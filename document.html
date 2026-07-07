@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>De Natura Aesthetics - Surgeon Profile & Case Portfolio</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap');
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            color: #2c3e50;
+            background-color: #f4f6f8;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        /* Standard A4 Page Sizing & Setup */
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 22mm 20mm 25mm 20mm;
+            margin: 15mm auto;
+            background: #ffffff;
+            box-shadow: 0 0 15px rgba(0,0,0,0.08);
+            position: relative;
+            page-break-after: always;
+            overflow: hidden;
+        }
+
+        @media print {
+            body {
+                background: none;
+            }
+            .page {
+                margin: 0;
+                box-shadow: none;
+                width: 210mm;
+                height: 297mm;
+                page-break-after: always;
+            }
+        }
+
+        /* Clinic Brand Colors */
+        :root {
+            --primary: #0f3424; /* Premium Forest Green */
+            --accent: #d4af37;  /* Classic Gold */
+            --dark: #1e272c;
+            --light-bg: #f8fafd;
+            --border-color: #e1e8ed;
+        }
+
+        /* Document Header Styling */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 12px;
+            margin-bottom: 25px;
+        }
+
+        .logo-area h1 {
+            color: var(--primary);
+            font-size: 23px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .logo-area p {
+            color: #666;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 1px;
+            letter-spacing: 0.5px;
+        }
+
+        .clinic-info {
+            text-align: right;
+            font-size: 11px;
+            color: #555;
+            line-height: 1.4;
+        }
+
+        .main-title {
+            text-align: center;
+            color: var(--primary);
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 25px;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+        }
+
+        /* Surgeon Profile Layout Optimization (Fills empty spaces) */
+        .profile-container {
+            display: grid;
+            grid-template-columns: 230px 1fr;
+            gap: 25px;
+            margin-bottom: 20px;
+        }
+
+        .profile-image-box {
+            width: 230px;
+            height: 285px;
+            border: 3px solid var(--accent);
+            border-radius: 4px;
+            background: #eaeaea;
+            overflow: hidden;
+        }
+
+        .profile-image-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .surgeon-meta h2 {
+            color: var(--primary);
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            letter-spacing: -0.5px;
+        }
+
+        .surgeon-meta h3 {
+            color: var(--accent);
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+        }
+
+        .credentials-list {
+            list-style: none;
+        }
+
+        .credentials-list li {
+            font-size: 12.5px;
+            line-height: 1.55;
+            margin-bottom: 8px;
+            position: relative;
+            padding-left: 15px;
+            color: #333;
+        }
+
+        .credentials-list li::before {
+            content: "•";
+            color: var(--accent);
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+            font-size: 14px;
+        }
+
+        .section-heading {
+            color: var(--primary);
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            border-left: 3px solid var(--accent);
+            padding-left: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        .qualifications-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            background: var(--light-bg);
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .qual-card h4 {
+            font-size: 12.5px;
+            color: var(--primary);
+            margin-bottom: 3px;
+            font-weight: 700;
+        }
+
+        .qual-card p {
+            font-size: 12px;
+            color: #555;
+            line-height: 1.4;
+        }
+
+        .quote-box {
+            background: linear-gradient(135deg, var(--primary), #164a34);
+            color: #ffffff;
+            padding: 18px 25px;
+            border-radius: 4px;
+            margin-top: 20px;
+            border-left: 4px solid var(--accent);
+            font-style: italic;
+            font-size: 12.5px;
+            line-height: 1.6;
+            text-align: center;
+            font-weight: 400;
+        }
+
+        /* Expanded Standards Section to Fill Page 1 Gaps cleanly */
+        .standards-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        .standard-item {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .standard-item strong {
+            color: var(--primary);
+            display: block;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        /* Case Studies Formats (Pages 2 & 3) */
+        .case-study {
+            margin-bottom: 25px;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 14px;
+            page-break-inside: avoid;
+        }
+
+        .case-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+
+        .case-desc {
+            font-size: 11px;
+            color: #555;
+            line-height: 1.4;
+            margin-bottom: 10px;
+        }
+
+        .image-matrix {
+            display: grid;
+            gap: 8px;
+            background: #f7f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #eef2f4;
+        }
+
+        .grid-3x2 { grid-template-columns: repeat(3, 1fr); }
+        .grid-4x2 { grid-template-columns: repeat(4, 1fr); }
+        .grid-2x1 { grid-template-columns: repeat(2, 1fr); }
+
+        .img-container {
+            position: relative;
+            background: #e5ecf0;
+            aspect-ratio: 4/3;
+            overflow: hidden;
+            border-radius: 3px;
+        }
+
+        .img-container.square {
+            aspect-ratio: 1/1;
+        }
+
+        .img-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Precise Black Strip Identity Masking for Patient Safety */
+        .eye-mask {
+            position: absolute;
+            top: 42%;
+            left: 12%;
+            width: 76%;
+            height: 15%;
+            background-color: #000000;
+            z-index: 10;
+        }
+
+        .img-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(15, 52, 36, 0.85); /* Integrated Primary Accent */
+            color: #fff;
+            font-size: 10px;
+            text-align: center;
+            padding: 4px 0;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+
+        /* Footer Infrastructure */
+        .footer-banner {
+            position: absolute;
+            bottom: 12mm;
+            left: 20mm;
+            right: 20mm;
+            text-align: center;
+            border-top: 1px solid var(--border-color);
+            padding-top: 12px;
+            font-size: 11px;
+            color: #7f8c8d;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- PAGE 1: SURGEON PROFILE (OPTIMIZED AND FULLY BALANCED) -->
+    <div class="page">
+        <div class="header">
+            <div class="logo-area">
+                <h1>DE NATURA AESTHETICS</h1>
+                <p>SKIN & HAIR TRANSPLANTATION CLINIC</p>
+            </div>
+            <div class="clinic-info">
+                <strong>Sasthamangalam, Maruthankuzhy</strong><br>
+                Thiruvananthapuram, Kerala, India
+            </div>
+        </div>
+
+        <div class="main-title">Know Your Surgeon Before Hair Transplant</div>
+
+        <div class="profile-container">
+            <div class="profile-image-box">
+                <!-- Points to your referenced high-res doctor profile image named verbatim -->
+                <img src="IMG_7017.JPG" alt="Dr. Anagha S. Nath Profile">
+            </div>
+            <div class="surgeon-meta">
+                <h2>Dr. Anagha S Nath</h2>
+                <h3>MDS — Oral and Maxillofacial Surgeon</h3>
+                <p style="font-size: 11.5px; margin-bottom: 12px; color:#444;"><strong>KDC Reg No:</strong> 12223</p>
+                
+                <ul class="credentials-list">
+                    <li>Approximately 5 years of clinical expertise specializing in state-of-the-art Hair Transplantation and Hair Restoration procedures.</li>
+                    <li>Extensively trained in comprehensive patient evaluation, personalized hairline architecture, precise graft harvesting, high-density graft implantation, and strategic post-operative clinical care.</li>
+                    <li>Combines deep maxillofacial structural knowledge with cosmetic hair restoration parameters to achieve optimal density balances and swelling-controlled recovery timelines.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section-heading">Additional Qualifications & Fellowships</div>
+        <div class="qualifications-grid">
+            <div class="qual-card">
+                <h4>Post Graduate Diploma</h4>
+                <p>Clinical Cosmetology [PGDCC]</p>
+            </div>
+            <div class="qual-card">
+                <h4>Surgical Fellowship</h4>
+                <p>Fellowship in Hair Transplant Surgery</p>
+            </div>
+            <div class="qual-card">
+                <h4>Facial Aesthetics Workshop</h4>
+                <p>Master Course in Facial Aesthetics [MCFA]</p>
+            </div>
+            <div class="qual-card">
+                <h4>Trichology Specialization</h4>
+                <p>Master Course in Trichology [MCIT]</p>
+            </div>
+        </div>
+
+        <div class="quote-box">
+            "Committed to providing evidence-based hair restoration solutions with emphasis on natural hairline design, patient safety, and long term aesthetic outcomes."
+        </div>
+
+        <div class="section-heading">Clinical Excellence Framework</div>
+        <div class="standards-container">
+            <div class="standard-item">
+                <strong>Natural Hairline Architecture</strong>
+                Custom hairline blueprints matching natural facial dimensions, graft angles, and aging progressions unique to each individual patient profile.
+            </div>
+            <div class="standard-item">
+                <strong>Maxillofacial Precision Advantage</strong>
+                Surgical depth regulation and precise follicular positioning ensure maximized survival index indicators for every harvested follicle.
+            </div>
+            <div class="standard-item">
+                <strong>Evidence-Based Patient Pathways</strong>
+                Seamless coordination from pre-op multi-angle scalp analysis to structural post-operative monitoring frameworks across all recovery phases.
+            </div>
+            <div class="standard-item">
+                <strong>Sterile Surgical Security</strong>
+                Strict clinical safety parameters designed to promote rapid, inflammation-free healing alongside permanent, natural-looking volume.
+            </div>
+        </div>
+
+        <div class="footer-banner">
+            Prioritizing clinical safety, evidence-based workflows, and premium aesthetic excellence.
+        </div>
+    </div>
+
+
+    <!-- PAGE 2: CLINICAL PORTFOLIO (CASE STUDIES 1, 2, & 3) -->
+    <div class="page">
+        <div class="header">
+            <div class="logo-area">
+                <h1>DE NATURA AESTHETICS</h1>
+                <p>TRANSPARENT RESULTS & VERIFIED PORTFOLIOS</p>
+            </div>
+            <div class="clinic-info">
+                <strong>Case Portfolio</strong><br>
+                Part I
+            </div>
+        </div>
+
+        <!-- Case Study 1 -->
+        <div class="case-study">
+            <div class="case-title">Case Study 1: Advanced Hair Transplantation (Patient Profile I)</div>
+            <div class="case-desc">Verified treatment timeline outlining customized hairline mapping (identity protected), immediate post-op graft density, and milestones at 1, 3, and 6 months.</div>
+            <div class="image-matrix grid-3x2">
+                <div class="img-container"><img src="case1_pre.jpg"><div class="eye-mask"></div><div class="img-label">Pre op</div></div>
+                <div class="img-container"><img src="case1_top.jpg"><div class="img-label">Top View</div></div>
+                <div class="img-container"><img src="case1_post.jpg"><div class="img-label">After procedure</div></div>
+                <div class="img-container"><img src="case1_1m.jpg"><div class="eye-mask"></div><div class="img-label">1 month</div></div>
+                <div class="img-container"><img src="case1_3m.jpg"><div class="eye-mask"></div><div class="img-label">3 months</div></div>
+                <div class="img-container"><img src="case1_6m.jpg"><div class="eye-mask"></div><div class="img-label">6 months</div></div>
+            </div>
+        </div>
+
+        <!-- Case Study 2 -->
+        <div class="case-study">
+            <div class="case-title">Case Study 2: Advanced Hair Transplantation (Patient Profile II)</div>
+            <div class="case-desc">Re-arranged structural timeline showcase mapping the initial pre-op profile, top-down crown density blueprints, multi-angle post-procedure graphs, and incremental density gains at 1 week, 1 month, 3 months, and 6 months.</div>
+            <div class="image-matrix grid-4x2">
+                <div class="img-container"><img src="case2_1.jpg"><div class="eye-mask"></div><div class="img-label">Pre op</div></div>
+                <div class="img-container"><img src="case2_2.jpg"><div class="img-label">Top-down Pre op</div></div>
+                <div class="img-container"><img src="case2_3.jpg"><div class="img-label">After procedure</div></div>
+                <div class="img-container"><img src="case2_4.jpg"><div class="img-label">After procedure</div></div>
+                <div class="img-container"><img src="case2_5.jpg"><div class="img-label">After procedure</div></div>
+                <div class="img-container"><img src="case2_6.jpg"><div class="eye-mask"></div><div class="img-label">1 month</div></div>
+                <div class="img-container"><img src="case2_7.jpg"><div class="eye-mask"></div><div class="img-label">3 months</div></div>
+                <div class="img-container"><img src="case2_8.jpg"><div class="eye-mask"></div><div class="img-label">6 months</div></div>
+            </div>
+        </div>
+
+        <!-- Case Study 3 -->
+        <div class="case-study">
+            <div class="case-title">Case Study 3: Advanced Hair Transplantation (Patient Profile III)</div>
+            <div class="case-desc">Multi-perspective clinical visualization detailing precision frontal and hairline recessional reconstruction progress, featuring comprehensive micro-graft integration and full density restoration.</div>
+            <div class="image-matrix grid-2x1">
+                <div class="img-container square"><img src="edited-image-pre.jpg"><div class="eye-mask"></div><div class="img-label">Before / Recessional State</div></div>
+                <div class="img-container square"><img src="edited-image-post.jpg"><div class="img-label">After Full Square-Grid Integration</div></div>
+            </div>
+        </div>
+
+        <div class="footer-banner">
+            De Natura Aesthetics for Skin and Hair Transplantation Clinic • Sasthamangalam, Maruthankuzhy, Thiruvananthapuram, Kerala, India
+        </div>
+    </div>
+
+
+    <!-- PAGE 3: CLINICAL PORTFOLIO (CASE STUDIES 4, 5, & 6) -->
+    <div class="page">
+        <div class="header">
+            <div class="logo-area">
+                <h1>DE NATURA AESTHETICS</h1>
+                <p>TRANSPARENT RESULTS & VERIFIED PORTFOLIOS</p>
+            </div>
+            <div class="clinic-info">
+                <strong>Case Portfolio</strong><br>
+                Part II
+            </div>
+        </div>
+
+        <!-- Case Study 4 -->
+        <div class="case-study">
+            <div class="case-title">Case Study 4: Advanced Hair Transplantation (Patient Profile IV)</div>
+            <div class="case-desc">Comprehensive 6-panel surgical mapping journey tracking initial thinning pre-op baseline, surgical drawing benchmarks, immediate post-op graft distribution matrix, followed by early 1-2 month growth transitions, culminating in high-volume curly density results. Optimized compact grid sizing.</div>
+            <div class="image-matrix grid-3x2">
+                <div class="img-container"><img src="c4_1.jpg"><div class="eye-mask"></div><div class="img-label">Pre-Op State</div></div>
+                <div class="img-container"><img src="c4_2.jpg"><div class="eye-mask"></div><div class="img-label">Surgical Planning</div></div>
+                <div class="img-container"><img src="c4_3.jpg"><div class="img-label">Immediate Post-Op</div></div>
+                <div class="img-container"><img src="c4_4.jpg"><div class="eye-mask"></div><div class="img-label">Early Post (1-2 M)</div></div>
+                <div class="img-container"><img src="c4_5.jpg"><div class="eye-mask"></div><div class="img-label">Final Result Front View</div></div>
+                <div class="img-container"><img src="c4_6.jpg"><div class="img-label">Final Result Top View</div></div>
+            </div>
+        </div>
+
+        <!-- Case Study 5 -->
+        <div class="case-study">
+            <div class="case-title">Case Study 5: Growth Factor Concentrate (GFC) Non-Surgical Therapy</div>
+            <div class="case-desc">Targeted restoration demonstrating significant reverse thinning, density optimization, and structural follicular thickness improvements.</div>
+            <div class="image-matrix grid-2x1">
+                <div class="img-container"><img src="gfc_before.jpg"><div class="img-label">Before Treatment (Localized Thinning)</div></div>
+                <div class="img-container"><img src="gfc_after.jpg"><div class="img-label">Advanced GFC Post-Treatment Volume</div></div>
+            </div>
+        </div>
+
+        <!-- Case Study 6 -->
+        <div class="case-study">
+            <div class="case-title">Case Study 6: Facial Hair Restoration (Beard & Mustache)</div>
+            <div class="case-desc">Meticulous micro-grafting milestones spanning pre-op guidelines, placement phases, clot removal healing, and complete structural integration over a 6-month period.</div>
+            <div class="image-matrix grid-3x2">
+                <div class="img-container"><img src="b1.jpg"><div class="eye-mask"></div><div class="img-label">Pre op</div></div>
+                <div class="img-container"><img src="b2.jpg"><div class="eye-mask"></div><div class="img-label">After procedure</div></div>
+                <div class="img-container"><img src="b3.jpg"><div class="img-label">1 week</div></div>
+                <div class="img-container"><img src="b4.jpg"><div class="img-label">Clot removal</div></div>
+                <div class="img-container"><img src="b5.jpg"><div class="img-label">3 months</div></div>
+                <div class="img-container"><img src="b6.jpg"><div class="img-label">6 months</div></div>
+            </div>
+        </div>
+
+        <!-- Bottom Footer with Medical Disclaimer Note -->
+        <div class="footer-banner" style="position: relative; margin-top: 35px; bottom: 0; left: 0; right: 0;">
+            <strong>De Natura Aesthetics for Skin and Hair Transplantation Clinic</strong><br>
+            📍 Sasthamangalam, Maruthankuzhy, Thiruvananthapuram, Kerala, India<br>
+            <span style="font-size: 9px; display:block; margin-top: 6px; color: #95a5a6; font-weight: 400;">Disclaimer: This brochure is for structural tracking and informational purposes only. For formal medical evaluations or specific diagnoses, please consult a medical professional directly.</span>
+        </div>
+    </div>
+
+</body>
+</html>

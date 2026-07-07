@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nifty AI Decision Engine - Secure Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=1.4">
+    <style>
+        /* Custom Login Styles to achieve premium Glassmorphism */
+        body.login-page {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: radial-gradient(circle at center, #0e1726 0%, #060b13 100%);
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Abstract glowing blobs for ambient background */
+        .glowing-mesh-1 {
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(0, 229, 255, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
+            top: -10%;
+            left: -10%;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+        }
+
+        .glowing-mesh-2 {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(0, 229, 153, 0.06) 0%, rgba(0, 0, 0, 0) 70%);
+            bottom: -20%;
+            right: -10%;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+        }
+
+        .login-card {
+            background: rgba(10, 17, 28, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 10;
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .login-card:hover {
+            border-color: rgba(0, 229, 255, 0.15);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .login-logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, #00e5ff, #00e676);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .login-subtitle {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+        }
+
+        .login-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 22px;
+        }
+
+        .login-group label {
+            font-size: 0.68rem;
+            color: var(--text-secondary);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .login-input {
+            background: rgba(6, 11, 19, 0.7) !important;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            outline: none;
+            transition: all 0.25s ease;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .login-input:focus {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 10px rgba(0, 229, 255, 0.15), inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-login {
+            width: 100%;
+            background: linear-gradient(135deg, #00e5ff, #00e676) !important;
+            color: #060b13 !important;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 0.8rem;
+            letter-spacing: 1.5px;
+            padding: 14px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(0, 229, 255, 0.2);
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 229, 255, 0.35);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .error-alert {
+            display: none;
+            background: rgba(255, 23, 68, 0.1);
+            border: 1px solid rgba(255, 23, 68, 0.2);
+            color: var(--neon-bear);
+            font-size: 0.72rem;
+            padding: 10px 14px;
+            border-radius: 6px;
+            margin-bottom: 22px;
+            text-align: center;
+            font-weight: 500;
+            animation: shake 0.4s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-6px); }
+            75% { transform: translateX(6px); }
+        }
+    </style>
+</head>
+<body class="login-page">
+    <div class="glowing-mesh-1"></div>
+    <div class="glowing-mesh-2"></div>
+
+    <div class="login-card">
+        <div class="login-header">
+            <div class="login-logo">Nifty AI Engine</div>
+            <div class="login-subtitle">Secure Gateway Access</div>
+        </div>
+
+        <div class="error-alert" id="error-box">Invalid credentials. Try again.</div>
+
+        <form id="login-form" onsubmit="handleFormSubmit(event)">
+            <div class="login-group">
+                <label for="username">Access Identity</label>
+                <input class="login-input" type="text" id="username" autocomplete="username" placeholder="Username" required autofocus>
+            </div>
+            <div class="login-group" style="margin-bottom: 30px;">
+                <label for="password">Security Password</label>
+                <input class="login-input" type="password" id="password" autocomplete="current-password" placeholder="••••••••" required>
+            </div>
+            <button class="btn-login" type="submit">Verify & Enter</button>
+        </form>
+    </div>
+
+    <script>
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            const errorBox = document.getElementById('error-box');
+
+            errorBox.style.display = 'none';
+
+            try {
+                const resp = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.status === "SUCCESS") {
+                        // Successful login, redirect to home page
+                        window.location.href = '/';
+                    }
+                } else {
+                    const errData = await resp.json();
+                    errorBox.textContent = errData.detail || "Authentication failed.";
+                    errorBox.style.display = 'block';
+                }
+            } catch (err) {
+                errorBox.textContent = "Unable to connect to the server.";
+                errorBox.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>

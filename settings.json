@@ -1,0 +1,17 @@
+{
+    "capital": 500000.0,
+    "risk_pct": 1.0,
+    "preferred_broker": "Upstox",
+    "preferred_strategy": "All",
+    "refresh_interval": 5,
+    "vix_threshold": 10.0,
+    "regime_override": "Auto",
+    "vix_baseline": 11.405764151316715,
+    "feed_mode": "Upstox",
+    "upstox_access_token": "eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiJGWTM2NjMiLCJqdGkiOiI2OWJlZDcwYjg3YTgwYjEzMWJkZTg5NzEiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6dHJ1ZSwiaXNFeHRlbmRlZCI6dHJ1ZSwiaWF0IjoxNzc0MTE0NTcxLCJpc3MiOiJ1ZGFwaS1nYXRld2F5LXNlcnZpY2UiLCJleHAiOjE4MDU2NjY0MDB9.nt9PqZksqL7IP1fg06yRENBUnrT612LQWwACzzLWAPs",
+    "upstox_expiry_date": "2026-07-07",
+    "preferred_index": "Nifty",
+    "dashboard_username": "admin",
+    "dashboard_password": "password123",
+    "session_token": "98138a8bd5994bd9b92b843485b5a78e"
+}
