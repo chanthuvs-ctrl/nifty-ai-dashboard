@@ -479,7 +479,12 @@ async function fetchMarketData() {
         // Update AI Intelligence Banner on Homepage
         const bannerRecText = document.getElementById('banner-rec-text');
         if (bannerRecText) {
-            bannerRecText.innerText = data.recommendation.toUpperCase();
+            const recVal = data.recommendation.toUpperCase();
+            if (recVal !== "NO TRADE") {
+                bannerRecText.innerText = `${recVal} (${data.confidence.toFixed(0)}% CONF)`;
+            } else {
+                bannerRecText.innerText = recVal;
+            }
             if (data.recommendation.includes("CE") || data.recommendation.includes("Bull")) {
                 bannerRecText.className = "banner-value text-bull";
             } else if (data.recommendation.includes("PE") || data.recommendation.includes("Bear")) {
@@ -754,6 +759,7 @@ async function fetchJournal() {
         const closedLive = data.trades.filter(t => t.status === "CLOSED" && (t.execution_type && t.execution_type.startsWith("Live")));
         
         // Helper to render active positions
+        let totalFloatingPnl = 0.0;
         const renderActive = (tbodyId, list, typeLabel, typeColor) => {
             const body = document.getElementById(tbodyId);
             if (!body) return;
@@ -781,6 +787,7 @@ async function fetchJournal() {
                             totalPnl -= legDiff * leg.quantity;
                         }
                     });
+                    totalFloatingPnl += totalPnl; // Accumulate running P&L
                     
                     // Target Profit / Stop Loss alerting
                     const isSpreadOrShort = pos.strategy.includes("Spread") || pos.strategy.includes("Short") || pos.strategy.includes("Condor");
@@ -887,6 +894,19 @@ async function fetchJournal() {
         renderActive('live-journal-active-body', activeLive, 'LIVE', '0, 229, 153');
         renderClosed('journal-closed-body', closedPaper, 'PAPER', '0, 217, 245');
         renderClosed('live-journal-closed-body', closedLive, 'LIVE', '0, 229, 153');
+        
+        // Update Header Ticker Running P&L
+        const pnlTickerElement = document.getElementById('hdr-total-pnl');
+        if (pnlTickerElement) {
+            pnlTickerElement.innerText = (totalFloatingPnl >= 0 ? '+' : '') + `₹${totalFloatingPnl.toFixed(2)}`;
+            if (totalFloatingPnl > 0) {
+                pnlTickerElement.className = "ticker-value text-bull";
+            } else if (totalFloatingPnl < 0) {
+                pnlTickerElement.className = "ticker-value text-bear";
+            } else {
+                pnlTickerElement.className = "ticker-value text-gold";
+            }
+        }
         
         // Add close buttons click events for both active lists
         document.querySelectorAll('.btn-close-pos').forEach(btn => {
@@ -1299,15 +1319,43 @@ function initDashboardToggles() {
             const panel = document.getElementById(panelId);
             if (!panel) return;
             
-            const isCurrentlyActive = btn.classList.toggle('active');
-            if (isCurrentlyActive) {
-                panel.classList.remove('hidden-panel');
-                // Trigger chart update if Chart panel opened
-                if (panelId === 'panel-chart' && window.myChart) {
-                    fetchChartData();
+            const isMobile = window.innerWidth < 1024;
+            
+            if (isMobile) {
+                // On mobile: close all other panels and toggle off their buttons
+                const wasActive = panel.classList.contains('active');
+                
+                // Close everything
+                document.querySelectorAll('.panel').forEach(p => {
+                    p.classList.remove('active');
+                    p.classList.add('hidden-panel');
+                });
+                document.querySelectorAll('.menu-btn').forEach(b => {
+                    b.classList.remove('active');
+                });
+                
+                // Open only this one if it wasn't already active
+                if (!wasActive) {
+                    panel.classList.add('active');
+                    panel.classList.remove('hidden-panel');
+                    btn.classList.add('active');
+                    if (panelId === 'panel-chart' && window.myChart) {
+                        fetchChartData();
+                    }
                 }
             } else {
-                panel.classList.add('hidden-panel');
+                // On desktop: toggle individual panels independently
+                const isCurrentlyActive = btn.classList.toggle('active');
+                if (isCurrentlyActive) {
+                    panel.classList.remove('hidden-panel');
+                    panel.classList.add('active');
+                    if (panelId === 'panel-chart' && window.myChart) {
+                        fetchChartData();
+                    }
+                } else {
+                    panel.classList.remove('active');
+                    panel.classList.add('hidden-panel');
+                }
             }
         });
     });
@@ -1319,6 +1367,7 @@ function initDashboardToggles() {
             const panel = closeBtn.closest('.panel');
             if (!panel) return;
             
+            panel.classList.remove('active');
             panel.classList.add('hidden-panel');
             
             // Toggle off corresponding menu button

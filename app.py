@@ -1923,36 +1923,7 @@ def sync_journal(data: SyncRequest):
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    path = request.url.path
-    
-    # Allow login, public assets, and main styles
-    exempt_paths = [
-        "/login", 
-        "/api/login", 
-        "/login.html", 
-        "/favicon.ico", 
-        "/chart.umd.js",
-        "/chartjs-plugin-annotation.js"
-    ]
-    
-    is_exempt = False
-    if path in exempt_paths:
-        is_exempt = True
-    elif path.startswith("/static/style.css") or path == "/style.css" or path == "/static/chart.umd.js" or path == "/static/chartjs-plugin-annotation.js":
-        is_exempt = True
-    
-    if is_exempt:
-        return await call_next(request)
-        
-    # Check session cookie
-    session_token = request.cookies.get("session_token")
-    expected_token = state.settings.get("session_token")
-    
-    if not session_token or not expected_token or session_token != expected_token:
-        if path.startswith("/api/") and path != "/api/check-auth":
-            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-        return RedirectResponse(url="/login")
-        
+    # Disable admin login for now (allow all requests)
     return await call_next(request)
 
 @app.get("/login", response_class=HTMLResponse)
