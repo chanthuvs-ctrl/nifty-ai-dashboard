@@ -218,11 +218,13 @@ class SimulationState:
         today_str = datetime.date.today().strftime("%Y-%m-%d")
         saved_expiry = self.settings.get("upstox_expiry_date")
         if saved_expiry and saved_expiry < today_str:
-            pref_index = self.settings.get("preferred_index", "Nifty")
-            target_weekday = 4 if pref_index.lower() == "sensex" else 3
-            days_ahead = (target_weekday - datetime.date.today().weekday()) % 7
-            next_expiry = datetime.date.today() + datetime.timedelta(days=days_ahead)
-            self.settings["upstox_expiry_date"] = next_expiry.strftime("%Y-%m-%d")
+            self.update_default_expiry()
+            if self.settings.get("upstox_expiry_date") < today_str:
+                pref_index = self.settings.get("preferred_index", "Nifty")
+                target_weekday = 4 if pref_index.lower() == "sensex" else 3
+                days_ahead = (target_weekday - datetime.date.today().weekday()) % 7
+                next_expiry = datetime.date.today() + datetime.timedelta(days=days_ahead)
+                self.settings["upstox_expiry_date"] = next_expiry.strftime("%Y-%m-%d")
             self.save_settings()
         
         self.upstox_option_chain = []
