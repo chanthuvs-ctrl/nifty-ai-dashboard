@@ -1290,65 +1290,51 @@ async function reloadExpiries(settings = null) {
 }
 
 // Initialize Mobile Overlay Panels & Home Dock Click Listeners
-function initOverlayPanels() {
-    // 1. Click listeners for navigation dock cards
-    document.querySelectorAll('.dock-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const panelId = card.getAttribute('data-panel');
-            openOverlayPanel(panelId);
+// Initialize In-Place Dashboard Panel Toggles
+function initDashboardToggles() {
+    // Click listeners for menu buttons
+    document.querySelectorAll('.menu-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const panelId = btn.getAttribute('data-panel');
+            const panel = document.getElementById(panelId);
+            if (!panel) return;
+            
+            const isCurrentlyActive = btn.classList.toggle('active');
+            if (isCurrentlyActive) {
+                panel.classList.remove('hidden-panel');
+                // Trigger chart update if Chart panel opened
+                if (panelId === 'panel-chart' && window.myChart) {
+                    fetchChartData();
+                }
+            } else {
+                panel.classList.add('hidden-panel');
+            }
         });
     });
 
-    // 2. Click listener for AI Intelligence Banner (opens the recommendation scorecard panel)
-    const aiBanner = document.getElementById('trigger-recommendation-panel');
-    if (aiBanner) {
-        aiBanner.addEventListener('click', () => {
-            openOverlayPanel('panel-recommendation');
-        });
-    }
-
-    // 3. Click listeners for all Close overlay buttons
-    document.querySelectorAll('.close-overlay-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+    // Close button click listener inside panel headers
+    document.querySelectorAll('.close-overlay-btn').forEach(closeBtn => {
+        closeBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const panel = btn.closest('.overlay-panel');
-            if (panel) {
-                closeOverlayPanel(panel.id);
+            const panel = closeBtn.closest('.panel');
+            if (!panel) return;
+            
+            panel.classList.add('hidden-panel');
+            
+            // Toggle off corresponding menu button
+            const panelId = panel.id;
+            const btn = document.querySelector(`.menu-btn[data-panel="${panelId}"]`);
+            if (btn) {
+                btn.classList.remove('active');
             }
         });
     });
 }
 
-function openOverlayPanel(panelId) {
-    const panel = document.getElementById(panelId);
-    if (panel) {
-        panel.classList.add('active');
-        document.body.classList.add('panel-lock');
-        
-        // Trigger specific panel callbacks if needed (e.g. chart resize)
-        if (panelId === 'panel-chart' && window.myChart) {
-            // Trigger chart update
-            fetchChartData();
-        }
-    }
-}
-
-function closeOverlayPanel(panelId) {
-    const panel = document.getElementById(panelId);
-    if (panel) {
-        panel.classList.remove('active');
-        // Only unlock body scroll if no other panel is active
-        const anyActive = document.querySelector('.overlay-panel.active');
-        if (!anyActive) {
-            document.body.classList.remove('panel-lock');
-        }
-    }
-}
-
 // Initialize application listeners
 document.addEventListener('DOMContentLoaded', async () => {
-    // Initialize mobile overlays and home control center
-    initOverlayPanels();
+    // Initialize in-place panel toggles and action center
+    initDashboardToggles();
     
     // Request notification permissions safely
     if (typeof Notification !== 'undefined') {
