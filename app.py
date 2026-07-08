@@ -17,6 +17,17 @@ from pydantic import BaseModel
 
 app = FastAPI(title="Nifty Intraday AI Strategy Decision Engine API")
 
+# Indian Standard Time (IST) Timezone Helpers
+def get_ist_datetime():
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    return utc_now + datetime.timedelta(hours=5, minutes=30)
+
+def get_ist_time_str() -> str:
+    return get_ist_datetime().strftime("%H:%M:%S")
+
+def get_ist_date_str() -> str:
+    return get_ist_datetime().strftime("%Y-%m-%d")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -136,8 +147,8 @@ class SimulationState:
         self.market_session = "Live Market"
         self.premarket_open_price = None
         self.price_source = "Google Finance (NSE India)" if live_price else "Simulation Fallback"
-        self.price_date = time.strftime("%Y-%m-%d")
-        self.price_time = time.strftime("%H:%M:%S")
+        self.price_date = get_ist_date_str()
+        self.price_time = get_ist_time_str()
         
         # Historical completed 5-min candles
         # candle schema: [time, open, high, low, close, volume, vwap]
@@ -487,8 +498,8 @@ class SimulationState:
         else:
             self.price_source = "Google Finance (Simulated Drift)"
             
-        self.price_date = time.strftime("%Y-%m-%d")
-        self.price_time = time.strftime("%H:%M:%S")
+        self.price_date = get_ist_date_str()
+        self.price_time = get_ist_time_str()
 
         # Update high/low boundary checks
         if self.spot_price > self.today_high:
@@ -515,7 +526,7 @@ class SimulationState:
 
         # Append to price history for live chart
         self.price_history.append({
-            "time": time.strftime("%H:%M:%S"),
+            "time": get_ist_time_str(),
             "price": round(self.spot_price, 2),
             "vwap": round(self.get_vwap(), 2),
             "ema20": round(self.ema_20, 2),
@@ -617,8 +628,8 @@ class SimulationState:
             first_item = data_list[0]
             self.spot_price = float(first_item.get("underlying_spot_price", self.spot_price))
             self.price_source = "Upstox Live Feed (BSE India)" if preferred_index.lower() == "sensex" else "Upstox Live Feed (NSE India)"
-            self.price_date = time.strftime("%Y-%m-%d")
-            self.price_time = time.strftime("%H:%M:%S")
+            self.price_date = get_ist_date_str()
+            self.price_time = get_ist_time_str()
             
             # 2. Parse option chain
             parsed_chain = []
@@ -735,7 +746,7 @@ class SimulationState:
             
             # Append to price history for live chart
             self.price_history.append({
-                "time": time.strftime("%H:%M:%S"),
+                "time": get_ist_time_str(),
                 "price": round(self.spot_price, 2),
                 "vwap": round(self.get_vwap(), 2),
                 "ema20": round(self.ema_20, 2),
@@ -968,7 +979,7 @@ class SimulationState:
             # Log changes to the change timeline
             if not self.change_log or self.change_log[-1]["new_strategy"] != primary_rec:
                 self.change_log.append({
-                    "time": time.strftime("%H:%M:%S"),
+                    "time": get_ist_time_str(),
                     "prev_strategy": prev_strat,
                     "new_strategy": primary_rec,
                     "confidence": f"{confidence_pct:.1f}%",
@@ -1056,8 +1067,8 @@ class TradeJournal:
         trade_id = str(len(self.trades) + 1)
         trade = {
             "id": trade_id,
-            "date": time.strftime("%Y-%m-%d"),
-            "time": time.strftime("%H:%M:%S"),
+            "date": get_ist_date_str(),
+            "time": get_ist_time_str(),
             "strategy": strategy,
             "entry_spot": entry_price,
             "strikes": strikes,
@@ -1230,6 +1241,9 @@ class TradeRequest(BaseModel):
 class CloseRequest(BaseModel):
     trade_id: str
     exit_spot: float
+
+class SyncRequest(BaseModel):
+    trades: List[Dict]
 
 @app.get("/api/market-data")
 def get_market_data():
@@ -1686,6 +1700,18 @@ def close_trade(data: CloseRequest):
     if not trade:
         raise HTTPException(status_code=404, detail="Open trade not found")
     return {"status": "SUCCESS", "trade": trade}
+
+@app.post("/api/journal/sync")
+def sync_journal(data: SyncRequest):
+    # Restore the server chronological order by reversing client's newest-first list
+    journal.trades = data.trades[::-1]
+    journal.save_journal()
+    return {
+        "status": "SUCCESS",
+        "trades": journal.trades[::-1],
+        "analytics": journal.get_analytics("Paper"),
+        "live_analytics": journal.get_analytics("Live")
+    }
 
 # ==========================================
 # AUTHENTICATION MIDDLEWARE & ENDPOINTS

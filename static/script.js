@@ -536,6 +536,89 @@ function renderOptionChain(chain, spot, maxPain) {
     fetchChartData();
 }
 
+// Synchronize client journal trades with server (backup & restore)
+async function syncJournalWithServer(serverTrades) {
+    let localTrades = [];
+    try {
+        localTrades = JSON.parse(localStorage.getItem('nifty_journal_trades')) || [];
+    } catch (e) {
+        console.error("Failed to parse local trades:", e);
+    }
+    
+    // Check if we have local trades, and the server was reset (server has less than or equal to 2 trades, which are dummy trades)
+    // or if the server doesn't have our latest local trade ID.
+    const localIds = localTrades.map(t => t.id);
+    const serverIds = serverTrades.map(t => t.id);
+    
+    const needsRestore = localTrades.length > 0 && (
+        serverTrades.length <= 2 || // default dummy trades
+        localTrades.length > serverTrades.length ||
+        (localIds.length > 0 && !serverIds.includes(localIds[0]))
+    );
+    
+    if (needsRestore && localTrades.length > serverTrades.length) {
+        console.log("Restoring paper trades from local storage backup...");
+        try {
+            const resp = await fetch('/api/journal/sync', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ trades: localTrades })
+            });
+            const res = await resp.json();
+            if (res.status === "SUCCESS") {
+                return res.trades || [];
+            }
+        } catch (err) {
+            console.error("Failed syncing journal backup:", err);
+        }
+    } else {
+        // Save current server trades to local storage as backup
+        localStorage.setItem('nifty_journal_trades', JSON.stringify(serverTrades));
+    }
+    return serverTrades;
+}
+
+// Synchronize client settings configuration with server (backup & restore)
+async function syncSettingsWithServer(serverSettings) {
+    let localSettings = null;
+    try {
+        localSettings = JSON.parse(localStorage.getItem('nifty_settings'));
+    } catch (e) {}
+    
+    // Check if server settings have empty token, but local storage has a token
+    const serverToken = serverSettings.upstox_access_token;
+    const localToken = localSettings ? localSettings.upstox_access_token : "";
+    
+    const needsRestore = localSettings && (
+        (localToken && !serverToken) ||
+        (localSettings.capital && localSettings.capital !== serverSettings.capital) ||
+        (localSettings.risk_pct && localSettings.risk_pct !== serverSettings.risk_pct)
+    );
+    
+    if (needsRestore) {
+        console.log("Restoring dashboard settings from local storage backup...");
+        try {
+            const resp = await fetch('/api/settings', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(localSettings)
+            });
+            const res = await resp.json();
+            if (res.status === "SUCCESS") {
+                return localSettings;
+            }
+        } catch (err) {
+            console.error("Failed syncing settings backup:", err);
+        }
+    } else {
+        // Save current server settings to local storage as backup
+        const cleanSettings = { ...serverSettings };
+        delete cleanSettings.upcoming_expiry_dates; // Keep clean
+        localStorage.setItem('nifty_settings', JSON.stringify(cleanSettings));
+    }
+    return serverSettings;
+}
+
 // Fetch and draw Paper/Live Trading lists
 async function fetchJournal() {
     try {
@@ -545,6 +628,11 @@ async function fetchJournal() {
             return;
         }
         const data = await resp.json();
+        
+        // Synchronize with local storage backup
+        const serverTrades = data.trades || [];
+        const syncedTrades = await syncJournalWithServer(serverTrades);
+        data.trades = syncedTrades;
         
         // We fetch the current live Nifty spot from our header
         const currentSpotText = document.getElementById('hdr-nifty-spot').innerText.replace(/,/g, '');
@@ -1033,6 +1121,10 @@ async function saveSettings() {
         });
         const res = await resp.json();
         if (res.status === "SUCCESS") {
+            // Save settings copy in localStorage as dynamic backup
+            const cleanSettings = { ...req };
+            localStorage.setItem('nifty_settings', JSON.stringify(cleanSettings));
+            
             document.getElementById('settings-modal').style.display = 'none';
             // Reload settings to get the correct dynamic expiries and active expiry date
             const settingsResp = await fetch('/api/settings');
@@ -1154,7 +1246,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Fetch settings to populate initial state
     try {
         const resp = await fetch('/api/settings');
-        const settings = await resp.json();
+        let settings = await resp.json();
+        
+        // Sync settings with local storage backup
+        settings = await syncSettingsWithServer(settings);
         
         const indexSelector = document.getElementById('select-active-index');
         if (indexSelector) {
