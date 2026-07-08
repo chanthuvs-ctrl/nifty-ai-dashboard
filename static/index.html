@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=2.2">
+    <link rel="stylesheet" href="style.css?v=2.3">
     <script src="chart.umd.js"></script>
     <script src="chartjs-plugin-annotation.js"></script>
 </head>
@@ -44,9 +44,15 @@
                 <span class="ticker-label">MAX PAIN</span>
                 <span class="ticker-value text-purple" id="hdr-max-pain">22,250</span>
             </div>
-            <div class="ticker-box" style="border-left: 1px solid rgba(255,255,255,0.08); padding-left: 12px; margin-left: 4px;">
-                <span class="ticker-label" style="color: var(--text-secondary); font-weight: 700;">RUNNING P&L</span>
-                <span class="ticker-value" id="hdr-total-pnl" style="color: var(--neon-bull); text-shadow: 0 0 10px rgba(0, 229, 153, 0.15);">₹0.00</span>
+            <div class="ticker-box" style="border-left: 1px solid rgba(255,255,255,0.08); padding-left: 12px; margin-left: 4px; display: flex; gap: 12px; align-items: center;">
+                <div>
+                    <span class="ticker-label" style="color: #00d9f5; font-weight: 700; font-size: 0.6rem;">PAPER P&L</span>
+                    <span class="ticker-value" id="hdr-paper-pnl" style="color: var(--text-muted); font-size: 0.8rem;">₹0.00</span>
+                </div>
+                <div style="border-left: 1px solid rgba(255,255,255,0.08); padding-left: 12px;">
+                    <span class="ticker-label" style="color: var(--neon-bull); font-weight: 700; font-size: 0.6rem;">LIVE P&L</span>
+                    <span class="ticker-value" id="hdr-live-pnl" style="color: var(--text-muted); font-size: 0.8rem;">₹0.00</span>
+                </div>
             </div>
         </div>
 
@@ -1040,6 +1046,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=2.2"></script>
+    <script src="script.js?v=2.3"></script>
 </body>
 </html>

@@ -766,7 +766,8 @@ async function fetchJournal() {
         const closedLive = data.trades.filter(t => t.status === "CLOSED" && (t.execution_type && t.execution_type.startsWith("Live")));
         
         // Helper to render active positions
-        let totalFloatingPnl = 0.0;
+        let totalPaperPnl = 0.0;
+        let totalLivePnl = 0.0;
         const renderActive = (tbodyId, list, typeLabel, typeColor) => {
             const body = document.getElementById(tbodyId);
             if (!body) return;
@@ -794,7 +795,11 @@ async function fetchJournal() {
                             totalPnl -= legDiff * leg.quantity;
                         }
                     });
-                    totalFloatingPnl += totalPnl; // Accumulate running P&L
+                    if (typeLabel === 'PAPER') {
+                        totalPaperPnl += totalPnl;
+                    } else {
+                        totalLivePnl += totalPnl;
+                    }
                     
                     // Target Profit / Stop Loss alerting
                     const isSpreadOrShort = pos.strategy.includes("Spread") || pos.strategy.includes("Short") || pos.strategy.includes("Condor");
@@ -902,16 +907,31 @@ async function fetchJournal() {
         renderClosed('journal-closed-body', closedPaper, 'PAPER', '0, 217, 245');
         renderClosed('live-journal-closed-body', closedLive, 'LIVE', '0, 229, 153');
         
-        // Update Header Ticker Running P&L
-        const pnlTickerElement = document.getElementById('hdr-total-pnl');
-        if (pnlTickerElement) {
-            pnlTickerElement.innerText = (totalFloatingPnl >= 0 ? '+' : '') + `₹${totalFloatingPnl.toFixed(2)}`;
-            if (totalFloatingPnl > 0) {
-                pnlTickerElement.className = "ticker-value text-bull";
-            } else if (totalFloatingPnl < 0) {
-                pnlTickerElement.className = "ticker-value text-bear";
+        // Update Header Ticker Running P&Ls
+        const paperPnlElem = document.getElementById('hdr-paper-pnl');
+        if (paperPnlElem) {
+            paperPnlElem.innerText = (totalPaperPnl >= 0 ? '+' : '') + `₹${totalPaperPnl.toFixed(2)}`;
+            if (totalPaperPnl > 0) {
+                paperPnlElem.style.color = "var(--neon-bull)";
+            } else if (totalPaperPnl < 0) {
+                paperPnlElem.style.color = "var(--neon-bear)";
             } else {
-                pnlTickerElement.className = "ticker-value text-gold";
+                paperPnlElem.style.color = "var(--text-muted)";
+            }
+        }
+        
+        const livePnlElem = document.getElementById('hdr-live-pnl');
+        if (livePnlElem) {
+            livePnlElem.innerText = (totalLivePnl >= 0 ? '+' : '') + `₹${totalLivePnl.toFixed(2)}`;
+            if (totalLivePnl > 0) {
+                livePnlElem.style.color = "var(--neon-bull)";
+                livePnlElem.style.textShadow = "0 0 10px rgba(0, 229, 153, 0.2)";
+            } else if (totalLivePnl < 0) {
+                livePnlElem.style.color = "var(--neon-bear)";
+                livePnlElem.style.textShadow = "0 0 10px rgba(235, 94, 85, 0.2)";
+            } else {
+                livePnlElem.style.color = "var(--text-muted)";
+                livePnlElem.style.textShadow = "none";
             }
         }
         

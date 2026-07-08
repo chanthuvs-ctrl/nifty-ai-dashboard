@@ -1614,58 +1614,66 @@ def get_market_data():
                 trade["reason"] = f"Trailing Stop Loss Hit (Peak: {trade['highest_spot_seen']:.1f}, Trigger: {trade['trailing_stop_spot']:.1f})"
                 journal.save_journal()
                 
-    # 2. Check 2% Capital Protection (Auto-Exit)
+    # 2. Check 2% Capital Protection (Auto-Exit) separately for Paper and Live
     capital = state.settings.get("capital", 500000.0)
     risk_limit = capital * 0.02
     
-    open_trades = [t for t in journal.trades if t.get("status") == "OPEN"]
-    if open_trades:
-        # Sum up P&L for all open positions
-        total_pnl = 0.0
-        for trade in open_trades:
-            pnl = 0.0
-            entry = trade["entry_spot"]
-            legs = trade.get("legs", [])
-            strat = trade.get("strategy", "")
-            if legs:
-                # Sum up legs
-                for leg in legs:
-                    leg_ltp = None
-                    if state.settings.get("feed_mode") == "Upstox" and state.upstox_option_chain:
-                        for chain_item in state.upstox_option_chain:
-                            if chain_item.get("strike") == leg.get("strike"):
-                                if leg.get("option_type") == "CE":
-                                    leg_ltp = chain_item.get("call_price")
-                                else:
-                                    leg_ltp = chain_item.get("put_price")
-                    if leg_ltp is None:
-                        # Price model fallback
-                        t_years = 4.0 / 365.0
-                        r = 0.07
-                        is_call = leg["option_type"].upper() == "CE"
-                        opt_res = calculate_greeks(spot, leg["strike"], t_years, state.vix / 100.0, r, is_call)
-                        leg_ltp = opt_res["price"]
-                        
-                    leg_diff = leg_ltp - leg["entry_price"]
-                    if leg["action"] == "BUY":
-                        pnl += leg_diff * leg["quantity"]
-                    else:
-                        pnl -= leg_diff * leg["quantity"]
-            else:
-                diff = spot - entry
-                multiplier = trade.get("lot_size", 65) * trade["size"]
-                if "CE" in strat or "Bull" in strat:
-                    pnl += diff * multiplier
+    def get_single_trade_pnl(t):
+        pnl = 0.0
+        entry = t["entry_spot"]
+        legs = t.get("legs", [])
+        strat = t.get("strategy", "")
+        if legs:
+            for leg in legs:
+                leg_ltp = None
+                if state.settings.get("feed_mode") == "Upstox" and state.upstox_option_chain:
+                    for chain_item in state.upstox_option_chain:
+                        if chain_item.get("strike") == leg.get("strike"):
+                            if leg.get("option_type") == "CE":
+                                leg_ltp = chain_item.get("call_price")
+                            else:
+                                leg_ltp = chain_item.get("put_price")
+                if leg_ltp is None:
+                    t_years = 4.0 / 365.0
+                    r = 0.07
+                    is_call = leg["option_type"].upper() == "CE"
+                    opt_res = calculate_greeks(spot, leg["strike"], t_years, state.vix / 100.0, r, is_call)
+                    leg_ltp = opt_res["price"]
+                    
+                leg_diff = leg_ltp - leg["entry_price"]
+                if leg["action"] == "BUY":
+                    pnl += leg_diff * leg["quantity"]
                 else:
-                    pnl -= diff * multiplier
-            total_pnl += pnl
-            
-        # If total unrealized loss exceeds 2% of capital, exit ALL trades
-        if total_pnl <= -risk_limit:
-            print(f"⚠️ CAPITAL PROTECTION TRIGGERED: Total loss (₹{total_pnl:.2f}) exceeded 2% limit (₹{risk_limit:.2f}). Exiting all trades.")
-            for trade in open_trades:
-                journal.close_trade(trade["id"], spot)
-                trade["reason"] = f"Auto-Exit Capital Protection (2% Max Loss hit at ₹{total_pnl:.2f})"
+                    pnl -= leg_diff * leg["quantity"]
+        else:
+            diff = spot - entry
+            multiplier = t.get("lot_size", 65) * t["size"]
+            if "CE" in strat or "Bull" in strat:
+                pnl += diff * multiplier
+            else:
+                pnl -= diff * multiplier
+        return pnl
+
+    # Check Paper Trades Capital Protection
+    paper_open = [t for t in journal.trades if t.get("status") == "OPEN" and not t.get("execution_type", "Paper").startswith("Live")]
+    if paper_open:
+        total_paper_pnl = sum(get_single_trade_pnl(t) for t in paper_open)
+        if total_paper_pnl <= -risk_limit:
+            print(f"⚠️ PAPER CAPITAL PROTECTION TRIGGERED: Paper loss (₹{total_paper_pnl:.2f}) exceeded 2% limit (₹{risk_limit:.2f}). Exiting all paper trades.")
+            for t in paper_open:
+                journal.close_trade(t["id"], spot)
+                t["reason"] = f"Auto-Exit Paper Capital Protection (2% Max Loss hit at ₹{total_paper_pnl:.2f})"
+            journal.save_journal()
+
+    # Check Live Trades Capital Protection
+    live_open = [t for t in journal.trades if t.get("status") == "OPEN" and t.get("execution_type", "Paper").startswith("Live")]
+    if live_open:
+        total_live_pnl = sum(get_single_trade_pnl(t) for t in live_open)
+        if total_live_pnl <= -risk_limit:
+            print(f"⚠️ LIVE CAPITAL PROTECTION TRIGGERED: Live loss (₹{total_live_pnl:.2f}) exceeded 2% limit (₹{risk_limit:.2f}). Exiting all live trades.")
+            for t in live_open:
+                journal.close_trade(t["id"], spot)
+                t["reason"] = f"Auto-Exit Live Capital Protection (2% Max Loss hit at ₹{total_live_pnl:.2f})"
             journal.save_journal()
             
     # Include option buy strategies in the returned data block
