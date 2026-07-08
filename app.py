@@ -248,6 +248,7 @@ class SimulationState:
         self.rec_negation: List[str] = ["Waiting for signals to strengthen."]
         self.recalculation_trigger = "Schedule"
         self.last_rec_time = time.time()
+        self.last_strategy_change_time = 0.0
         
         # Strategy change history log
         self.change_log: List[Dict] = []
@@ -1053,6 +1054,20 @@ class SimulationState:
             should_change = True
         elif old_rec == "No Trade":
             should_change = True
+
+        # Apply Cooldown Debounce Protection (Avoid rapid chattering/oscillation in live markets)
+        now_ts = time.time()
+        cooldown_period = 60.0  # 60 seconds lock to confirm setup before shifting
+        time_since_change = now_ts - self.last_strategy_change_time
+        
+        # Immediate bypass for safety overrides or first evaluation
+        is_safety_override = "Sudden" in self.recalculation_trigger
+        is_first_eval = len(self.change_log) == 0
+        
+        if should_change and primary_rec != old_rec and not is_first_eval and not is_safety_override:
+            if time_since_change < cooldown_period:
+                should_change = False
+                reasoning_list.append(f"AI Setup locked (cooldown active: {int(cooldown_period - time_since_change)}s remaining for trade execution stability).")
             
         # Always update confidence, reasoning, and negation in real-time
         self.confidence = confidence_pct
@@ -1063,6 +1078,7 @@ class SimulationState:
             # Save actual previous rec before update
             prev_strat = self.current_recommendation
             self.current_recommendation = primary_rec
+            self.last_strategy_change_time = time.time()  # Enforce cooldown block on successful strategy shift
             
             # Log changes to the change timeline
             if not self.change_log or self.change_log[-1]["new_strategy"] != primary_rec:
@@ -1590,7 +1606,8 @@ def get_market_data():
         },
         "option_buy_strategies": option_buy_strategies,
         "fallback_active": fallback_active,
-        "market_session": state.market_session
+        "market_session": state.market_session,
+        "lock_remaining_seconds": max(0, int(60.0 - (time.time() - state.last_strategy_change_time)))
     }
 
 @app.get("/api/logs")

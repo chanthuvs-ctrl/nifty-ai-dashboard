@@ -497,6 +497,40 @@ async function fetchMarketData() {
         const bannerTargetText = document.getElementById('banner-target-text');
         if (bannerTargetText) bannerTargetText.innerText = data.trade_card.target;
 
+        // Render dynamic confirmation lock badges
+        const bannerLockText = document.getElementById('banner-lock-text');
+        const cardLockStatus = document.getElementById('card-lock-status');
+        
+        const lockSec = data.lock_remaining_seconds || 0;
+        let lockHTML = "";
+        let lockClass = "";
+        let lockColor = "";
+        let lockBg = "";
+        
+        if (lockSec > 0) {
+            lockHTML = `⏱️ LOCK: ${lockSec}s`;
+            lockColor = "var(--neon-cyan)";
+            lockBg = "rgba(0, 229, 255, 0.08)";
+        } else {
+            lockHTML = `✓ CONFIRMED SETUP`;
+            lockColor = "var(--neon-bull)";
+            lockBg = "rgba(0, 230, 118, 0.08)";
+        }
+        
+        if (bannerLockText) {
+            bannerLockText.innerText = lockHTML;
+            bannerLockText.style.color = lockColor;
+            bannerLockText.style.background = lockBg;
+            bannerLockText.style.border = `1px solid ${lockColor}`;
+        }
+        
+        if (cardLockStatus) {
+            cardLockStatus.innerText = lockHTML;
+            cardLockStatus.style.color = lockColor;
+            cardLockStatus.style.background = lockBg;
+            cardLockStatus.style.border = `1px solid ${lockColor}`;
+        }
+
         // Render Option Buying strategies in custom table
         const optBuyBody = document.getElementById('option-buy-strategies-body');
         if (optBuyBody && data.option_buy_strategies) {
