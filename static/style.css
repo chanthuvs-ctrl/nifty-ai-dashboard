@@ -2293,13 +2293,10 @@ body {
 
     #panel-options {
         grid-column: 1 / 2 !important;
-        grid-row: 2 / 3 !important;
+        grid-row: 2 / 4 !important;
     }
 
-    #panel-option-buy {
-        grid-column: 1 / 2 !important;
-        grid-row: 3 / 4 !important;
-    }
+
 
     #panel-regime {
         grid-column: 2 / 3 !important;

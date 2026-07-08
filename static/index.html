@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=1.4">
+    <link rel="stylesheet" href="style.css?v=2.2">
     <script src="chart.umd.js"></script>
     <script src="chartjs-plugin-annotation.js"></script>
 </head>
@@ -92,7 +92,7 @@
                 <button class="menu-btn active" data-panel="panel-chart">📈 Chart</button>
                 <button class="menu-btn active" data-panel="panel-options">⛓️ Options</button>
                 <button class="menu-btn active" data-panel="panel-journal">📔 Journal</button>
-                <button class="menu-btn active" data-panel="panel-option-buy">⚡ Option Buy</button>
+                
                 <button class="menu-btn active" data-panel="panel-regime">🧠 Regime</button>
                 <button class="menu-btn active" data-panel="panel-gauges">📊 Sentiment</button>
             </div>
@@ -109,6 +109,25 @@
                 <div class="banner-right">
                     <span>Entry: <span id="banner-entry-text">--</span></span>
                     <span style="margin-left: 10px;">Target: <span id="banner-target-text">--</span></span>
+                </div>
+            </div>
+
+            <!-- MTF CONFIRMATION STATUS BAR -->
+            <div class="mtf-alignment-bar" style="display: flex; gap: 8px; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 6px; margin-top: 5px; margin-bottom: 5px; font-family: var(--font-mono); font-size: 0.68rem;">
+                <span style="color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">MTF Trends:</span>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="color: var(--text-muted);">15m (Macro):</span>
+                        <span id="trend-15m-badge" style="font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05);">Neutral</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="color: var(--text-muted);">5m (Setup):</span>
+                        <span id="trend-5m-badge" style="font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05);">Neutral</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="color: var(--text-muted);">1m (Confirm):</span>
+                        <span id="trend-1m-badge" style="font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05);">Neutral</span>
+                    </div>
                 </div>
             </div>
 
@@ -897,36 +916,7 @@ Weekly Review: Week ____ (P&L: _________)
                 </div>
             </section>
         
-        <!-- OPTION BUYING STRATEGIES PANEL -->
-        <section class="panel full-width-panel overlay-panel" id="panel-option-buy">
-            <div class="panel-header">
-                <h2>⚡ Option Buying Strategies (2% Risk Capped)</h2>
-                <span class="close-overlay-btn">&times;</span>
-            </div>
-            <div class="panel-body flex-column">
-                <div class="pnl-alert-header" style="background: rgba(0, 229, 255, 0.05); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; margin-bottom: 15px; font-size: 0.8rem; line-height: 1.4;">
-                    <strong>⚡ MOMENTUM OPTION BUY SYSTEM</strong>: This module scans for sudden rapid movements (crash/spike) and pullbacks. Lot size is dynamically computed to cap potential loss to strictly **2.0% of Capital**, with trailing stops to capture unlimited run-ups.
-                </div>
-                <div class="table-responsive">
-                    <table class="journal-table">
-                        <thead>
-                            <tr>
-                                <th>Strategy Name</th>
-                                <th>Market Signal</th>
-                                <th>Lots Recommendation</th>
-                                <th>Stop Loss</th>
-                                <th>Max Risk Capped</th>
-                                <th>Trailing Parameter</th>
-                                <th>Action Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="option-buy-strategies-body">
-                            <!-- Dynamically populated -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
+        
     </main>
 </div>
 
@@ -1050,6 +1040,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=2.0"></script>
+    <script src="script.js?v=2.2"></script>
 </body>
 </html>

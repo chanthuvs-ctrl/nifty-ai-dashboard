@@ -150,15 +150,17 @@ class SimulationState:
         self.price_date = get_ist_date_str()
         self.price_time = get_ist_time_str()
         
-        # Historical completed 5-min candles
-        # candle schema: [time, open, high, low, close, volume, vwap]
-        self.completed_candles: List[Dict] = []
+        # Historical completed candles for multi-timeframe analysis
+        self.candles_1m: List[Dict] = []
+        self.candles_5m: List[Dict] = []
+        self.candles_15m: List[Dict] = []
+        self.completed_candles = self.candles_5m  # Backwards compatibility alias
         
         # Price history for live chart (capped at 360 points ≈ 30 min at 5s intervals)
         self.price_history: List[Dict] = []
         
-        # Current building candle
-        self.current_candle = {
+        # Current building candles
+        self.candle_1m = {
             "time": time.time(),
             "open": self.spot_price,
             "high": self.spot_price,
@@ -168,6 +170,27 @@ class SimulationState:
             "vwap_sum_pv": 0.0,
             "vwap_sum_v": 0.0
         }
+        self.candle_5m = {
+            "time": time.time(),
+            "open": self.spot_price,
+            "high": self.spot_price,
+            "low": self.spot_price,
+            "close": self.spot_price,
+            "volume": 0.0,
+            "vwap_sum_pv": 0.0,
+            "vwap_sum_v": 0.0
+        }
+        self.candle_15m = {
+            "time": time.time(),
+            "open": self.spot_price,
+            "high": self.spot_price,
+            "low": self.spot_price,
+            "close": self.spot_price,
+            "volume": 0.0,
+            "vwap_sum_pv": 0.0,
+            "vwap_sum_v": 0.0
+        }
+        self.current_candle = self.candle_5m
         
         # Session benchmarks
         self.opening_range_high = self.spot_price + 40.0
@@ -257,18 +280,21 @@ class SimulationState:
         self._init_history()
         
     def _init_history(self):
-        """Pre-populate 20 completed candles so EMAs/RSI work immediately."""
-        start_time = time.time() - (20 * 300)
+        """Pre-populate 20 completed candles for each timeframe so EMAs/RSI work immediately."""
+        now_ts = time.time()
+        
+        # 1-minute candles initialization
+        start_time_1m = now_ts - (20 * 60)
         curr = self.spot_price - 10.0
         for i in range(20):
-            c_time = start_time + (i * 300)
+            c_time = start_time_1m + (i * 60)
             open_p = curr
-            close_p = curr + random.uniform(-25, 25)
-            high_p = max(open_p, close_p) + random.uniform(0, 10)
-            low_p = min(open_p, close_p) - random.uniform(0, 10)
-            vol = random.uniform(1000, 5000)
+            close_p = curr + random.uniform(-5, 5)
+            high_p = max(open_p, close_p) + random.uniform(0, 2)
+            low_p = min(open_p, close_p) - random.uniform(0, 2)
+            vol = random.uniform(200, 1000)
             vw = (open_p + high_p + low_p + close_p) / 4
-            self.completed_candles.append({
+            self.candles_1m.append({
                 "time": c_time,
                 "open": open_p,
                 "high": high_p,
@@ -278,12 +304,57 @@ class SimulationState:
                 "vwap": vw
             })
             curr = close_p
-        
+            
+        # 5-minute candles initialization
+        start_time_5m = now_ts - (20 * 300)
+        curr = self.spot_price - 10.0
+        for i in range(20):
+            c_time = start_time_5m + (i * 300)
+            open_p = curr
+            close_p = curr + random.uniform(-25, 25)
+            high_p = max(open_p, close_p) + random.uniform(0, 10)
+            low_p = min(open_p, close_p) - random.uniform(0, 10)
+            vol = random.uniform(1000, 5000)
+            vw = (open_p + high_p + low_p + close_p) / 4
+            self.candles_5m.append({
+                "time": c_time,
+                "open": open_p,
+                "high": high_p,
+                "low": low_p,
+                "close": close_p,
+                "volume": vol,
+                "vwap": vw
+            })
+            curr = close_p
+            
+        # 15-minute candles initialization
+        start_time_15m = now_ts - (20 * 900)
+        curr = self.spot_price - 10.0
+        for i in range(20):
+            c_time = start_time_15m + (i * 900)
+            open_p = curr
+            close_p = curr + random.uniform(-75, 75)
+            high_p = max(open_p, close_p) + random.uniform(0, 30)
+            low_p = min(open_p, close_p) - random.uniform(0, 30)
+            vol = random.uniform(3000, 15000)
+            vw = (open_p + high_p + low_p + close_p) / 4
+            self.candles_15m.append({
+                "time": c_time,
+                "open": open_p,
+                "high": high_p,
+                "low": low_p,
+                "close": close_p,
+                "volume": vol,
+                "vwap": vw
+            })
+            curr = close_p
+            
         self.spot_price = curr
-        self.current_candle["open"] = curr
-        self.current_candle["high"] = curr
-        self.current_candle["low"] = curr
-        self.current_candle["close"] = curr
+        for candle in [self.candle_1m, self.candle_5m, self.candle_15m]:
+            candle["open"] = curr
+            candle["high"] = curr
+            candle["low"] = curr
+            candle["close"] = curr
         self.recompute_indicators()
         
     def save_settings(self):
@@ -344,25 +415,23 @@ class SimulationState:
         next_expiry = today + datetime.timedelta(days=days_ahead)
         self.settings["upstox_expiry_date"] = next_expiry.strftime("%Y-%m-%d")
 
-    def recompute_indicators(self):
-        """Calculates indicators based on completed candle history."""
-        if not self.completed_candles:
-            return
+    def analyze_timeframe(self, candles: List[Dict]) -> Dict:
+        """Returns indicators and trend direction for a given completed candle history."""
+        if len(candles) < 5:
+            return {"trend": "Neutral", "ema20": self.spot_price, "ema50": self.spot_price, "rsi": 50.0}
+            
+        closes = [c["close"] for c in candles]
         
-        closes = [c["close"] for c in self.completed_candles]
-        highs = [c["high"] for c in self.completed_candles]
-        lows = [c["low"] for c in self.completed_candles]
-        
-        # Simple EMA calculation
+        # Simple EMA calculation helper
         def calculate_ema(data: List[float], span: int) -> float:
             alpha = 2.0 / (span + 1)
             ema = data[0]
             for val in data[1:]:
                 ema = val * alpha + ema * (1 - alpha)
             return ema
-        
-        self.ema_20 = calculate_ema(closes, 20)
-        self.ema_50 = calculate_ema(closes, 50)
+
+        ema20 = calculate_ema(closes, min(20, len(closes)))
+        ema50 = calculate_ema(closes, min(50, len(closes)))
         
         # RSI 14
         gains = []
@@ -376,11 +445,35 @@ class SimulationState:
         avg_loss = sum(losses[-14:]) / 14 if len(losses) >= 14 else 1.0
         
         if avg_loss == 0:
-            self.rsi = 100.0
+            rsi = 100.0
         else:
             rs = avg_gain / avg_loss
-            self.rsi = 100.0 - (100.0 / (1.0 + rs))
+            rsi = 100.0 - (100.0 / (1.0 + rs))
             
+        # Classify Trend
+        if ema20 > ema50:
+            trend = "Bullish" if rsi > 50.0 else "Neutral-Bullish"
+        elif ema20 < ema50:
+            trend = "Bearish" if rsi < 50.0 else "Neutral-Bearish"
+        else:
+            trend = "Neutral"
+            
+        return {
+            "trend": trend,
+            "ema20": ema20,
+            "ema50": ema50,
+            "rsi": rsi
+        }
+
+    def recompute_indicators(self):
+        """Calculates indicators based on completed candle history."""
+        analysis_5m = self.analyze_timeframe(self.candles_5m)
+        
+        # Update self properties using the 5m timeframe
+        self.ema_20 = analysis_5m["ema20"]
+        self.ema_50 = analysis_5m["ema50"]
+        self.rsi = analysis_5m["rsi"]
+        
         # ADX (Directional Index approximation)
         self.adx = max(10.0, min(60.0, self.adx + random.uniform(-1.0, 1.0)))
         
@@ -398,11 +491,11 @@ class SimulationState:
 
     def get_rolling_momentum(self) -> float:
         """Returns the rolling price change percentage over the last 2 minutes."""
-        if not self.price_history or len(self.price_history) < 5:
+        if not self.price_history:
             return 0.0
         # Ticks are appended every 5 seconds. 2 minutes = 24 ticks back.
         lookback = min(24, len(self.price_history) - 1)
-        prev_price = self.price_history[-lookback]["price"]
+        prev_price = self.price_history[-lookback - 1]["price"]
         if prev_price <= 0:
             return 0.0
         return ((self.spot_price - prev_price) / prev_price) * 100.0
@@ -624,35 +717,32 @@ class SimulationState:
         if len(self.price_history) > 360:
             self.price_history.pop(0)
 
-        # Update current candle metrics
-        curr = self.current_candle
-        curr["high"] = max(curr["high"], self.spot_price)
-        curr["low"] = min(curr["low"], self.spot_price)
-        curr["close"] = self.spot_price
-        curr["volume"] += random.uniform(50, 200)
-        curr["vwap_sum_pv"] += self.spot_price * curr["volume"]
-        curr["vwap_sum_v"] += curr["volume"]
+        # Update current candle metrics for all three timeframes
+        for candle in [self.candle_1m, self.candle_5m, self.candle_15m]:
+            candle["high"] = max(candle["high"], self.spot_price)
+            candle["low"] = min(candle["low"], self.spot_price)
+            candle["close"] = self.spot_price
+            candle["volume"] += random.uniform(50, 200)
+            candle["vwap_sum_pv"] += self.spot_price * candle["volume"]
+            candle["vwap_sum_v"] += candle["volume"]
 
-        # Check if 5 minutes completed
         now = time.time()
-        if now - curr["time"] >= 300 or override_type == "candle_close":
-            # Close candle and append to history
-            vwap_val = curr["vwap_sum_pv"] / curr["vwap_sum_v"] if curr["vwap_sum_v"] > 0 else self.spot_price
-            self.completed_candles.append({
-                "time": curr["time"],
-                "open": curr["open"],
-                "high": curr["high"],
-                "low": curr["low"],
-                "close": curr["close"],
-                "volume": curr["volume"],
+        
+        # 1. Check if 1 minute completed
+        if now - self.candle_1m["time"] >= 60 or override_type == "candle_close":
+            vwap_val = self.candle_1m["vwap_sum_pv"] / self.candle_1m["vwap_sum_v"] if self.candle_1m["vwap_sum_v"] > 0 else self.spot_price
+            self.candles_1m.append({
+                "time": self.candle_1m["time"],
+                "open": self.candle_1m["open"],
+                "high": self.candle_1m["high"],
+                "low": self.candle_1m["low"],
+                "close": self.candle_1m["close"],
+                "volume": self.candle_1m["volume"],
                 "vwap": vwap_val
             })
-            # Maintain last 30 candles
-            if len(self.completed_candles) > 30:
-                self.completed_candles.pop(0)
-            
-            # Reset current candle
-            self.current_candle = {
+            if len(self.candles_1m) > 60:
+                self.candles_1m.pop(0)
+            self.candle_1m = {
                 "time": now,
                 "open": self.spot_price,
                 "high": self.spot_price,
@@ -662,8 +752,60 @@ class SimulationState:
                 "vwap_sum_pv": 0.0,
                 "vwap_sum_v": 0.0
             }
+
+        # 2. Check if 5 minutes completed
+        if now - self.candle_5m["time"] >= 300 or override_type == "candle_close":
+            vwap_val = self.candle_5m["vwap_sum_pv"] / self.candle_5m["vwap_sum_v"] if self.candle_5m["vwap_sum_v"] > 0 else self.spot_price
+            self.candles_5m.append({
+                "time": self.candle_5m["time"],
+                "open": self.candle_5m["open"],
+                "high": self.candle_5m["high"],
+                "low": self.candle_5m["low"],
+                "close": self.candle_5m["close"],
+                "volume": self.candle_5m["volume"],
+                "vwap": vwap_val
+            })
+            if len(self.candles_5m) > 60:
+                self.candles_5m.pop(0)
+            self.candle_5m = {
+                "time": now,
+                "open": self.spot_price,
+                "high": self.spot_price,
+                "low": self.spot_price,
+                "close": self.spot_price,
+                "volume": 0.0,
+                "vwap_sum_pv": 0.0,
+                "vwap_sum_v": 0.0
+            }
+            # Keep alias synchronized
+            self.current_candle = self.candle_5m
             self.recompute_indicators()
             self.recalculation_trigger = "Completed 5-minute candle"
+
+        # 3. Check if 15 minutes completed
+        if now - self.candle_15m["time"] >= 900 or override_type == "candle_close":
+            vwap_val = self.candle_15m["vwap_sum_pv"] / self.candle_15m["vwap_sum_v"] if self.candle_15m["vwap_sum_v"] > 0 else self.spot_price
+            self.candles_15m.append({
+                "time": self.candle_15m["time"],
+                "open": self.candle_15m["open"],
+                "high": self.candle_15m["high"],
+                "low": self.candle_15m["low"],
+                "close": self.candle_15m["close"],
+                "volume": self.candle_15m["volume"],
+                "vwap": vwap_val
+            })
+            if len(self.candles_15m) > 60:
+                self.candles_15m.pop(0)
+            self.candle_15m = {
+                "time": now,
+                "open": self.spot_price,
+                "high": self.spot_price,
+                "low": self.spot_price,
+                "close": self.spot_price,
+                "volume": 0.0,
+                "vwap_sum_pv": 0.0,
+                "vwap_sum_v": 0.0
+            }
 
         # Check immediate override recalculations or periodic recalculation
         if self.recalculation_trigger != "Schedule" or (now - self.last_rec_time >= 60):
@@ -898,146 +1040,214 @@ class SimulationState:
         regime = self.classify_market_regime()
         vwap_val = self.get_vwap()
         
-        # Weighted Score Computation (Base Bullish vs Bearish)
-        scores = {
-            "bullish": 0,
-            "bearish": 0,
-            "sideways": 0
-        }
-        
-        reasons_bullish = []
-        reasons_bearish = []
-        reasons_neutral = []
-        
-        # 1. ORB (Weight: 15)
-        if self.spot_price > self.opening_range_high:
-            scores["bullish"] += 15
-            reasons_bullish.append("Opening Range Breakout upside (+15)")
-        elif self.spot_price < self.opening_range_low:
-            scores["bearish"] += 15
-            reasons_bearish.append("Opening Range Breakdown downside (+15)")
-        else:
-            scores["sideways"] += 10
-            reasons_neutral.append("Price within Opening Range (+10)")
-            
-        # 2. VWAP Crossover (Weight: 10)
-        if self.spot_price > vwap_val:
-            scores["bullish"] += 10
-            reasons_bullish.append("Price above VWAP (+10)")
-        else:
-            scores["bearish"] += 10
-            reasons_bearish.append("Price below VWAP (+10)")
-            
-        # 3. EMA alignment (Weight: 10)
-        if self.ema_20 > self.ema_50:
-            scores["bullish"] += 10
-            reasons_bullish.append("EMA 20 > EMA 50 crossover (+10)")
-        else:
-            scores["bearish"] += 10
-            reasons_bearish.append("EMA 20 < EMA 50 breakdown (+10)")
-            
-        # 4. ADX trend strength (Weight: 10)
-        if self.adx > 25.0:
-            if self.spot_price > self.ema_20:
-                scores["bullish"] += 10
-                reasons_bullish.append("ADX > 25 indicates Strong Bullish Trend (+10)")
-            else:
-                scores["bearish"] += 10
-                reasons_bearish.append("ADX > 25 indicates Strong Bearish Trend (+10)")
-        else:
-            scores["sideways"] += 10
-            reasons_neutral.append("ADX < 20 indicates Sideways Consolidation (+10)")
-            
-        # 5. VIX Trend (Weight: 15)
-        if self.vix > 18.0:
-            scores["bearish"] += 10
-            reasons_bearish.append("VIX is elevated, favoring hedging/buying puts (+10)")
-        else:
-            scores["sideways"] += 15
-            reasons_neutral.append("VIX is low/stable, premium decay favors option sellers (+15)")
-            
-        # 6. PCR (Weight: 10)
-        if self.pcr > 1.25:
-            scores["bullish"] += 10
-            reasons_bullish.append("PCR is bullish (>1.25) indicating put writers control (+10)")
-        elif self.pcr < 0.75:
-            scores["bearish"] += 10
-            reasons_bearish.append("PCR is bearish (<0.75) indicating heavy call writing (+10)")
-        else:
-            scores["sideways"] += 8
-            reasons_neutral.append("PCR is neutral, range-bound positioning (+8)")
-            
-        # 7. OI Build-up (Weight: 15)
-        if self.pcr > 1.15:
-            scores["bullish"] += 15
-            reasons_bullish.append("Heavy Put writing building support at ATM strikes (+15)")
-        elif self.pcr < 0.85:
-            scores["bearish"] += 15
-            reasons_bearish.append("Heavy Call writing building resistance at ATM strikes (+15)")
-        else:
-            scores["sideways"] += 10
-            reasons_neutral.append("OI build-up balanced on both Call and Put sides (+10)")
-            
-        # 8. IV Change (Weight: 10)
-        if self.vix > 20.0:
-            scores["bearish"] += 5
-            reasons_bearish.append("Rising IV points to downside risk volatility (+5)")
-        else:
-            scores["sideways"] += 10
-            reasons_neutral.append("Stable/Crushing IV favors selling strategies (+10)")
-            
-        # 9. Breadth & Sectors (Weight: 10 total)
-        if self.advance_decline > 1.5:
-            scores["bullish"] += 10
-            reasons_bullish.append("Strong Advance/Decline ratio & broad market breadth (+10)")
-        elif self.advance_decline < 0.65:
-            scores["bearish"] += 10
-            reasons_bearish.append("Weak Advance/Decline ratio indicating broad selloff (+10)")
-        else:
-            scores["sideways"] += 5
-            reasons_neutral.append("Market breadth is balanced across sectors (+5)")
-
-        # Strategy selection based on aggregate weighted scores
-        total_bullish = scores["bullish"]
-        total_bearish = scores["bearish"]
-        total_sideways = scores["sideways"]
-        
-        max_score = max(total_bullish, total_bearish, total_sideways)
-        
+        # Check for Option Buy Momentum Breakout first!
+        mom_pct = self.get_rolling_momentum()
+        is_momentum_breakout = False
         primary_rec = "No Trade"
         confidence_pct = 50.0
         reasoning_list = []
         negation_list = []
         
-        if max_score == total_bullish and total_bullish > 45:
-            confidence_pct = min(98.0, 50.0 + (total_bullish / 100.0) * 45.0)
-            reasoning_list = reasons_bullish
-            negation_list = reasons_bearish
-            if "Strong" in regime or "Breakout" in regime:
-                primary_rec = "Buy CE" if self.vix > 15.0 else "Bull Call Spread"
+        if mom_pct >= 0.18:
+            primary_rec = "Buy CE"
+            confidence_pct = 95.0
+            reasoning_list = [
+                f"Sudden Market Spike! 2-min momentum surges by {mom_pct:+.2f}% (Threshold: +0.18%)",
+                "Momentum Velocity Breakout strategy triggered on CE side.",
+                f"Index spot price trending strongly upward (Spot: {self.spot_price:.1f})."
+            ]
+            negation_list = [
+                "Option selling negated due to sudden high-velocity trend.",
+                "PE options negated due to strong bullish spike."
+            ]
+            is_momentum_breakout = True
+        elif mom_pct <= -0.18:
+            primary_rec = "Buy PE"
+            confidence_pct = 95.0
+            reasoning_list = [
+                f"Sudden Market Crash! 2-min momentum drops by {mom_pct:.2f}% (Threshold: -0.18%)",
+                "Momentum Velocity Breakout strategy triggered on PE side.",
+                f"Index spot price dropping rapidly (Spot: {self.spot_price:.1f})."
+            ]
+            negation_list = [
+                "Option selling negated due to sudden high-velocity trend.",
+                "CE options negated due to strong bearish crash."
+            ]
+            is_momentum_breakout = True
+            
+        if not is_momentum_breakout:
+            # Weighted Score Computation (Base Bullish vs Bearish)
+            scores = {
+                "bullish": 0,
+                "bearish": 0,
+                "sideways": 0
+            }
+            
+            reasons_bullish = []
+            reasons_bearish = []
+            reasons_neutral = []
+            
+            # 1. ORB (Weight: 15)
+            if self.spot_price > self.opening_range_high:
+                scores["bullish"] += 15
+                reasons_bullish.append("Opening Range Breakout upside (+15)")
+            elif self.spot_price < self.opening_range_low:
+                scores["bearish"] += 15
+                reasons_bearish.append("Opening Range Breakdown downside (+15)")
             else:
-                primary_rec = "Bull Put Spread"
-        elif max_score == total_bearish and total_bearish > 45:
-            confidence_pct = min(98.0, 50.0 + (total_bearish / 100.0) * 45.0)
-            reasoning_list = reasons_bearish
-            negation_list = reasons_bullish
-            if "Strong" in regime or "Breakdown" in regime:
-                primary_rec = "Buy PE" if self.vix > 15.0 else "Bear Put Spread"
+                scores["sideways"] += 10
+                reasons_neutral.append("Price within Opening Range (+10)")
+                
+            # 2. VWAP Crossover (Weight: 10)
+            if self.spot_price > vwap_val:
+                scores["bullish"] += 10
+                reasons_bullish.append("Price above VWAP (+10)")
             else:
-                primary_rec = "Bear Call Spread"
-        else:
-            confidence_pct = min(98.0, 50.0 + (total_sideways / 100.0) * 45.0)
-            reasoning_list = reasons_neutral
-            negation_list = reasons_bullish + reasons_bearish
+                scores["bearish"] += 10
+                reasons_bearish.append("Price below VWAP (+10)")
+                
+            # 3. EMA alignment (Weight: 10)
+            if self.ema_20 > self.ema_50:
+                scores["bullish"] += 10
+                reasons_bullish.append("EMA 20 > EMA 50 crossover (+10)")
+            else:
+                scores["bearish"] += 10
+                reasons_bearish.append("EMA 20 < EMA 50 breakdown (+10)")
+                
+            # 4. ADX trend strength (Weight: 10)
+            if self.adx > 25.0:
+                if self.spot_price > self.ema_20:
+                    scores["bullish"] += 10
+                    reasons_bullish.append("ADX > 25 indicates Strong Bullish Trend (+10)")
+                else:
+                    scores["bearish"] += 10
+                    reasons_bearish.append("ADX > 25 indicates Strong Bearish Trend (+10)")
+            else:
+                scores["sideways"] += 10
+                reasons_neutral.append("ADX < 20 indicates Sideways Consolidation (+10)")
+                
+            # 5. VIX Trend (Weight: 15)
             if self.vix > 18.0:
-                primary_rec = "Iron Condor"
+                scores["bearish"] += 10
+                reasons_bearish.append("VIX is elevated, favoring hedging/buying puts (+10)")
             else:
-                primary_rec = "Short Strangle"
-        
-        # Rule: If confidence is below 65%, force NO TRADE.
-        if confidence_pct < 65.0:
-            primary_rec = "No Trade"
-            reasoning_list.append("Confidence score below institutional threshold of 65%.")
+                scores["sideways"] += 15
+                reasons_neutral.append("VIX is low/stable, premium decay favors option sellers (+15)")
+                
+            # 6. PCR (Weight: 10)
+            if self.pcr > 1.25:
+                scores["bullish"] += 10
+                reasons_bullish.append("PCR is bullish (>1.25) indicating put writers control (+10)")
+            elif self.pcr < 0.75:
+                scores["bearish"] += 10
+                reasons_bearish.append("PCR is bearish (<0.75) indicating heavy call writing (+10)")
+            else:
+                scores["sideways"] += 8
+                reasons_neutral.append("PCR is neutral, range-bound positioning (+8)")
+                
+            # 7. OI Build-up (Weight: 15)
+            if self.pcr > 1.15:
+                scores["bullish"] += 15
+                reasons_bullish.append("Heavy Put writing building support at ATM strikes (+15)")
+            elif self.pcr < 0.85:
+                scores["bearish"] += 15
+                reasons_bearish.append("Heavy Call writing building resistance at ATM strikes (+15)")
+            else:
+                scores["sideways"] += 10
+                reasons_neutral.append("OI build-up balanced on both Call and Put sides (+10)")
+                
+            # 8. IV Change (Weight: 10)
+            if self.vix > 20.0:
+                scores["bearish"] += 5
+                reasons_bearish.append("Rising IV points to downside risk volatility (+5)")
+            else:
+                scores["sideways"] += 10
+                reasons_neutral.append("Stable/Crushing IV favors selling strategies (+10)")
+                
+            # 9. Breadth & Sectors (Weight: 10 total)
+            if self.advance_decline > 1.5:
+                scores["bullish"] += 10
+                reasons_bullish.append("Strong Advance/Decline ratio & broad market breadth (+10)")
+            elif self.advance_decline < 0.65:
+                scores["bearish"] += 10
+                reasons_bearish.append("Weak Advance/Decline ratio indicating broad selloff (+10)")
+            else:
+                scores["sideways"] += 5
+                reasons_neutral.append("Market breadth is balanced across sectors (+5)")
+
+            # Strategy selection based on aggregate weighted scores
+            total_bullish = scores["bullish"]
+            total_bearish = scores["bearish"]
+            total_sideways = scores["sideways"]
+            
+            max_score = max(total_bullish, total_bearish, total_sideways)
+            
+            if max_score == total_bullish and total_bullish > 45:
+                confidence_pct = min(98.0, 50.0 + (total_bullish / 100.0) * 45.0)
+                reasoning_list = reasons_bullish
+                negation_list = reasons_bearish
+                if "Strong" in regime or "Breakout" in regime:
+                    primary_rec = "Buy CE" if self.vix > 15.0 else "Bull Call Spread"
+                else:
+                    primary_rec = "Bull Put Spread"
+            elif max_score == total_bearish and total_bearish > 45:
+                confidence_pct = min(98.0, 50.0 + (total_bearish / 100.0) * 45.0)
+                reasoning_list = reasons_bearish
+                negation_list = reasons_bullish
+                if "Strong" in regime or "Breakdown" in regime:
+                    primary_rec = "Buy PE" if self.vix > 15.0 else "Bear Put Spread"
+                else:
+                    primary_rec = "Bear Call Spread"
+            else:
+                confidence_pct = min(98.0, 50.0 + (total_sideways / 100.0) * 45.0)
+                reasoning_list = reasons_neutral
+                negation_list = reasons_bullish + reasons_bearish
+                if self.vix > 18.0:
+                    primary_rec = "Iron Condor"
+                else:
+                    primary_rec = "Short Strangle"
+            
+            # Rule: If confidence is below 65%, force NO TRADE.
+            if confidence_pct < 65.0:
+                primary_rec = "No Trade"
+                reasoning_list.append("Confidence score below institutional threshold of 65%.")
+
+            # Multi-Timeframe Trend Confirmation
+            analysis_15m = self.analyze_timeframe(self.candles_15m)
+            analysis_1m = self.analyze_timeframe(self.candles_1m)
+            analysis_5m = self.analyze_timeframe(self.candles_5m)
+            
+            trend_15m = analysis_15m["trend"]
+            trend_5m = analysis_5m["trend"]
+            trend_1m = analysis_1m["trend"]
+            
+            is_bullish_confirmed = (trend_15m in ["Bullish", "Neutral-Bullish"]) and \
+                                   (trend_5m in ["Bullish", "Neutral-Bullish"]) and \
+                                   (trend_1m == "Bullish")
+                                   
+            is_bearish_confirmed = (trend_15m in ["Bearish", "Neutral-Bearish"]) and \
+                                   (trend_5m in ["Bearish", "Neutral-Bearish"]) and \
+                                   (trend_1m == "Bearish")
+                                   
+            reasoning_list.append(f"MTF Trend Check: 15m (Macro) = {trend_15m}, 5m (Setup) = {trend_5m}, 1m (Confirm) = {trend_1m}")
+            
+            # Filter directional strategies through Multi-Timeframe Confirmation
+            if primary_rec in ["Buy CE", "Bull Call Spread", "Bull Put Spread"]:
+                if not is_bullish_confirmed:
+                    reasoning_list.append(f"⚠️ Bullish signal '{primary_rec}' blocked: Mismatched MTF trend (15m: {trend_15m}, 5m: {trend_5m}, 1m: {trend_1m}). Locked to Sideways.")
+                    if self.vix > 18.0:
+                        primary_rec = "Iron Condor"
+                    else:
+                        primary_rec = "Short Strangle"
+                    confidence_pct = 70.0
+            elif primary_rec in ["Buy PE", "Bear Put Spread", "Bear Call Spread"]:
+                if not is_bearish_confirmed:
+                    reasoning_list.append(f"⚠️ Bearish signal '{primary_rec}' blocked: Mismatched MTF trend (15m: {trend_15m}, 5m: {trend_5m}, 1m: {trend_1m}). Locked to Sideways.")
+                    if self.vix > 18.0:
+                        primary_rec = "Iron Condor"
+                    else:
+                        primary_rec = "Short Strangle"
+                    confidence_pct = 70.0
 
         # Apply Stability Filter
         old_rec = self.current_recommendation
@@ -1061,7 +1271,7 @@ class SimulationState:
         time_since_change = now_ts - self.last_strategy_change_time
         
         # Immediate bypass for safety overrides or first evaluation
-        is_safety_override = "Sudden" in self.recalculation_trigger
+        is_safety_override = "Sudden" in self.recalculation_trigger or is_momentum_breakout
         is_first_eval = len(self.change_log) == 0
         
         if should_change and primary_rec != old_rec and not is_first_eval and not is_safety_override:
@@ -1295,11 +1505,12 @@ class TradeJournal:
 
 journal = TradeJournal()
 
-# Pre-populate dynamic trades history
-journal.add_trade("Bull Put Spread", 22210.0, ["22200 PE", "22150 PE"], 90.0, "VIX Falling, strong put writing", size=2)
-journal.close_trade("1", 22260.0)
-journal.add_trade("Buy PE", 22280.0, ["22300 PE"], 75.0, "VWAP breakdowns and negative breadth", size=1)
-journal.close_trade("2", 22230.0)
+# Pre-populate dynamic trades history only if the journal is empty
+if len(journal.trades) == 0:
+    t1 = journal.add_trade("Bull Put Spread", 22210.0, ["22200 PE", "22150 PE"], 90.0, "VIX Falling, strong put writing", size=2)
+    journal.close_trade(t1["id"], 22260.0)
+    t2 = journal.add_trade("Buy PE", 22280.0, ["22300 PE"], 75.0, "VWAP breakdowns and negative breadth", size=1)
+    journal.close_trade(t2["id"], 22230.0)
 
 
 # ==========================================
@@ -1547,9 +1758,17 @@ def get_market_data():
         tertiary_rec = "No Trade"
 
     margin_req = 120000.0 if "Spread" in state.current_recommendation or "Short" in state.current_recommendation else 15000.0
-    max_risk = state.settings["capital"] * (state.settings["risk_pct"] / 100.0)
     lot_size = 20 if preferred_index.lower() == "sensex" else 65
-    suggested_lots = max(1, int(max_risk / 1500.0)) if "Buy" in state.current_recommendation else max(1, int(state.settings["capital"] / margin_req))
+    
+    if "Buy CE" in state.current_recommendation or "Buy PE" in state.current_recommendation:
+        # Option Buying strategy: limit risk to 2% of capital
+        max_risk = state.settings.get("capital", 500000.0) * 0.02
+        risk_per_lot = 0.5 * 30.0 * lot_size
+        suggested_lots = max(1, int(max_risk / risk_per_lot))
+    else:
+        # Spreads or Option Selling
+        max_risk = state.settings["capital"] * (state.settings["risk_pct"] / 100.0)
+        suggested_lots = max(1, int(state.settings["capital"] / margin_req))
 
     return {
         "spot_price": round(spot, 2),
@@ -1565,6 +1784,11 @@ def get_market_data():
         "tertiary_recommendation": tertiary_rec,
         "reasoning": state.rec_reasoning,
         "negation": state.rec_negation,
+        "timeframe_trends": {
+            "m15": state.analyze_timeframe(state.candles_15m)["trend"],
+            "m5": state.analyze_timeframe(state.candles_5m)["trend"],
+            "m1": state.analyze_timeframe(state.candles_1m)["trend"]
+        },
         "indicators": {
             "ema_20": round(state.ema_20, 2),
             "ema_50": round(state.ema_50, 2),
@@ -1864,11 +2088,27 @@ def execute_live_order(data: LiveOrderRequest):
 @app.post("/api/settings/action")
 def trigger_action(data: TriggerOverride):
     state.tick_5s(override_type=data.override_type)
+    
+    preferred_index = state.settings.get("preferred_index", "Nifty")
+    lot_size = 20 if preferred_index.lower() == "sensex" else 65
+    margin_req = 120000.0 if "Spread" in state.current_recommendation or "Short" in state.current_recommendation else 15000.0
+    
+    if "Buy CE" in state.current_recommendation or "Buy PE" in state.current_recommendation:
+        max_risk = state.settings.get("capital", 500000.0) * 0.02
+        risk_per_lot = 0.5 * 30.0 * lot_size
+        suggested_lots = max(1, int(max_risk / risk_per_lot))
+    else:
+        max_risk = state.settings["capital"] * (state.settings["risk_pct"] / 100.0)
+        suggested_lots = max(1, int(state.settings["capital"] / margin_req))
+        
     return {
         "status": "SUCCESS", 
         "trigger": state.recalculation_trigger,
         "spot": state.spot_price,
-        "recommendation": state.current_recommendation
+        "recommendation": state.current_recommendation,
+        "confidence": state.confidence,
+        "reasoning": state.rec_reasoning,
+        "suggested_lots": suggested_lots
     }
 
 @app.get("/api/journal")
@@ -1924,7 +2164,11 @@ def sync_journal(data: SyncRequest):
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     # Disable admin login for now (allow all requests)
-    return await call_next(request)
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 @app.get("/login", response_class=HTMLResponse)
 def get_login_page():

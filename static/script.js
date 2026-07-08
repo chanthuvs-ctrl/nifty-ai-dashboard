@@ -379,6 +379,13 @@ async function fetchMarketData() {
         
         document.getElementById('hdr-max-pain').innerText = data.indicators.max_pain;
         
+        // Update timeframe trends
+        if (data.timeframe_trends) {
+            updateTrendBadge('trend-15m-badge', data.timeframe_trends.m15);
+            updateTrendBadge('trend-5m-badge', data.timeframe_trends.m5);
+            updateTrendBadge('trend-1m-badge', data.timeframe_trends.m1);
+        }
+        
         // 2. Regime & Indicators Panel
         const regimeBadge = document.getElementById('regime-badge');
         if (regimeBadge) {
@@ -3082,3 +3089,35 @@ function saveAcademyState() {
 // Expose functions globally for dynamic integrations
 window.initAcademy = initAcademy;
 window.switchAcademyTab = switchAcademyTab;
+
+
+// Update visual styling of timeframe trend badges dynamically
+function updateTrendBadge(id, trend) {
+    const badge = document.getElementById(id);
+    if (!badge) return;
+    
+    badge.innerText = trend;
+    badge.className = ""; // clear classes
+    
+    if (trend === "Bullish") {
+        badge.style.color = "var(--neon-bull)";
+        badge.style.background = "rgba(0, 229, 153, 0.1)";
+        badge.style.border = "1px solid rgba(0, 229, 153, 0.2)";
+    } else if (trend === "Bearish") {
+        badge.style.color = "var(--neon-bear)";
+        badge.style.background = "rgba(235, 94, 85, 0.1)";
+        badge.style.border = "1px solid rgba(235, 94, 85, 0.2)";
+    } else if (trend.includes("Bullish")) {
+        badge.style.color = "rgba(0, 229, 153, 0.8)";
+        badge.style.background = "rgba(0, 229, 153, 0.05)";
+        badge.style.border = "1px solid rgba(0, 229, 153, 0.1)";
+    } else if (trend.includes("Bearish")) {
+        badge.style.color = "rgba(235, 94, 85, 0.8)";
+        badge.style.background = "rgba(235, 94, 85, 0.05)";
+        badge.style.border = "1px solid rgba(235, 94, 85, 0.1)";
+    } else {
+        badge.style.color = "var(--text-muted)";
+        badge.style.background = "rgba(255, 255, 255, 0.05)";
+        badge.style.border = "1px solid rgba(255, 255, 255, 0.1)";
+    }
+}
