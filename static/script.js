@@ -1312,6 +1312,8 @@ async function reloadExpiries(settings = null) {
 // Initialize Mobile Overlay Panels & Home Dock Click Listeners
 // Initialize In-Place Dashboard Panel Toggles
 function initDashboardToggles() {
+    const backdrop = document.getElementById('modal-backdrop');
+    
     // Click listeners for menu buttons
     document.querySelectorAll('.menu-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1333,12 +1335,14 @@ function initDashboardToggles() {
                 document.querySelectorAll('.menu-btn').forEach(b => {
                     b.classList.remove('active');
                 });
+                if (backdrop) backdrop.classList.remove('active');
                 
                 // Open only this one if it wasn't already active
                 if (!wasActive) {
                     panel.classList.add('active');
                     panel.classList.remove('hidden-panel');
                     btn.classList.add('active');
+                    if (backdrop) backdrop.classList.add('active');
                     if (panelId === 'panel-chart' && window.myChart) {
                         fetchChartData();
                     }
@@ -1376,14 +1380,71 @@ function initDashboardToggles() {
             if (btn) {
                 btn.classList.remove('active');
             }
+            
+            // Check if any active panels are still open on mobile
+            const anyActive = document.querySelector('.panel.active');
+            if (!anyActive && backdrop) {
+                backdrop.classList.remove('active');
+            }
         });
     });
+
+    // Click backdrop to close active panel
+    if (backdrop) {
+        backdrop.addEventListener('click', () => {
+            document.querySelectorAll('.panel.active').forEach(p => {
+                p.classList.remove('active');
+                p.classList.add('hidden-panel');
+                
+                const panelId = p.id;
+                const btn = document.querySelector(`.menu-btn[data-panel="${panelId}"]`);
+                if (btn) btn.classList.remove('active');
+            });
+            backdrop.classList.remove('active');
+        });
+    }
 }
 
 // Initialize application listeners
 document.addEventListener('DOMContentLoaded', async () => {
     // Initialize in-place panel toggles and action center
     initDashboardToggles();
+    
+    // Align initial active states based on viewport width
+    const alignActiveStates = () => {
+        const isMobile = window.innerWidth < 1024;
+        const backdrop = document.getElementById('modal-backdrop');
+        if (backdrop) backdrop.classList.remove('active');
+        
+        document.querySelectorAll('.menu-btn').forEach(btn => {
+            const panelId = btn.getAttribute('data-panel');
+            const panel = document.getElementById(panelId);
+            if (!panel) return;
+            
+            if (isMobile) {
+                btn.classList.remove('active');
+                panel.classList.remove('active');
+                panel.classList.add('hidden-panel');
+            } else {
+                btn.classList.add('active');
+                panel.classList.add('active');
+                panel.classList.remove('hidden-panel');
+            }
+        });
+    };
+    
+    alignActiveStates();
+    // Re-align on resize if crossing the threshold
+    window.addEventListener('resize', () => {
+        const isMobileNow = window.innerWidth < 1024;
+        const chartBtn = document.querySelector('.menu-btn[data-panel="panel-chart"]');
+        if (chartBtn) {
+            const isBtnActive = chartBtn.classList.contains('active');
+            if ((!isMobileNow && !isBtnActive) || (isMobileNow && isBtnActive && !document.querySelector('.panel.active'))) {
+                alignActiveStates();
+            }
+        }
+    });
     
     // Request notification permissions safely
     if (typeof Notification !== 'undefined') {
