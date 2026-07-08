@@ -1961,3 +1961,251 @@ body {
 .panel-collapsed {
     border-color: rgba(255, 255, 255, 0.05) !important;
 }
+
+/* ==========================================
+   HOMEPAGE LAYOUT, OVERLAY PANELS & NAVIGATION DOCK
+   ========================================== */
+
+.homepage-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 0 16px 20px 16px;
+    box-sizing: border-box;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+/* AI Intelligence Banner */
+.ai-intelligence-banner {
+    background: linear-gradient(135deg, rgba(6, 30, 54, 0.75), rgba(12, 18, 30, 0.9));
+    border: 1px solid rgba(0, 229, 255, 0.25);
+    border-radius: 8px;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 0 15px rgba(0, 229, 255, 0.08);
+    cursor: pointer;
+    transition: all 0.25s ease;
+    user-select: none;
+}
+
+.ai-intelligence-banner:hover {
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 20px rgba(0, 229, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+.banner-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pulse-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--neon-cyan);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--neon-cyan);
+    animation: banner-pulse 1.5s infinite;
+}
+
+@keyframes banner-pulse {
+    0% { transform: scale(0.9); opacity: 0.6; }
+    50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 12px var(--neon-cyan); }
+    100% { transform: scale(0.9); opacity: 0.6; }
+}
+
+.banner-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+.banner-value {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--neon-cyan);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.banner-confidence {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.banner-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.banner-action-hint {
+    font-size: 0.7rem;
+    color: var(--neon-cyan);
+    font-weight: 600;
+    opacity: 0.8;
+}
+
+/* Control Dock */
+.control-dock-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.control-dock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+}
+
+/* Responsive grid for mobile */
+@media (max-width: 580px) {
+    .control-dock-grid {
+        grid-template-columns: repeat(2, 1fr); /* 2 columns on mobile */
+        gap: 12px;
+    }
+    .banner-right {
+        display: none !important; /* hide details on small screens to fit banner */
+    }
+}
+
+.dock-card {
+    background: linear-gradient(135deg, rgba(20, 30, 48, 0.4), rgba(36, 59, 85, 0.3));
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+}
+
+.dock-card:hover {
+    border-color: rgba(0, 229, 255, 0.35);
+    background: linear-gradient(135deg, rgba(20, 30, 48, 0.65), rgba(36, 59, 85, 0.55));
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 229, 255, 0.1);
+}
+
+.dock-card:active {
+    transform: scale(0.98);
+}
+
+.dock-card-icon {
+    font-size: 1.6rem;
+    line-height: 1;
+    margin-bottom: 2px;
+}
+
+.dock-card-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.dock-card-desc {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    line-height: 1.3;
+}
+
+/* OVERLAY PANEL LAYOUT SHIFT */
+.overlay-panel {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(6, 10, 18, 0.97) !important;
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    z-index: 9999 !important;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateY(40px) scale(0.98);
+    overflow-y: auto !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.overlay-panel.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+/* Force body scroll lock when panel is active */
+body.panel-lock {
+    overflow: hidden !important;
+    height: 100vh !important;
+}
+
+/* Close Button on overlays */
+.close-overlay-btn {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.1rem;
+    font-weight: 600;
+    line-height: 1;
+    transition: all 0.2s ease;
+    user-select: none;
+    z-index: 10;
+}
+
+.close-overlay-btn:hover {
+    background: rgba(255, 23, 68, 0.12);
+    color: #ff1744;
+    border-color: rgba(255, 23, 68, 0.4);
+    box-shadow: 0 0 10px rgba(255, 23, 68, 0.2);
+}
+
+/* Layout adjusting inside overlays */
+.overlay-panel .panel-header {
+    padding: 16px 20px;
+    background: rgba(10, 17, 28, 0.7);
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.overlay-panel .panel-body {
+    flex: 1;
+    padding: 24px 20px;
+    box-sizing: border-box;
+    overflow-y: auto;
+}

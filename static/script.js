@@ -476,6 +476,65 @@ async function fetchMarketData() {
             fallbackBanner.style.display = data.fallback_active ? 'flex' : 'none';
         }
         
+        // Update AI Intelligence Banner on Homepage
+        const bannerRecText = document.getElementById('banner-rec-text');
+        if (bannerRecText) {
+            bannerRecText.innerText = data.recommendation.toUpperCase();
+            if (data.recommendation.includes("CE") || data.recommendation.includes("Bull")) {
+                bannerRecText.className = "banner-value text-bull";
+            } else if (data.recommendation.includes("PE") || data.recommendation.includes("Bear")) {
+                bannerRecText.className = "banner-value text-bear";
+            } else {
+                bannerRecText.className = "banner-value text-gold";
+            }
+        }
+        const bannerConfText = document.getElementById('banner-conf-text');
+        if (bannerConfText) bannerConfText.innerText = `${data.confidence.toFixed(1)}% Confidence`;
+        
+        const bannerEntryText = document.getElementById('banner-entry-text');
+        if (bannerEntryText) bannerEntryText.innerText = data.trade_card.entry_zone;
+        
+        const bannerTargetText = document.getElementById('banner-target-text');
+        if (bannerTargetText) bannerTargetText.innerText = data.trade_card.target;
+
+        // Render Option Buying strategies in custom table
+        const optBuyBody = document.getElementById('option-buy-strategies-body');
+        if (optBuyBody && data.option_buy_strategies) {
+            optBuyBody.innerHTML = "";
+            data.option_buy_strategies.forEach(strat => {
+                const tr = document.createElement('tr');
+                
+                const isSignalActive = strat.status.includes("ACTIVE");
+                const signalClass = isSignalActive ? (strat.action.includes("CE") ? "text-bull font-bold" : "text-bear font-bold") : "text-secondary";
+                
+                // Set dynamic glowing badges for signals
+                let badgeStyle = "padding: 4px 8px; font-size: 0.7rem; border-radius: 4px; display: inline-block; font-weight: 700;";
+                let badgeClass = "badge-pro";
+                if (isSignalActive) {
+                    if (strat.action.includes("CE")) {
+                        badgeClass = "badge-pro btn-glow-green";
+                    } else {
+                        badgeClass = "badge-pro btn-glow-red";
+                    }
+                }
+                
+                tr.innerHTML = `
+                    <td class="font-bold">${strat.name}</td>
+                    <td class="${signalClass}" style="max-width: 250px;">${strat.reason}</td>
+                    <td>${strat.suggested_lots} lots (${strat.suggested_lots * strat.lot_size} Qty)</td>
+                    <td>${strat.stop_loss_points} points</td>
+                    <td class="font-bold text-bear">${strat.risk_amount}</td>
+                    <td>Trailing Stop (30 pts)</td>
+                    <td>
+                        <span class="${badgeClass}" style="${badgeStyle}">
+                            ${strat.status}
+                        </span>
+                    </td>
+                `;
+                optBuyBody.appendChild(tr);
+            });
+        }
+        
         // 7. Bind Option Chain Table
         renderOptionChain(data.option_chain, data.spot_price, data.indicators.max_pain);
         globalOptionChain = data.option_chain;
@@ -1196,45 +1255,66 @@ async function reloadExpiries(settings = null) {
     }
 }
 
-// Initialize Collapsible Panel toggles
-function initPanelCollapses() {
-    const panels = document.querySelectorAll('.panel');
-    panels.forEach(panel => {
-        const header = panel.querySelector('.panel-header');
-        if (!header) return;
-        
-        const panelId = panel.id;
-        if (!panelId) return;
-        
-        // Check if state is saved in localStorage
-        const isCollapsed = localStorage.getItem(`panel_collapsed_${panelId}`) === 'true';
-        if (isCollapsed) {
-            panel.classList.add('panel-collapsed');
-        }
-        
-        // Create toggle button
-        const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'btn-panel-toggle';
-        toggleBtn.type = 'button';
-        toggleBtn.innerHTML = isCollapsed ? '+' : '&minus;';
-        toggleBtn.title = isCollapsed ? 'Expand Panel' : 'Collapse Panel';
-        
-        toggleBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // Avoid triggering any header clicks
-            const currentlyCollapsed = panel.classList.toggle('panel-collapsed');
-            toggleBtn.innerHTML = currentlyCollapsed ? '+' : '&minus;';
-            toggleBtn.title = currentlyCollapsed ? 'Expand Panel' : 'Collapse Panel';
-            localStorage.setItem(`panel_collapsed_${panelId}`, currentlyCollapsed);
+// Initialize Mobile Overlay Panels & Home Dock Click Listeners
+function initOverlayPanels() {
+    // 1. Click listeners for navigation dock cards
+    document.querySelectorAll('.dock-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const panelId = card.getAttribute('data-panel');
+            openOverlayPanel(panelId);
         });
-        
-        header.appendChild(toggleBtn);
     });
+
+    // 2. Click listener for AI Intelligence Banner (opens the recommendation scorecard panel)
+    const aiBanner = document.getElementById('trigger-recommendation-panel');
+    if (aiBanner) {
+        aiBanner.addEventListener('click', () => {
+            openOverlayPanel('panel-recommendation');
+        });
+    }
+
+    // 3. Click listeners for all Close overlay buttons
+    document.querySelectorAll('.close-overlay-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const panel = btn.closest('.overlay-panel');
+            if (panel) {
+                closeOverlayPanel(panel.id);
+            }
+        });
+    });
+}
+
+function openOverlayPanel(panelId) {
+    const panel = document.getElementById(panelId);
+    if (panel) {
+        panel.classList.add('active');
+        document.body.classList.add('panel-lock');
+        
+        // Trigger specific panel callbacks if needed (e.g. chart resize)
+        if (panelId === 'panel-chart' && window.myChart) {
+            // Trigger chart update
+            fetchChartData();
+        }
+    }
+}
+
+function closeOverlayPanel(panelId) {
+    const panel = document.getElementById(panelId);
+    if (panel) {
+        panel.classList.remove('active');
+        // Only unlock body scroll if no other panel is active
+        const anyActive = document.querySelector('.overlay-panel.active');
+        if (!anyActive) {
+            document.body.classList.remove('panel-lock');
+        }
+    }
 }
 
 // Initialize application listeners
 document.addEventListener('DOMContentLoaded', async () => {
-    // Initialize collapsible panel states
-    initPanelCollapses();
+    // Initialize mobile overlays and home control center
+    initOverlayPanels();
     
     // Request notification permissions safely
     if (typeof Notification !== 'undefined') {

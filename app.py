@@ -395,6 +395,88 @@ class SimulationState:
             self.supertrend = "Bearish"
             self.supertrend_val = self.spot_price + 40.0
 
+    def get_rolling_momentum(self) -> float:
+        """Returns the rolling price change percentage over the last 2 minutes."""
+        if not self.price_history or len(self.price_history) < 5:
+            return 0.0
+        # Ticks are appended every 5 seconds. 2 minutes = 24 ticks back.
+        lookback = min(24, len(self.price_history) - 1)
+        prev_price = self.price_history[-lookback]["price"]
+        if prev_price <= 0:
+            return 0.0
+        return ((self.spot_price - prev_price) / prev_price) * 100.0
+
+    def get_option_buy_strategies(self) -> List[Dict]:
+        # Calculate rolling 2-minute change
+        mom_pct = self.get_rolling_momentum()
+        capital = self.settings.get("capital", 500000.0)
+        max_risk = capital * 0.02 # 2% max risk limit
+        
+        # lot size
+        preferred_index = self.settings.get("preferred_index", "Nifty")
+        lot_size = 20 if preferred_index.lower() == "sensex" else 65
+        
+        # Risk per lot (Delta 0.5 * 30 points stop loss * lot size)
+        risk_per_lot = 0.5 * 30.0 * lot_size
+        suggested_lots = max(1, int(max_risk / risk_per_lot))
+        
+        # Momentum strategy status
+        mom_status = "WAITING FOR BREAKOUT"
+        mom_action = "NO SIGNAL"
+        mom_reason = f"2-min rolling move is {mom_pct:+.2f}% (Threshold: ±0.18%)"
+        
+        if mom_pct <= -0.18:
+            mom_status = "ACTIVE SIGNAL (PE BUY)"
+            mom_action = "BUY PE"
+            mom_reason = f"Sudden Crash! 2-min momentum drops by {mom_pct:.2f}%"
+        elif mom_pct >= 0.18:
+            mom_status = "ACTIVE SIGNAL (CE BUY)"
+            mom_action = "BUY CE"
+            mom_reason = f"Sudden Spike! 2-min momentum surges by {mom_pct:+.2f}%"
+            
+        # VWAP Pullback strategy status
+        vwap_val = self.get_vwap()
+        pullback_status = "WAITING"
+        pullback_action = "NO SIGNAL"
+        pullback_reason = "Price is away from VWAP/EMA support levels"
+        
+        if abs(self.spot_price - vwap_val) <= 15.0:
+            if self.rsi <= 40:
+                pullback_status = "ACTIVE SIGNAL (CE BUY)"
+                pullback_action = "BUY CE"
+                pullback_reason = "Price pulling back to VWAP support with oversold RSI"
+            elif self.rsi >= 60:
+                pullback_status = "ACTIVE SIGNAL (PE BUY)"
+                pullback_action = "BUY PE"
+                pullback_reason = "Price pulling back to VWAP resistance with overbought RSI"
+                
+        return [
+            {
+                "name": "Momentum Velocity Breakout",
+                "description": "Captures sudden rapid market crashes or spikes using a 2-minute rolling change window.",
+                "status": mom_status,
+                "action": mom_action,
+                "reason": mom_reason,
+                "suggested_lots": suggested_lots,
+                "lot_size": lot_size,
+                "stop_loss_points": 30.0,
+                "risk_pct": "2.0%",
+                "risk_amount": f"₹{max_risk:.2f}"
+            },
+            {
+                "name": "VWAP Pullback / Mean Reversion",
+                "description": "Enters high-probability momentum buys when price rests at VWAP support with confirming RSI signals.",
+                "status": pullback_status,
+                "action": pullback_action,
+                "reason": pullback_reason,
+                "suggested_lots": suggested_lots,
+                "lot_size": lot_size,
+                "stop_loss_points": 25.0,
+                "risk_pct": "2.0%",
+                "risk_amount": f"₹{max_risk:.2f}"
+            }
+        ]
+
     def tick_5s(self, override_type: Optional[str] = None):
         """Simulate market price tick update every 5 seconds or handle manual overrides."""
         # 1. Update spot price
@@ -421,6 +503,12 @@ class SimulationState:
         elif override_type == "large_writing":
             self.pcr = 1.45
             self.recalculation_trigger = "Large Put Writing"
+        elif override_type == "sudden_crash":
+            self.spot_price = old_spot - 85.0
+            self.recalculation_trigger = "Sudden Market Crash Triggered"
+        elif override_type == "sudden_spike":
+            self.spot_price = old_spot + 85.0
+            self.recalculation_trigger = "Sudden Market Spike Triggered"
         else:
             # Determine current IST market session
             utc_now = datetime.datetime.now(datetime.timezone.utc)
@@ -1257,6 +1345,104 @@ def get_market_data():
         state.tick_5s()
     
     spot = state.spot_price
+    
+    # 1. Update Trailing Stop Loss on Open positions
+    for trade in journal.trades:
+        if trade.get("status") != "OPEN":
+            continue
+            
+        strat = trade.get("strategy", "")
+        # For momentum strategies or general option buy strategy, trail stop loss
+        is_bearish = "PE" in strat or "Bear" in strat or "Put" in strat or "Short" in strat
+        entry = trade.get("entry_spot", spot)
+        
+        # Initialize trailing parameters if not present
+        if "highest_spot_seen" not in trade and "lowest_spot_seen" not in trade:
+            if is_bearish:
+                trade["lowest_spot_seen"] = entry
+                trade["trailing_stop_spot"] = entry + 30.0
+            else:
+                trade["highest_spot_seen"] = entry
+                trade["trailing_stop_spot"] = entry - 30.0
+                
+        # Update trailing stops based on spot movement
+        if is_bearish:
+            if spot < trade["lowest_spot_seen"]:
+                trade["lowest_spot_seen"] = spot
+                # Trail stop down (lock in profit)
+                trade["trailing_stop_spot"] = spot + 30.0
+            elif spot >= trade["trailing_stop_spot"]:
+                # Trailing Stop hit! Close position
+                journal.close_trade(trade["id"], spot)
+                trade["reason"] = f"Trailing Stop Loss Hit (Peak: {trade['lowest_spot_seen']:.1f}, Trigger: {trade['trailing_stop_spot']:.1f})"
+                journal.save_journal()
+        else:
+            if spot > trade["highest_spot_seen"]:
+                trade["highest_spot_seen"] = spot
+                # Trail stop up (lock in profit)
+                trade["trailing_stop_spot"] = spot - 30.0
+            elif spot <= trade["trailing_stop_spot"]:
+                # Trailing Stop hit! Close position
+                journal.close_trade(trade["id"], spot)
+                trade["reason"] = f"Trailing Stop Loss Hit (Peak: {trade['highest_spot_seen']:.1f}, Trigger: {trade['trailing_stop_spot']:.1f})"
+                journal.save_journal()
+                
+    # 2. Check 2% Capital Protection (Auto-Exit)
+    capital = state.settings.get("capital", 500000.0)
+    risk_limit = capital * 0.02
+    
+    open_trades = [t for t in journal.trades if t.get("status") == "OPEN"]
+    if open_trades:
+        # Sum up P&L for all open positions
+        total_pnl = 0.0
+        for trade in open_trades:
+            pnl = 0.0
+            entry = trade["entry_spot"]
+            legs = trade.get("legs", [])
+            strat = trade.get("strategy", "")
+            if legs:
+                # Sum up legs
+                for leg in legs:
+                    leg_ltp = None
+                    if state.settings.get("feed_mode") == "Upstox" and state.upstox_option_chain:
+                        for chain_item in state.upstox_option_chain:
+                            if chain_item.get("strike") == leg.get("strike"):
+                                if leg.get("option_type") == "CE":
+                                    leg_ltp = chain_item.get("call_price")
+                                else:
+                                    leg_ltp = chain_item.get("put_price")
+                    if leg_ltp is None:
+                        # Price model fallback
+                        t_years = 4.0 / 365.0
+                        r = 0.07
+                        is_call = leg["option_type"].upper() == "CE"
+                        opt_res = calculate_greeks(spot, leg["strike"], t_years, state.vix / 100.0, r, is_call)
+                        leg_ltp = opt_res["price"]
+                        
+                    leg_diff = leg_ltp - leg["entry_price"]
+                    if leg["action"] == "BUY":
+                        pnl += leg_diff * leg["quantity"]
+                    else:
+                        pnl -= leg_diff * leg["quantity"]
+            else:
+                diff = spot - entry
+                multiplier = trade.get("lot_size", 65) * trade["size"]
+                if "CE" in strat or "Bull" in strat:
+                    pnl += diff * multiplier
+                else:
+                    pnl -= diff * multiplier
+            total_pnl += pnl
+            
+        # If total unrealized loss exceeds 2% of capital, exit ALL trades
+        if total_pnl <= -risk_limit:
+            print(f"⚠️ CAPITAL PROTECTION TRIGGERED: Total loss (₹{total_pnl:.2f}) exceeded 2% limit (₹{risk_limit:.2f}). Exiting all trades.")
+            for trade in open_trades:
+                journal.close_trade(trade["id"], spot)
+                trade["reason"] = f"Auto-Exit Capital Protection (2% Max Loss hit at ₹{total_pnl:.2f})"
+            journal.save_journal()
+            
+    # Include option buy strategies in the returned data block
+    option_buy_strategies = state.get_option_buy_strategies()
     preferred_index = state.settings.get("preferred_index", "Nifty")
     if preferred_index.lower() == "sensex":
         atm_strike = round(spot / 100.0) * 100
@@ -1402,6 +1588,7 @@ def get_market_data():
             "iv_effect": "Neutral",
             "holding_time": "1 - 3 hours"
         },
+        "option_buy_strategies": option_buy_strategies,
         "fallback_active": fallback_active,
         "market_session": state.market_session
     }

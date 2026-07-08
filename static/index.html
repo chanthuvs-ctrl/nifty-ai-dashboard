@@ -82,14 +82,66 @@
     </header>
     <div id="dashboard-view">
 
+        <!-- HOMEPAGE MOBILE CONTROL DOCK AND BANNER -->
+        <div class="homepage-layout">
+            <div class="ai-intelligence-banner" id="trigger-recommendation-panel">
+                <div class="banner-left">
+                    <span class="pulse-dot"></span>
+                    <span class="banner-label">AI SIGNAL:</span>
+                    <span class="banner-value" id="banner-rec-text">NO TRADE</span>
+                    <span class="banner-confidence" id="banner-conf-text">50.0% Confidence</span>
+                </div>
+                <div class="banner-right">
+                    <span>Entry: <span id="banner-entry-text">--</span></span>
+                    <span style="margin-left: 10px;">Target: <span id="banner-target-text">--</span></span>
+                    <span class="banner-action-hint">Tap to Inspect Greeks ➔</span>
+                </div>
+            </div>
+            
+            <div class="control-dock-container">
+                <div class="control-dock-grid">
+                    <div class="dock-card" data-panel="panel-chart">
+                        <div class="dock-card-icon" style="color: var(--neon-cyan);">📈</div>
+                        <div class="dock-card-title">Price Chart</div>
+                        <div class="dock-card-desc">Live Price & Annotation Timeline</div>
+                    </div>
+                    <div class="dock-card" data-panel="panel-options">
+                        <div class="dock-card-icon" style="color: var(--neon-bull);">⛓️</div>
+                        <div class="dock-card-title">Option Chain</div>
+                        <div class="dock-card-desc">Strike Prices & Weekly Expiries</div>
+                    </div>
+                    <div class="dock-card" data-panel="panel-journal">
+                        <div class="dock-card-icon" style="color: #ea80fc;">📔</div>
+                        <div class="dock-card-title">Trade Journal</div>
+                        <div class="dock-card-desc">Active Positions & Analytics Logs</div>
+                    </div>
+                    <div class="dock-card" data-panel="panel-option-buy">
+                        <div class="dock-card-icon" style="color: #ffea00;">⚡</div>
+                        <div class="dock-card-title">Option Buying</div>
+                        <div class="dock-card-desc">Momentum & Pullback Breakouts</div>
+                    </div>
+                    <div class="dock-card" data-panel="panel-regime">
+                        <div class="dock-card-icon" style="color: #b9f6ca;">🧠</div>
+                        <div class="dock-card-title">Market Regime</div>
+                        <div class="dock-card-desc">Regime & ADX Trend Analytics</div>
+                    </div>
+                    <div class="dock-card" data-panel="panel-gauges">
+                        <div class="dock-card-icon" style="color: #ff8a80;">📊</div>
+                        <div class="dock-card-title">Sentiment Dials</div>
+                        <div class="dock-card-desc">PCR, VIX Dials & Event Logs</div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
     <!-- MAIN DASHBOARD CONTENT -->
     <main class="dashboard-grid">
         
         <!-- COLUMN 1: REGIME & CLASSIFICATION -->
-        <section class="panel" id="panel-regime">
+        <section class="panel overlay-panel" id="panel-regime">
             <div class="panel-header">
                 <h2>Market Regime & Sentiment</h2>
+                <span class="close-overlay-btn">&times;</span>
             </div>
             <div class="panel-body">
                 <div class="regime-display">
@@ -152,10 +204,11 @@
         </section>
 
         <!-- COLUMN 2: STRATEGY RECOMMENDATION (PRIMARY) -->
-        <section class="panel panel-highlight" id="panel-recommendation">
+        <section class="panel panel-highlight overlay-panel" id="panel-recommendation">
             <div class="panel-header header-highlight">
                 <span class="badge-live">PRIMARY DECISION RIGHT NOW</span>
                 <span class="timestamp" id="last-update-time">10:05:00</span>
+                <span class="close-overlay-btn">&times;</span>
             </div>
             <div class="panel-body flex-column">
                 
@@ -254,9 +307,10 @@
         </section>
 
         <!-- COLUMN 3: DIALS, GAUGES & LOGS -->
-        <section class="panel" id="panel-gauges">
+        <section class="panel overlay-panel" id="panel-gauges">
             <div class="panel-header">
                 <h2>Sentiment Gauges & Logs</h2>
+                <span class="close-overlay-btn">&times;</span>
             </div>
             <div class="panel-body flex-column">
                 
@@ -301,16 +355,17 @@
     </main>
 
     <!-- LIVE PRICE CHART WITH STRATEGY ANNOTATIONS -->
-    <section class="panel full-width-panel chart-panel" id="panel-chart">
+    <section class="panel full-width-panel chart-panel overlay-panel" id="panel-chart">
         <div class="panel-header">
             <h2>Live Price & Strategy Timeline</h2>
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                 <span class="chart-legend-item"><span class="chart-legend-dot" style="background: #00e5ff;"></span>Spot Price</span>
                 <span class="chart-legend-item"><span class="chart-legend-dot" style="background: #ffea00;"></span>VWAP</span>
                 <span class="chart-legend-item"><span class="chart-legend-dot" style="background: #00e676;"></span>EMA 20</span>
                 <span class="chart-legend-item"><span class="chart-legend-dot" style="background: #b388ff;"></span>EMA 50</span>
                 <span class="chart-legend-item"><span class="chart-legend-dot" style="background: #ff1744; width: 8px; height: 8px; border-radius: 0; transform: rotate(45deg);"></span>Strategy Change</span>
             </div>
+            <span class="close-overlay-btn">&times;</span>
         </div>
         <div class="panel-body" style="padding: 12px 16px;">
             <div class="chart-container" style="position: relative; width: 100%; height: 320px;">
@@ -331,8 +386,8 @@
     </section>
 
     <!-- ROW 2: FULL OPTION CHAIN SECTION -->
-    <section class="panel full-width-panel" id="panel-options">
-        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+    <section class="panel full-width-panel overlay-panel" id="panel-options">
+        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; position: relative;">
             <div style="display: flex; align-items: center; gap: 15px;">
                 <h2 id="option-chain-title">Nifty Live Option Chain</h2>
                 <div style="display: flex; align-items: center; gap: 6px; background: rgba(30, 41, 59, 0.6); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color);">
@@ -340,11 +395,12 @@
                     <select id="set-dashboard-expiry" style="background: transparent; border: none; color: var(--neon-cyan); font-weight: 700; font-size: 0.75rem; cursor: pointer; outline: none; padding: 0 4px;"></select>
                 </div>
             </div>
-            <div class="opt-legend">
+            <div class="opt-legend" style="margin-right: 35px;">
                 <span class="legend-item"><span class="legend-color bg-itm-call"></span>ITM Call</span>
                 <span class="legend-item"><span class="legend-color bg-itm-put"></span>ITM Put</span>
                 <span class="legend-item"><span class="legend-color bg-atm"></span>ATM Strike</span>
             </div>
+            <span class="close-overlay-btn">&times;</span>
         </div>
         
         <!-- FALLBACK WARNING BANNER -->
@@ -383,13 +439,14 @@
     </section>
 
     <!-- ROW 3: PAPER TRADING JOURNAL & ANALYTICS -->
-    <section class="panel full-width-panel" id="panel-journal">
-        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px;">
+    <section class="panel full-width-panel overlay-panel" id="panel-journal">
+        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px; position: relative;">
             <h2 id="journal-panel-title">Paper Trading Positions & Session Analytics</h2>
-            <div class="journal-tabs" style="display: flex; gap: 8px;">
+            <div class="journal-tabs" style="display: flex; gap: 8px; margin-right: 35px;">
                 <button class="btn-tab active" id="tab-paper">Paper Trading</button>
                 <button class="btn-tab" id="tab-live">Live Trading</button>
             </div>
+            <span class="close-overlay-btn">&times;</span>
         </div>
         
         <!-- PAPER TRADING CONTENT -->
@@ -850,6 +907,37 @@ Weekly Review: Week ____ (P&L: _________)
                 </div>
             </section>
         </main>
+        
+        <!-- OPTION BUYING STRATEGIES PANEL -->
+        <section class="panel full-width-panel overlay-panel" id="panel-option-buy">
+            <div class="panel-header">
+                <h2>⚡ Option Buying Strategies (2% Risk Capped)</h2>
+                <span class="close-overlay-btn">&times;</span>
+            </div>
+            <div class="panel-body flex-column">
+                <div class="pnl-alert-header" style="background: rgba(0, 229, 255, 0.05); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; margin-bottom: 15px; font-size: 0.8rem; line-height: 1.4;">
+                    <strong>⚡ MOMENTUM OPTION BUY SYSTEM</strong>: This module scans for sudden rapid movements (crash/spike) and pullbacks. Lot size is dynamically computed to cap potential loss to strictly **2.0% of Capital**, with trailing stops to capture unlimited run-ups.
+                </div>
+                <div class="table-responsive">
+                    <table class="journal-table">
+                        <thead>
+                            <tr>
+                                <th>Strategy Name</th>
+                                <th>Market Signal</th>
+                                <th>Lots Recommendation</th>
+                                <th>Stop Loss</th>
+                                <th>Max Risk Capped</th>
+                                <th>Trailing Parameter</th>
+                                <th>Action Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="option-buy-strategies-body">
+                            <!-- Dynamically populated -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
     </div>
 
     <!-- SETTINGS PANEL (MODAL SLIDE-OUT) -->
@@ -953,6 +1041,8 @@ Weekly Review: Week ____ (P&L: _________)
                         <button class="btn btn-action" data-action="iv_spike">India VIX Spike</button>
                         <button class="btn btn-action" data-action="large_writing">Large Put Writing</button>
                         <button class="btn btn-action" data-action="candle_close">Force Candle Close</button>
+                        <button class="btn btn-action" data-action="sudden_crash" style="border-color: rgba(255, 23, 68, 0.4); color: #ff1744;">⚡ Sudden Crash</button>
+                        <button class="btn btn-action" data-action="sudden_spike" style="border-color: rgba(0, 230, 118, 0.4); color: #00e676;">⚡ Sudden Spike</button>
                     </div>
                 </div>
 
