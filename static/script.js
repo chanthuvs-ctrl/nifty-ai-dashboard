@@ -1447,6 +1447,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     const btnExecuteLive = document.getElementById('btn-execute-live');
     if (btnExecuteLive) btnExecuteLive.addEventListener('click', executeLiveTrade);
+
+    // Quick trade bindings on mobile home layout
+    const quickPaper = document.getElementById('btn-quick-paper');
+    if (quickPaper) {
+        quickPaper.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (btnExecutePaper) btnExecutePaper.click();
+        });
+    }
+
+    const quickLive = document.getElementById('btn-quick-live');
+    if (quickLive) {
+        quickLive.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (btnExecuteLive) btnExecuteLive.click();
+        });
+    }
     
     // Log Out button
     const btnLogout = document.getElementById('btn-logout');
