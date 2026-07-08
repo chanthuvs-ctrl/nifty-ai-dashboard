@@ -1966,36 +1966,29 @@ body {
    NEW FLOATING NAVIGATION MENU BAR & BOTTOM SHEET SYSTEM
    ========================================== */
 
-/* Pinned top brand header bar */
-header {
-    position: fixed !important;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 60px;
-    z-index: 10001 !important;
-    background: var(--bg-main) !important;
-    border-bottom: 1px solid var(--border-color);
-    box-sizing: border-box;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 20px;
+/* Pinned top brand header bar - Scroll naturally on mobile */
+@media (max-width: 1023px) {
+    .app-header {
+        position: relative !important;
+        top: auto !important;
+        backdrop-filter: none !important;
+        background: var(--bg-main) !important;
+        padding: 12px 16px !important;
+    }
 }
 
-/* Floating Navigation Action Center */
+/* Floating Navigation Action Center - Relativized */
 .control-menu-center {
-    position: fixed !important;
-    top: 60px;
-    left: 0;
-    width: 100%;
-    height: auto;
-    z-index: 10000 !important;
     background: var(--bg-main) !important;
     border-bottom: 1px solid var(--border-color);
     padding: 12px 20px 8px 20px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
     box-sizing: border-box;
+}
+
+@media (max-width: 1023px) {
+    .control-menu-center {
+        padding: 10px 16px 8px 16px !important;
+    }
 }
 
 .control-menu-grid {
@@ -2190,28 +2183,32 @@ header {
     padding: 10px 20px 20px 20px;
     max-width: 1700px;
     margin: 0 auto;
-    margin-top: 215px !important; /* Offset content below floating bars */
+    margin-top: 10px !important; /* Normal top flow spacing */
     box-sizing: border-box;
 }
 
-/* Mobile popup overlay sheets (bottom sheets starting below menu buttons) */
+/* Mobile popup overlay sheets (centered modal cards) */
 @media (max-width: 1023px) {
     .overlay-panel {
         position: fixed !important;
-        top: 215px !important; /* Starts exactly below the navigation bars */
-        left: 0;
-        width: 100% !important;
-        height: calc(100vh - 215px) !important; /* Spans rest of mobile screen */
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -45%) scale(0.96) !important;
+        width: 92% !important;
+        max-width: 540px !important;
+        height: 75vh !important;
+        max-height: 600px !important;
         background: rgba(10, 18, 30, 0.98) !important;
-        z-index: 9999 !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        z-index: 99999 !important;
         opacity: 0;
         pointer-events: none;
-        transform: translateY(100%);
-        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         overflow-y: auto !important;
-        box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
-        border-top: 1px solid rgba(0, 229, 255, 0.15) !important;
-        border-radius: 12px 12px 0 0 !important;
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+        border: 1px solid rgba(0, 229, 255, 0.25) !important;
+        border-radius: 12px !important;
         margin: 0 !important;
         box-sizing: border-box;
     }
@@ -2219,13 +2216,13 @@ header {
     .overlay-panel.active {
         opacity: 1;
         pointer-events: auto;
-        transform: translateY(0);
+        transform: translate(-50%, -50%) scale(1) !important;
     }
     
     .overlay-panel .panel-header {
         position: sticky;
         top: 0;
-        background: rgba(10, 17, 28, 0.95);
+        background: rgba(10, 17, 28, 0.96);
         z-index: 100;
         border-bottom: 1px solid var(--border-color);
         padding: 12px 16px;
