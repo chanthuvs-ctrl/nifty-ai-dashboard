@@ -1104,8 +1104,46 @@ async function reloadExpiries(settings = null) {
     }
 }
 
+// Initialize Collapsible Panel toggles
+function initPanelCollapses() {
+    const panels = document.querySelectorAll('.panel');
+    panels.forEach(panel => {
+        const header = panel.querySelector('.panel-header');
+        if (!header) return;
+        
+        const panelId = panel.id;
+        if (!panelId) return;
+        
+        // Check if state is saved in localStorage
+        const isCollapsed = localStorage.getItem(`panel_collapsed_${panelId}`) === 'true';
+        if (isCollapsed) {
+            panel.classList.add('panel-collapsed');
+        }
+        
+        // Create toggle button
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'btn-panel-toggle';
+        toggleBtn.type = 'button';
+        toggleBtn.innerHTML = isCollapsed ? '+' : '&minus;';
+        toggleBtn.title = isCollapsed ? 'Expand Panel' : 'Collapse Panel';
+        
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Avoid triggering any header clicks
+            const currentlyCollapsed = panel.classList.toggle('panel-collapsed');
+            toggleBtn.innerHTML = currentlyCollapsed ? '+' : '&minus;';
+            toggleBtn.title = currentlyCollapsed ? 'Expand Panel' : 'Collapse Panel';
+            localStorage.setItem(`panel_collapsed_${panelId}`, currentlyCollapsed);
+        });
+        
+        header.appendChild(toggleBtn);
+    });
+}
+
 // Initialize application listeners
 document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize collapsible panel states
+    initPanelCollapses();
+    
     // Request notification permissions safely
     if (typeof Notification !== 'undefined') {
         if (Notification.permission !== "granted" && Notification.permission !== "denied") {
