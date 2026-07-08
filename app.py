@@ -213,6 +213,17 @@ class SimulationState:
                     self.settings.update(saved)
             except Exception as e:
                 print(f"Failed to load settings from disk: {e}")
+                
+        # Ensure saved expiry date is not in the past
+        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        saved_expiry = self.settings.get("upstox_expiry_date")
+        if saved_expiry and saved_expiry < today_str:
+            pref_index = self.settings.get("preferred_index", "Nifty")
+            target_weekday = 4 if pref_index.lower() == "sensex" else 3
+            days_ahead = (target_weekday - datetime.date.today().weekday()) % 7
+            next_expiry = datetime.date.today() + datetime.timedelta(days=days_ahead)
+            self.settings["upstox_expiry_date"] = next_expiry.strftime("%Y-%m-%d")
+            self.save_settings()
         
         self.upstox_option_chain = []
         
@@ -1403,10 +1414,19 @@ def get_settings():
             next_expiry = today + datetime.timedelta(days=days_ahead + i * 7)
             expiry_dates.append(next_expiry.strftime("%Y-%m-%d"))
             
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
     saved_expiry = state.settings.get("upstox_expiry_date")
-    if saved_expiry and saved_expiry not in expiry_dates:
-        expiry_dates.insert(0, saved_expiry)
+    
+    # If saved expiry is in the past, auto-update to the next upcoming expiry
+    if saved_expiry and saved_expiry < today_str:
+        state.settings["upstox_expiry_date"] = expiry_dates[0]
+        state.save_settings()
+        saved_expiry = expiry_dates[0]
         
+    if saved_expiry and saved_expiry not in expiry_dates:
+        if saved_expiry >= today_str:
+            expiry_dates.insert(0, saved_expiry)
+            
     return {
         **state.settings,
         "upcoming_expiry_dates": expiry_dates
