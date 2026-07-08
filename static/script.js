@@ -74,6 +74,25 @@ function playAlertChime() {
     }
 }
 
+// Book Profit / Loss triggered registry
+const triggeredAlerts = {};
+function triggerTradeAudioAlert(tradeId, type) {
+    const key = `${tradeId}_${type}`;
+    if (!triggeredAlerts[key]) {
+        triggeredAlerts[key] = true;
+        playAlertChime();
+        // Also play a second beep slightly delayed for stop-losses to make it sound urgent!
+        if (type === 'loss') {
+            setTimeout(playAlertChime, 250);
+        }
+        showToast(
+            type === 'profit' ? `🏆 PROFIT TARGET MET for Position #${tradeId}!` : `⚠️ STOP LOSS HIT for Position #${tradeId}!`,
+            90,
+            type === 'profit' ? 'bull' : 'bear'
+        );
+    }
+}
+
 // Circular canvas gauge drawer helper
 function drawGauge(canvasId, value, minVal, maxVal, unit, isVix = false) {
     const canvas = document.getElementById(canvasId);
@@ -582,19 +601,40 @@ async function fetchJournal() {
                         }
                     });
                     
+                    // Target Profit / Stop Loss alerting
+                    const isSpreadOrShort = pos.strategy.includes("Spread") || pos.strategy.includes("Short") || pos.strategy.includes("Condor");
+                    const tpThreshold = isSpreadOrShort ? 2500 * size : 1500 * size;
+                    const slThreshold = isSpreadOrShort ? -1250 * size : -750 * size;
+                    
+                    let alertBadge = "";
+                    let btnClass = "btn-secondary";
+                    let btnText = "Close";
+                    
+                    if (totalPnl >= tpThreshold) {
+                        alertBadge = `<span class="badge-pro pulse-green" style="background: rgba(0, 230, 118, 0.15); color: #00e676; border: 1px solid #00e676; font-size: 0.58rem; padding: 2px 5px; margin-left: 6px;">🏆 BOOK PROFIT</span>`;
+                        btnClass = "btn-glow-green";
+                        btnText = "Book Profit";
+                        triggerTradeAudioAlert(pos.id, 'profit');
+                    } else if (totalPnl <= slThreshold) {
+                        alertBadge = `<span class="badge-pro pulse-red" style="background: rgba(255, 23, 68, 0.15); color: #ff1744; border: 1px solid #ff1744; font-size: 0.58rem; padding: 2px 5px; margin-left: 6px;">⚠️ BOOK LOSS</span>`;
+                        btnClass = "btn-glow-red";
+                        btnText = "Book Loss";
+                        triggerTradeAudioAlert(pos.id, 'loss');
+                    }
+                    
                     const typeBadge = `<span class="badge-pro" style="background: rgba(${typeColor}, 0.12); color: rgb(${typeColor}); border: 1px solid rgb(${typeColor}); font-size: 0.58rem; padding: 2px 5px; margin-left: 6px;">${typeLabel}</span>`;
                     
                     tr.innerHTML = `
                         <td>${pos.time}</td>
-                        <td class="font-bold" style="display: flex; align-items: center; gap: 4px;">${pos.strategy} ${typeBadge}</td>
+                        <td class="font-bold" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">${pos.strategy} ${typeBadge} ${alertBadge}</td>
                         <td>${pos.strikes.join(', ')}</td>
                         <td>₹${entry.toFixed(2)}</td>
                         <td>${size} lot(s)</td>
                         <td>₹${currentSpot.toFixed(2)}</td>
                         <td class="font-bold ${totalPnl >= 0 ? 'text-bull' : 'text-bear'}">₹${totalPnl.toFixed(2)}</td>
                         <td>
-                            <button class="btn btn-secondary btn-close-pos" data-id="${pos.id}" data-exit="${currentSpot}">
-                                Close
+                            <button class="btn ${btnClass} btn-close-pos" data-id="${pos.id}" data-exit="${currentSpot}">
+                                ${btnText}
                             </button>
                         </td>
                     `;

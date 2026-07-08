@@ -1866,3 +1866,54 @@ body {
 .hidden {
     display: none !important;
 }
+
+/* GLOWING AND ALERT BUTTONS FOR BOOK PROFIT/LOSS */
+.btn-glow-green {
+    background: linear-gradient(135deg, #00e676, #00b0ff) !important;
+    color: #060b13 !important;
+    border: none !important;
+    font-weight: 700 !important;
+    box-shadow: 0 0 12px rgba(0, 230, 118, 0.45);
+    animation: pulse-g 2s infinite;
+}
+
+.btn-glow-red {
+    background: linear-gradient(135deg, #ff1744, #d500f9) !important;
+    color: #ffffff !important;
+    border: none !important;
+    font-weight: 700 !important;
+    box-shadow: 0 0 12px rgba(255, 23, 68, 0.45);
+    animation: pulse-r 2s infinite;
+}
+
+@keyframes pulse-g {
+    0% { box-shadow: 0 0 8px rgba(0, 230, 118, 0.45); }
+    50% { box-shadow: 0 0 18px rgba(0, 230, 118, 0.75); }
+    100% { box-shadow: 0 0 8px rgba(0, 230, 118, 0.45); }
+}
+
+@keyframes pulse-r {
+    0% { box-shadow: 0 0 8px rgba(255, 23, 68, 0.45); }
+    50% { box-shadow: 0 0 18px rgba(255, 23, 68, 0.75); }
+    100% { box-shadow: 0 0 8px rgba(255, 23, 68, 0.45); }
+}
+
+.pulse-green {
+    animation: pulse-g-text 1.5s infinite;
+}
+
+.pulse-red {
+    animation: pulse-r-text 1.5s infinite;
+}
+
+@keyframes pulse-g-text {
+    0% { border-color: rgba(0, 230, 118, 0.3); box-shadow: 0 0 4px rgba(0, 230, 118, 0.1); }
+    50% { border-color: rgba(0, 230, 118, 0.9); box-shadow: 0 0 10px rgba(0, 230, 118, 0.3); }
+    100% { border-color: rgba(0, 230, 118, 0.3); box-shadow: 0 0 4px rgba(0, 230, 118, 0.1); }
+}
+
+@keyframes pulse-r-text {
+    0% { border-color: rgba(255, 23, 68, 0.3); box-shadow: 0 0 4px rgba(255, 23, 68, 0.1); }
+    50% { border-color: rgba(255, 23, 68, 0.9); box-shadow: 0 0 10px rgba(255, 23, 68, 0.3); }
+    100% { border-color: rgba(255, 23, 68, 0.3); box-shadow: 0 0 4px rgba(255, 23, 68, 0.1); }
+}
