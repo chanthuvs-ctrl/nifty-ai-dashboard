@@ -712,15 +712,23 @@ class SimulationState:
             if total_call_oi > 0:
                 self.pcr = total_put_oi / total_call_oi
                 
-            # Extract ATM Implied Volatility to update VIX dynamically in Upstox mode!
-            if parsed_chain:
-                atm_item = min(parsed_chain, key=lambda x: abs(x["strike"] - self.spot_price))
-                try:
-                    call_iv_val = float(atm_item.get("call_iv", "14.5%").replace("%", ""))
-                    if call_iv_val > 0:
-                        self.vix = call_iv_val
-                except Exception:
-                    pass
+            # Query actual live India VIX spot price from Upstox market quotes!
+            try:
+                vix_url = "https://api.upstox.com/v2/market-quote/quotes"
+                vix_headers = {
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {token}"
+                }
+                vix_resp = requests.get(vix_url, headers=vix_headers, params={"symbol": "NSE_INDEX|India VIX"}, timeout=3)
+                if vix_resp.status_code == 200:
+                    vix_data = vix_resp.json()
+                    if vix_data.get("status") == "success":
+                        quote = vix_data.get("data", {}).get("NSE_INDEX:India VIX", {})
+                        last_price = quote.get("last_price")
+                        if last_price:
+                            self.vix = float(last_price)
+            except Exception as e:
+                print(f"Failed to fetch live India VIX from Upstox: {e}")
             
             self.recompute_indicators()
             self.evaluate_decision_engine()
