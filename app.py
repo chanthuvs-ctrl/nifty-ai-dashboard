@@ -1059,6 +1059,43 @@ class SimulationState:
         else:
             return "Strong Bear Trend" if self.rsi < 40 else "Weak Bear Trend"
 
+    def calculate_trade_pnl(self, t, spot):
+        """Calculates current floating P&L of a trade based on option Greeks or Spot price."""
+        pnl = 0.0
+        entry = t["entry_spot"]
+        legs = t.get("legs", [])
+        strat = t.get("strategy", "")
+        if legs:
+            for leg in legs:
+                leg_ltp = None
+                if self.settings.get("feed_mode") == "Upstox" and self.upstox_option_chain:
+                    for chain_item in self.upstox_option_chain:
+                        if chain_item.get("strike") == leg.get("strike"):
+                            if leg.get("option_type") == "CE":
+                                leg_ltp = chain_item.get("call_price")
+                            else:
+                                leg_ltp = chain_item.get("put_price")
+                if leg_ltp is None:
+                    t_years = 4.0 / 365.0
+                    r = 0.07
+                    is_call = leg["option_type"].upper() == "CE"
+                    opt_res = calculate_greeks(spot, leg["strike"], t_years, self.vix / 100.0, r, is_call)
+                    leg_ltp = opt_res["price"]
+                    
+                leg_diff = leg_ltp - leg["entry_price"]
+                if leg["action"] == "BUY":
+                    pnl += leg_diff * leg["quantity"]
+                else:
+                    pnl -= leg_diff * leg["quantity"]
+        else:
+            diff = spot - entry
+            multiplier = t.get("lot_size", 65) * t["size"]
+            if "CE" in strat or "Bull" in strat:
+                pnl += diff * multiplier
+            else:
+                pnl -= diff * multiplier
+        return pnl
+
     def _auto_trade_tick(self):
         """Automated trading logic processing at each tick."""
         mode = self.settings.get("auto_trade_mode", "OFF")
@@ -1092,14 +1129,7 @@ class SimulationState:
                     break
             
             if active_trade:
-                entry = active_trade["entry_spot"]
-                strat = active_trade["strategy"]
-                multiplier = float(active_trade.get("lot_size", lot_size)) * active_trade["size"]
-                diff = spot - entry
-                if "CE" in strat or "Bull" in strat:
-                    floating_pnl = diff * multiplier
-                else:
-                    floating_pnl = -diff * multiplier
+                floating_pnl = self.calculate_trade_pnl(active_trade, spot)
             else:
                 self.auto_trade_active_id = None
                 
@@ -1130,33 +1160,29 @@ class SimulationState:
                 print(f"🤖 AUTO-TRADE: Closed position due to 2% Trade SL limit (₹{floating_pnl:.2f})")
                 return
                 
-            # Check Trailing Stop Loss (TSL)
-            strat = active_trade["strategy"]
-            is_bullish = "CE" in strat or "Bull" in strat
-            
+            # Check Trailing Stop Loss (TSL) based on Total Position P&L (amount)
             tsl_offset = float(self.settings.get("trailing_sl_pts", 30.0))
-            if is_bullish:
-                self.highest_lowest_spot_since_entry = max(self.highest_lowest_spot_since_entry, spot)
-                self.trailed_sl_price = self.highest_lowest_spot_since_entry - tsl_offset
-                if spot < self.trailed_sl_price:
-                    journal.close_trade(active_trade["id"], spot)
-                    active_trade["reason"] = f"Trailing SL hit (Trailed to {self.trailed_sl_price:.2f}, Spot {spot:.2f})"
-                    journal.save_journal()
-                    self.auto_trade_active_id = None
-                    print(f"🤖 AUTO-TRADE: Closed position CE due to Trailing SL ({self.trailed_sl_price:.2f})")
-                    return
-            else:
-                self.highest_lowest_spot_since_entry = min(self.highest_lowest_spot_since_entry, spot)
-                self.trailed_sl_price = self.highest_lowest_spot_since_entry + tsl_offset
-                if spot > self.trailed_sl_price:
-                    journal.close_trade(active_trade["id"], spot)
-                    active_trade["reason"] = f"Trailing SL hit (Trailed to {self.trailed_sl_price:.2f}, Spot {spot:.2f})"
-                    journal.save_journal()
-                    self.auto_trade_active_id = None
-                    print(f"🤖 AUTO-TRADE: Closed position PE due to Trailing SL ({self.trailed_sl_price:.2f})")
-                    return
+            active_size = active_trade.get("size", suggested_lots)
+            active_lot_size = active_trade.get("lot_size", lot_size)
+            tsl_offset_currency = tsl_offset * active_lot_size * active_size
+            
+            # Update peak P&L seen since entry (highest_lowest_spot_since_entry re-purposed as highest_pnl_seen)
+            self.highest_lowest_spot_since_entry = max(self.highest_lowest_spot_since_entry, floating_pnl)
+            
+            # Trail Stop Loss price level in P&L currency (trailed_sl_price re-purposed as trailed_sl_pnl)
+            self.trailed_sl_price = max(self.trailed_sl_price, self.highest_lowest_spot_since_entry - tsl_offset_currency)
+            
+            if floating_pnl < self.trailed_sl_price:
+                journal.close_trade(active_trade["id"], spot)
+                active_trade["reason"] = f"Trailing SL hit (Trailed to P&L ₹{self.trailed_sl_price:.2f}, Current P&L ₹{floating_pnl:.2f})"
+                journal.save_journal()
+                self.auto_trade_active_id = None
+                print(f"🤖 AUTO-TRADE: Closed position due to Trailing SL (Trailed P&L: ₹{self.trailed_sl_price:.2f}, Current P&L: ₹{floating_pnl:.2f})")
+                return
             
             # Check for AI recommendation change exit
+            strat = active_trade["strategy"]
+            is_bullish = "CE" in strat or "Bull" in strat
             rec = self.current_recommendation
             should_close = False
             if rec == "No Trade":
@@ -1179,11 +1205,9 @@ class SimulationState:
             rec = self.current_recommendation
             conf = self.confidence
             if conf >= 65.0 and rec in ["Buy CE", "Buy PE", "Bull Call Spread", "Bear Put Spread", "Bull Put Spread", "Bear Call Spread"]:
-                self.highest_lowest_spot_since_entry = spot
-                tsl_offset = float(self.settings.get("trailing_sl_pts", 30.0))
-                is_bullish = "CE" in rec or "Bull" in rec
-                self.initial_sl_price = spot - tsl_offset if is_bullish else spot + tsl_offset
-                self.trailed_sl_price = self.initial_sl_price
+                self.highest_lowest_spot_since_entry = 0.0 # Starts at 0.0 peak P&L seen
+                self.initial_sl_price = -trade_limit # representing initial SL P&L
+                self.trailed_sl_price = -trade_limit # representing trailed SL P&L
                 
                 atm_strike = round(spot / 100.0) * 100 if preferred_index.lower() == "sensex" else round(spot / 50.0) * 50
                 
@@ -1816,40 +1840,7 @@ def get_market_data():
     risk_limit = capital * 0.02
     
     def get_single_trade_pnl(t):
-        pnl = 0.0
-        entry = t["entry_spot"]
-        legs = t.get("legs", [])
-        strat = t.get("strategy", "")
-        if legs:
-            for leg in legs:
-                leg_ltp = None
-                if state.settings.get("feed_mode") == "Upstox" and state.upstox_option_chain:
-                    for chain_item in state.upstox_option_chain:
-                        if chain_item.get("strike") == leg.get("strike"):
-                            if leg.get("option_type") == "CE":
-                                leg_ltp = chain_item.get("call_price")
-                            else:
-                                leg_ltp = chain_item.get("put_price")
-                if leg_ltp is None:
-                    t_years = 4.0 / 365.0
-                    r = 0.07
-                    is_call = leg["option_type"].upper() == "CE"
-                    opt_res = calculate_greeks(spot, leg["strike"], t_years, state.vix / 100.0, r, is_call)
-                    leg_ltp = opt_res["price"]
-                    
-                leg_diff = leg_ltp - leg["entry_price"]
-                if leg["action"] == "BUY":
-                    pnl += leg_diff * leg["quantity"]
-                else:
-                    pnl -= leg_diff * leg["quantity"]
-        else:
-            diff = spot - entry
-            multiplier = t.get("lot_size", 65) * t["size"]
-            if "CE" in strat or "Bull" in strat:
-                pnl += diff * multiplier
-            else:
-                pnl -= diff * multiplier
-        return pnl
+        return state.calculate_trade_pnl(t, spot)
 
     # Check Paper Trades Capital Protection
     paper_open = [t for t in journal.trades if t.get("status") == "OPEN" and not t.get("execution_type", "Paper").startswith("Live")]
