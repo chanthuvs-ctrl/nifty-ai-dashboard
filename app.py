@@ -1789,6 +1789,7 @@ def get_market_data():
         max_risk = state.settings["capital"] * (state.settings["risk_pct"] / 100.0)
         suggested_lots = max(1, int(state.settings["capital"] / margin_req))
 
+    state.option_chain = option_chain
     return {
         "spot_price": round(spot, 2),
         "price_source": state.price_source,
