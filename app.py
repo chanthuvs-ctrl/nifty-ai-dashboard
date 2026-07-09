@@ -1897,6 +1897,11 @@ def get_market_data():
         if not success:
             state.tick_5s()
             fallback_active = True
+        else:
+            # Still run decision engine + auto-trade tick even on successful Upstox feed
+            state.evaluate_decision_engine()
+            if not state.daily_stop_limit_hit:
+                state._auto_trade_tick()
     else:
         state.tick_5s()
     
