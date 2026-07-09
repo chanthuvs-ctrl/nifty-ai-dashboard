@@ -109,27 +109,46 @@ def calculate_greeks(
     }
 
 
-def fetch_live_index_price(index_symbol: str = "Nifty") -> Optional[float]:
-    """Fetch live Nifty 50 or SENSEX spot price from Google Finance."""
+def fetch_live_index_price(index_symbol: str = "Nifty"):
+    """Fetch live Nifty 50 or SENSEX spot price and intraday changes from Google Finance."""
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
+    price, change_pct, change_val = None, 0.0, 0.0
     try:
         if index_symbol.lower() == "sensex":
             url = "https://www.google.com/finance/quote/SENSEX:INDEXBOM"
-            resp = requests.get(url, headers=headers, timeout=5)
-            match = re.search(r'class="gO24Ff">SENSEX</div>.*?jsname="Pdsbrc"[^>]*><span>([^<]+)</span>', resp.text, re.DOTALL)
+            title = "BSE SENSEX"
         else:
             url = "https://www.google.com/finance/quote/NIFTY_50:INDEXNSE"
-            resp = requests.get(url, headers=headers, timeout=5)
-            match = re.search(r'class="gO24Ff">NIFTY 50</div>.*?jsname="Pdsbrc"[^>]*><span>([^<]+)</span>', resp.text, re.DOTALL)
+            title = "NIFTY 50"
             
-        if match:
-            price_str = match.group(1).replace(",", "")
-            return float(price_str)
+        resp = requests.get(url, headers=headers, timeout=5)
+        idx = resp.text.find(f'class="gO24Ff">{title}</div>')
+        if idx != -1:
+            block = resp.text[idx:idx+1500]
+            
+            # Spot Price
+            match_price = re.search(r'jsname="Pdsbrc"[^>]*><span>([^<]+)</span>', block, re.DOTALL)
+            if match_price:
+                price = float(match_price.group(1).replace(",", ""))
+                
+            # Change percentage
+            match_pct = re.search(r'jsname="vY9t3b"[^>]*><span[^>]*>([^<]+)</span>', block, re.DOTALL)
+            if match_pct:
+                pct_str = match_pct.group(1).replace("%", "").replace(",", "")
+                change_pct = float(pct_str)
+                
+            # Change value
+            match_val = re.search(r'jsname="xnruHf"[^>]*>(?:<span>)*([^<+-]*[+-][^<]+?)(?:</span>)+', block, re.DOTALL)
+            if not match_val:
+                match_val = re.search(r'\(([^)]+)\)\s*Today', block, re.DOTALL)
+            if match_val:
+                val_str = match_val.group(1).replace(",", "")
+                change_val = float(val_str)
     except Exception as e:
         print(f"Live {index_symbol} fetch warning:", e)
-    return None
+    return price, change_pct, change_val
 
 
 # ==========================================
@@ -139,8 +158,11 @@ def fetch_live_index_price(index_symbol: str = "Nifty") -> Optional[float]:
 class SimulationState:
     def __init__(self):
         # Fetch live price or fallback to current typical price
-        live_price = fetch_live_index_price("Nifty")
-        self.spot_price = live_price if live_price else 24270.85
+        price_data = fetch_live_index_price("Nifty")
+        live_price = price_data[0] if price_data[0] is not None else 24270.85
+        self.spot_price = live_price
+        self.intraday_change_pct = price_data[1]
+        self.intraday_change_val = price_data[2]
         self.vix = 14.5
         self.pcr = 0.95
         self.last_live_fetch = time.time()
@@ -274,6 +296,8 @@ class SimulationState:
         self.initial_sl_price = 0.0
         self.trailed_sl_price = 0.0
         self.last_trade_date = get_ist_date_str()
+        self.intraday_change_pct = 0.0
+        self.intraday_change_val = 0.0
         
         # Dynamic active recommendation
         self.current_recommendation = "No Trade"
@@ -660,9 +684,11 @@ class SimulationState:
                 
                 # Periodically fetch live price from Google Finance
                 if now - self.last_live_fetch >= 30:
-                    live_price = fetch_live_index_price(preferred_index)
-                    if live_price:
-                        self.spot_price = live_price
+                    price_data = fetch_live_index_price(preferred_index)
+                    if price_data[0] is not None:
+                        self.spot_price = price_data[0]
+                        self.intraday_change_pct = price_data[1]
+                        self.intraday_change_val = price_data[2]
                         self.last_live_fetch = now
                 
                 if not live_price:
@@ -1969,6 +1995,8 @@ def get_market_data():
     state.option_chain = option_chain
     return {
         "spot_price": round(spot, 2),
+        "change_pct": state.intraday_change_pct,
+        "change_val": state.intraday_change_val,
         "price_source": state.price_source,
         "price_date": state.price_date,
         "price_time": state.price_time,
@@ -2135,12 +2163,12 @@ def update_settings_index(data: IndexUpdateRequest):
     state.upstox_option_chain = []
     
     # Force engine tick to recalculate spot price and strategy
-    live_price = fetch_live_index_price(data.preferred_index)
-    if data.preferred_index.lower() == "sensex":
-        state.spot_price = live_price if live_price else 79996.60
-    else:
-        state.spot_price = live_price if live_price else 24270.85
-        
+    price_data = fetch_live_index_price(data.preferred_index)
+    live_price = price_data[0]
+    if live_price is not None:
+        state.spot_price = live_price
+        state.intraday_change_pct = price_data[1]
+        state.intraday_change_val = price_data[2]
     state.evaluate_decision_engine()
     state.save_settings()
     return {
@@ -2346,6 +2374,9 @@ def close_trade(data: CloseRequest):
     trade = journal.close_trade(data.trade_id, data.exit_spot)
     if not trade:
         raise HTTPException(status_code=404, detail="Open trade not found")
+    if state.auto_trade_active_id == data.trade_id:
+        state.auto_trade_active_id = None
+        print(f"🤖 AUTO-TRADE: Manually closed active trade {data.trade_id}. Resetting auto_trade_active_id.")
     return {"status": "SUCCESS", "trade": trade}
 
 @app.post("/api/journal/sync")

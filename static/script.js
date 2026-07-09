@@ -385,9 +385,8 @@ async function fetchMarketData() {
         const activeIndex = activeIndexSelect ? activeIndexSelect.value : 'Nifty';
         const isSensex = activeIndex.toLowerCase() === 'sensex';
         
-        const baseline = isSensex ? 79996.60 : 24270.85;
-        const spotDiff = data.spot_price - baseline;
-        const spotPct = (spotDiff / baseline) * 100;
+        const changePctVal = data.change_pct !== undefined ? data.change_pct : ((data.spot_price - (isSensex ? 79996.60 : 24270.85)) / (isSensex ? 79996.60 : 24270.85)) * 100;
+        const changeAmtVal = data.change_val !== undefined ? data.change_val : data.spot_price - (isSensex ? 79996.60 : 24270.85);
         const changeHdr = document.getElementById('hdr-nifty-change');
         
         // Update header ticker label and option chain title dynamically
@@ -396,8 +395,8 @@ async function fetchMarketData() {
         
         const chainTitle = document.getElementById('option-chain-title');
         if (chainTitle) chainTitle.innerText = isSensex ? 'Sensex Live Option Chain' : 'Nifty Live Option Chain';
-        changeHdr.innerText = `${spotDiff >= 0 ? '+' : ''}${spotPct.toFixed(2)}%`;
-        changeHdr.className = `ticker-change ${spotDiff >= 0 ? 'up' : 'down'}`;
+        changeHdr.innerText = `${changeAmtVal >= 0 ? '+' : ''}${changeAmtVal.toFixed(2)} (${changePctVal >= 0 ? '+' : ''}${changePctVal.toFixed(2)}%)`;
+        changeHdr.className = `ticker-change ${changeAmtVal >= 0 ? 'up' : 'down'}`;
         
         document.getElementById('hdr-vix').innerText = data.vix.toFixed(2);
         const vixStatus = document.getElementById('hdr-vix-status');
