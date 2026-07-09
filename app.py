@@ -2095,6 +2095,8 @@ def get_market_data():
         "trailing_sl_pts": state.settings.get("trailing_sl_pts", 30.0),
         "daily_stop_limit_hit": state.daily_stop_limit_hit,
         "daily_pnl": round(state.daily_closed_pnl, 2),
+        "today_trades": sum(1 for t in journal.trades if t.get("status") == "CLOSED"),
+        "today_legs": sum(len(t.get("legs") or []) or 1 for t in journal.trades if t.get("status") == "CLOSED"),
         "timeframe_trends": {
             "m15": state.analyze_timeframe(state.candles_15m)["trend"],
             "m5": state.analyze_timeframe(state.candles_5m)["trend"],

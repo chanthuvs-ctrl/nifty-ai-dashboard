@@ -73,6 +73,18 @@
                 <button class="btn btn-secondary" id="btn-autotrade-live" style="height: 28px; padding: 0 8px; font-size: 0.68rem; text-transform: uppercase; border: none;" data-mode="Live">Auto Real</button>
             </div>
             
+            <!-- BOOKED P&L + TRADE STATS BAR -->
+            <div id="stats-bar" style="display: flex; align-items: center; gap: 6px; margin-right: 4px; background: rgba(10,18,30,0.7); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 10px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.4px; height: 32px;">
+                <span style="color: var(--text-dim);">P&amp;L:</span>
+                <span id="stats-booked-pnl" style="color: var(--neon-bull);">₹0.00</span>
+                <span style="color: var(--border-color);">|</span>
+                <span style="color: var(--text-dim);">Trades:</span>
+                <span id="stats-trade-count" style="color: var(--neon-accent);">0</span>
+                <span style="color: var(--border-color);">|</span>
+                <span style="color: var(--text-dim);">Legs:</span>
+                <span id="stats-leg-count" style="color: var(--neon-accent);">0</span>
+            </div>
+
             <div id="daily-halt-badge" style="display: none; font-size: 0.68rem; font-weight: 700; color: var(--neon-bear); background: rgba(235, 94, 85, 0.08); padding: 5px 8px; border-radius: 4px; border: 1px solid var(--neon-bear); align-items: center; gap: 4px; letter-spacing: 0.5px; margin-right: 4px;">
                 ⚠️ HALTED (-5%)
             </div>

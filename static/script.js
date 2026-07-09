@@ -623,6 +623,21 @@ async function fetchMarketData() {
         // Sync auto-trade header button group state
         const currentMode = data.auto_trade_mode || 'OFF';
         syncAutoTradeButtonVisuals('hdr-auto-trade-group', currentMode);
+
+        // Update booked P&L + trade stats bar
+        const bookedPnl = data.daily_pnl !== undefined ? data.daily_pnl : 0;
+        const todayTrades = data.today_trades !== undefined ? data.today_trades : 0;
+        const todayLegs = data.today_legs !== undefined ? data.today_legs : 0;
+        const pnlEl = document.getElementById('stats-booked-pnl');
+        const tradeEl = document.getElementById('stats-trade-count');
+        const legEl = document.getElementById('stats-leg-count');
+        if (pnlEl) {
+            const isProfit = bookedPnl >= 0;
+            pnlEl.textContent = (isProfit ? '+' : '') + '₹' + bookedPnl.toFixed(2);
+            pnlEl.style.color = isProfit ? 'var(--neon-bull)' : 'var(--neon-bear)';
+        }
+        if (tradeEl) tradeEl.textContent = todayTrades;
+        if (legEl) legEl.textContent = todayLegs;
         
         const dailyHaltBadge = document.getElementById('daily-halt-badge');
         if (dailyHaltBadge) {
