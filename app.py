@@ -1225,13 +1225,18 @@ class SimulationState:
             # Check for AI recommendation change exit
             strat = active_trade["strategy"]
             is_bullish = "CE" in strat or "Bull" in strat
+            is_bearish = "PE" in strat or "Bear" in strat
+            is_neutral = "Strangle" in strat or "Condor" in strat
+            
             rec = self.current_recommendation
             should_close = False
             if rec == "No Trade":
                 should_close = True
+            elif is_neutral and "Strangle" not in rec and "Condor" not in rec:
+                should_close = True
             elif is_bullish and ("PE" in rec or "Bear" in rec or "Short Strangle" in rec or "Iron Condor" in rec):
                 should_close = True
-            elif not is_bullish and ("CE" in rec or "Bull" in rec or "Short Strangle" in rec or "Iron Condor" in rec):
+            elif is_bearish and ("CE" in rec or "Bull" in rec or "Short Strangle" in rec or "Iron Condor" in rec):
                 should_close = True
                 
             if should_close:
@@ -1246,35 +1251,71 @@ class SimulationState:
         else:
             rec = self.current_recommendation
             conf = self.confidence
-            if conf >= 65.0 and rec in ["Buy CE", "Buy PE", "Bull Call Spread", "Bear Put Spread", "Bull Put Spread", "Bear Call Spread"]:
+            allowed_strategies = [
+                "Buy CE", "Buy PE", "Bull Call Spread", "Bear Put Spread", 
+                "Bull Put Spread", "Bear Call Spread", "Short Strangle", "Iron Condor"
+            ]
+            if conf >= 65.0 and rec in allowed_strategies:
                 self.highest_lowest_spot_since_entry = 0.0 # Starts at 0.0 peak P&L seen
                 self.initial_sl_price = -trade_limit # representing initial SL P&L
                 self.trailed_sl_price = -trade_limit # representing trailed SL P&L
                 
                 atm_strike = round(spot / 100.0) * 100 if preferred_index.lower() == "sensex" else round(spot / 50.0) * 50
+                strike_interval = 100 if preferred_index.lower() == "sensex" else 50
                 
+                # Define legs based on strategy
+                legs_to_order = []
+                if rec == "Buy CE":
+                    legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "BUY"})
+                elif rec == "Buy PE":
+                    legs_to_order.append({"strike": atm_strike, "option_type": "PE", "action": "BUY"})
+                elif rec == "Bull Call Spread":
+                    legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "BUY"})
+                    legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "SELL"})
+                elif rec == "Bear Put Spread":
+                    legs_to_order.append({"strike": atm_strike, "option_type": "PE", "action": "BUY"})
+                    legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "SELL"})
+                elif rec == "Bull Put Spread":
+                    legs_to_order.append({"strike": atm_strike, "option_type": "PE", "action": "SELL"})
+                    legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "BUY"})
+                elif rec == "Bear Call Spread":
+                    legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "SELL"})
+                    legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "BUY"})
+                elif rec == "Short Strangle":
+                    legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "SELL"})
+                    legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "SELL"})
+                elif rec == "Iron Condor":
+                    legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "SELL"})
+                    legs_to_order.append({"strike": atm_strike + 2*strike_interval, "option_type": "CE", "action": "BUY"})
+                    legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "SELL"})
+                    legs_to_order.append({"strike": atm_strike - 2*strike_interval, "option_type": "PE", "action": "BUY"})
+
                 if mode == "Live":
-                    legs_to_order = []
-                    instrument_key = None
-                    option_type = "CE" if is_bullish else "PE"
-                    for item in self.option_chain:
-                        if item["strike"] == atm_strike:
-                            instrument_key = item["call_instrument_key"] if is_bullish else item["put_instrument_key"]
-                            break
-                    if not instrument_key:
-                        instrument_key = f"SIM_{option_type.upper()}_{atm_strike}"
+                    live_legs = []
+                    for leg in legs_to_order:
+                        k = leg["strike"]
+                        ot = leg["option_type"]
+                        act = leg["action"]
                         
-                    legs_to_order.append(LiveLegOrder(
-                        instrument_key=instrument_key,
-                        quantity=suggested_lots * lot_size,
-                        transaction_type="BUY",
-                        order_type="MARKET",
-                        price=0.0,
-                        strike=atm_strike,
-                        option_type=option_type
-                    ))
+                        instrument_key = None
+                        for item in self.option_chain:
+                            if item["strike"] == k:
+                                instrument_key = item["call_instrument_key"] if ot == "CE" else item["put_instrument_key"]
+                                break
+                        if not instrument_key:
+                            instrument_key = f"SIM_{ot.upper()}_{k}"
+                            
+                        live_legs.append(LiveLegOrder(
+                            instrument_key=instrument_key,
+                            quantity=suggested_lots * lot_size,
+                            transaction_type=act,
+                            order_type="MARKET",
+                            price=0.0,
+                            strike=k,
+                            option_type=ot
+                        ))
                     
-                    order_req = LiveOrderRequest(strategy=rec, legs=legs_to_order)
+                    order_req = LiveOrderRequest(strategy=rec, legs=live_legs)
                     try:
                         res = execute_live_order(order_req)
                         if res.get("status") in ["SUCCESS", "PARTIAL_SUCCESS"] and "trade" in res:
@@ -1283,15 +1324,40 @@ class SimulationState:
                     except Exception as e:
                         print(f"❌ AUTO-TRADE REAL: Failed placing order: {e}")
                 else:
+                    # Paper mode
+                    legs_logged = []
+                    strikes_logged = []
+                    for leg in legs_to_order:
+                        k = leg["strike"]
+                        ot = leg["option_type"]
+                        act = leg["action"]
+                        
+                        ltp = 100.0
+                        for item in self.option_chain:
+                            if item["strike"] == k:
+                                ltp = item["call_price"] if ot == "CE" else item["put_price"]
+                                break
+                                
+                        legs_logged.append({
+                            "instrument_key": f"SIM_{ot.upper()}_{k}",
+                            "strike": float(k),
+                            "option_type": ot,
+                            "action": act,
+                            "entry_price": float(ltp),
+                            "quantity": suggested_lots * lot_size
+                        })
+                        strikes_logged.append(f"{act} SIM_{ot.upper()}_{k} x {suggested_lots * lot_size}")
+                        
                     trade = journal.add_trade(
                         strategy=rec,
                         entry_price=spot,
-                        strikes=[f"{atm_strike} Strike"],
+                        strikes=strikes_logged,
                         confidence=conf,
                         reason=f"Live Auto Paper: AI Signal {rec} at {conf:.1f}%",
                         size=suggested_lots,
                         execution_type="Paper",
-                        lot_size=lot_size
+                        lot_size=lot_size,
+                        legs=legs_logged
                     )
                     self.auto_trade_active_id = trade["id"]
                     print(f"🤖 AUTO-TRADE PAPER: Entered {rec} position (ID: {self.auto_trade_active_id})")
