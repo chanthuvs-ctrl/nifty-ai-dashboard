@@ -686,7 +686,8 @@ class SimulationState:
                 if now - self.last_live_fetch >= 30:
                     price_data = fetch_live_index_price(preferred_index)
                     if price_data[0] is not None:
-                        self.spot_price = price_data[0]
+                        live_price = price_data[0]
+                        self.spot_price = live_price
                         self.intraday_change_pct = price_data[1]
                         self.intraday_change_val = price_data[2]
                         self.last_live_fetch = now
@@ -700,7 +701,16 @@ class SimulationState:
                     elif "Strong Bear" in regime:
                         drift = -0.5
                     
-                    self.spot_price += drift + random.uniform(-10.0, 10.0)
+                    # Calculate baseline before drift
+                    baseline = self.spot_price - self.intraday_change_val
+                    
+                    # Drift spot price
+                    self.spot_price += drift + random.uniform(-2.0, 2.0)
+                    
+                    # Update change metrics to stay in sync
+                    self.intraday_change_val = self.spot_price - baseline
+                    if baseline != 0.0:
+                        self.intraday_change_pct = (self.intraday_change_val / baseline) * 100.0
                     
                     # Bound random spikes relative to starting spot price area
                     if preferred_index.lower() == "sensex":
