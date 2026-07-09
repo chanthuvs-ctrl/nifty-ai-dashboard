@@ -1723,6 +1723,8 @@ class SettingsUpdate(BaseModel):
     upstox_expiry_date: str
     dashboard_username: str
     dashboard_password: str
+    auto_trade_mode: str = "OFF"
+    trailing_sl_pts: float = 30.0
 
 class LoginRequest(BaseModel):
     username: str
@@ -2104,6 +2106,8 @@ def update_settings(data: SettingsUpdate):
     state.settings["upstox_expiry_date"] = data.upstox_expiry_date
     state.settings["dashboard_username"] = data.dashboard_username
     state.settings["dashboard_password"] = data.dashboard_password
+    state.settings["auto_trade_mode"] = data.auto_trade_mode
+    state.settings["trailing_sl_pts"] = data.trailing_sl_pts
     
     # Try updating the expiry automatically based on token validity/feed mode
     state.update_default_expiry()
