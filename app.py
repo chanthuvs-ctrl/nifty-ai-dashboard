@@ -163,6 +163,7 @@ class SimulationState:
         self.spot_price = live_price
         self.intraday_change_pct = price_data[1]
         self.intraday_change_val = price_data[2]
+        self.prev_close_baseline = live_price - self.intraday_change_val
         self.vix = 14.5
         self.pcr = 0.95
         self.last_live_fetch = time.time()
@@ -296,8 +297,6 @@ class SimulationState:
         self.initial_sl_price = 0.0
         self.trailed_sl_price = 0.0
         self.last_trade_date = get_ist_date_str()
-        self.intraday_change_pct = 0.0
-        self.intraday_change_val = 0.0
         
         # Dynamic active recommendation
         self.current_recommendation = "No Trade"
@@ -690,6 +689,7 @@ class SimulationState:
                         self.spot_price = live_price
                         self.intraday_change_pct = price_data[1]
                         self.intraday_change_val = price_data[2]
+                        self.prev_close_baseline = price_data[0] - price_data[2]
                         self.last_live_fetch = now
                 
                 if not live_price:
@@ -701,16 +701,17 @@ class SimulationState:
                     elif "Strong Bear" in regime:
                         drift = -0.5
                     
-                    # Calculate baseline before drift
-                    baseline = self.spot_price - self.intraday_change_val
+                    # Ensure baseline exists
+                    if not getattr(self, "prev_close_baseline", None):
+                        self.prev_close_baseline = self.spot_price - self.intraday_change_val
                     
                     # Drift spot price
                     self.spot_price += drift + random.uniform(-2.0, 2.0)
                     
                     # Update change metrics to stay in sync
-                    self.intraday_change_val = self.spot_price - baseline
-                    if baseline != 0.0:
-                        self.intraday_change_pct = (self.intraday_change_val / baseline) * 100.0
+                    if self.prev_close_baseline != 0.0:
+                        self.intraday_change_val = self.spot_price - self.prev_close_baseline
+                        self.intraday_change_pct = (self.intraday_change_val / self.prev_close_baseline) * 100.0
                     
                     # Bound random spikes relative to starting spot price area
                     if preferred_index.lower() == "sensex":
@@ -921,6 +922,11 @@ class SimulationState:
             self.price_source = "Upstox Live Feed (BSE India)" if preferred_index.lower() == "sensex" else "Upstox Live Feed (NSE India)"
             self.price_date = get_ist_date_str()
             self.price_time = get_ist_time_str()
+            
+            # Recalculate change metrics using prev_close_baseline
+            if getattr(self, "prev_close_baseline", 0.0) != 0.0:
+                self.intraday_change_val = self.spot_price - self.prev_close_baseline
+                self.intraday_change_pct = (self.intraday_change_val / self.prev_close_baseline) * 100.0
             
             # 2. Parse option chain
             parsed_chain = []
@@ -2179,6 +2185,7 @@ def update_settings_index(data: IndexUpdateRequest):
         state.spot_price = live_price
         state.intraday_change_pct = price_data[1]
         state.intraday_change_val = price_data[2]
+        state.prev_close_baseline = live_price - price_data[2]
     state.evaluate_decision_engine()
     state.save_settings()
     return {
