@@ -66,6 +66,17 @@
                 <option value="Sensex">INDEX: SENSEX</option>
             </select>
             
+            <!-- AUTO-TRADE THREE-STATE QUICK SELECTOR -->
+            <div class="nav-tab-group" id="hdr-auto-trade-group" style="display: flex; gap: 2px; border: 1px solid var(--border-color); padding: 2px; border-radius: 6px; background: rgba(10, 18, 30, 0.6); margin-right: 4px;">
+                <button class="btn btn-secondary active" id="btn-autotrade-off" style="height: 28px; padding: 0 8px; font-size: 0.68rem; text-transform: uppercase; border: none;" data-mode="OFF">Auto OFF</button>
+                <button class="btn btn-secondary" id="btn-autotrade-paper" style="height: 28px; padding: 0 8px; font-size: 0.68rem; text-transform: uppercase; border: none;" data-mode="Paper">Auto Paper</button>
+                <button class="btn btn-secondary" id="btn-autotrade-live" style="height: 28px; padding: 0 8px; font-size: 0.68rem; text-transform: uppercase; border: none;" data-mode="Live">Auto Real</button>
+            </div>
+            
+            <div id="daily-halt-badge" style="display: none; font-size: 0.68rem; font-weight: 700; color: var(--neon-bear); background: rgba(235, 94, 85, 0.08); padding: 5px 8px; border-radius: 4px; border: 1px solid var(--neon-bear); align-items: center; gap: 4px; letter-spacing: 0.5px; margin-right: 4px;">
+                ⚠️ HALTED (-5%)
+            </div>
+
             <div id="engine-status-badge" style="font-size: 0.72rem; font-weight: 700; color: var(--neon-bull); background: rgba(0, 229, 153, 0.08); padding: 5px 10px; border-radius: 4px; border: 1px solid var(--neon-bull); display: flex; align-items: center; gap: 6px; letter-spacing: 0.5px;">
                 <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: var(--neon-bull); box-shadow: 0 0 8px var(--neon-bull);" class="pulse-indicator"></span>
                 ENGINE LIVE
@@ -999,6 +1010,26 @@ Weekly Review: Week ____ (P&L: _________)
                         <select id="set-upstox-expiry" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; cursor: pointer;">
                             <!-- Will be dynamically populated by JS -->
                         </select>
+                    </div>
+                </div>
+
+                <div class="horizontal-divider"></div>
+
+                <div class="setting-row" style="border-left: 2px solid var(--neon-cyan); padding-left: 10px; margin-bottom: 15px;">
+                    <div style="font-size: 0.65rem; font-weight: 700; color: var(--neon-cyan); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">🤖 Automated Trading</div>
+                    
+                    <div class="setting-row">
+                        <label>Auto-Trade Execution Mode</label>
+                        <div class="nav-tab-group" id="modal-auto-trade-group" style="display: flex; gap: 2px; border: 1px solid var(--border-color); padding: 2px; border-radius: 6px; background: rgba(10, 18, 30, 0.6); margin-top: 4px;">
+                            <button class="btn btn-secondary active" id="btn-modal-autotrade-off" style="flex: 1; height: 32px; font-size: 0.72rem; text-transform: uppercase; border: none;" data-mode="OFF">Disabled</button>
+                            <button class="btn btn-secondary" id="btn-modal-autotrade-paper" style="flex: 1; height: 32px; font-size: 0.72rem; text-transform: uppercase; border: none;" data-mode="Paper">Paper Trade</button>
+                            <button class="btn btn-secondary" id="btn-modal-autotrade-live" style="flex: 1; height: 32px; font-size: 0.72rem; text-transform: uppercase; border: none;" data-mode="Live">Real Trade</button>
+                        </div>
+                    </div>
+                    
+                    <div class="setting-row" style="margin-top: 10px;">
+                        <label>Trailing Stop Loss (Points)</label>
+                        <input type="number" id="set-trailing-sl" value="30.0" min="5.0" max="200.0" step="5.0" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%;">
                     </div>
                 </div>
 
