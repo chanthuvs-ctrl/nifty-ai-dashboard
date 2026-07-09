@@ -273,6 +273,7 @@ class SimulationState:
         self.highest_lowest_spot_since_entry = 0.0
         self.initial_sl_price = 0.0
         self.trailed_sl_price = 0.0
+        self.last_trade_date = get_ist_date_str()
         
         # Dynamic active recommendation
         self.current_recommendation = "No Trade"
@@ -821,6 +822,18 @@ class SimulationState:
         # Check immediate override recalculations or periodic recalculation
         if self.recalculation_trigger != "Schedule" or (now - self.last_rec_time >= 60):
             self.evaluate_decision_engine()
+            
+        # Daily date rollover reset
+        today_str = get_ist_date_str()
+        if today_str != getattr(self, "last_trade_date", ""):
+            self.daily_stop_limit_hit = False
+            self.daily_closed_pnl = 0.0
+            self.last_trade_date = today_str
+            print(f"🌅 New day detected ({today_str}). Resetting daily auto-trade halt limits.")
+
+        # Run live automated trading execution tick
+        if not self.daily_stop_limit_hit:
+            self._auto_trade_tick()
 
     def get_vwap(self) -> float:
         """Returns session VWAP estimation."""
@@ -1045,6 +1058,177 @@ class SimulationState:
             return "Strong Bull Trend" if self.rsi > 60 else "Weak Bull Trend"
         else:
             return "Strong Bear Trend" if self.rsi < 40 else "Weak Bear Trend"
+
+    def _auto_trade_tick(self):
+        """Automated trading logic processing at each tick."""
+        mode = self.settings.get("auto_trade_mode", "OFF")
+        if mode == "OFF":
+            return
+            
+        capital = self.settings.get("capital", 500000.0)
+        daily_limit = capital * 0.05
+        trade_limit = capital * 0.02
+        preferred_index = self.settings.get("preferred_index", "Nifty")
+        lot_size = 20 if preferred_index.lower() == "sensex" else 65
+        
+        # Determine lot sizing based on max 2% trade limit risk
+        risk_per_lot = 30.0 * lot_size
+        suggested_lots = max(1, int(trade_limit / risk_per_lot))
+        
+        spot = self.spot_price
+        
+        # Calculate today's closed P&L
+        today_str = get_ist_date_str()
+        today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str]
+        closed_pnl = sum(t.get("pnl", 0.0) for t in today_closed)
+        
+        # Calculate current floating P&L of active position
+        floating_pnl = 0.0
+        active_trade = None
+        if self.auto_trade_active_id:
+            for t in journal.trades:
+                if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN":
+                    active_trade = t
+                    break
+            
+            if active_trade:
+                entry = active_trade["entry_spot"]
+                strat = active_trade["strategy"]
+                multiplier = float(active_trade.get("lot_size", lot_size)) * active_trade["size"]
+                diff = spot - entry
+                if "CE" in strat or "Bull" in strat:
+                    floating_pnl = diff * multiplier
+                else:
+                    floating_pnl = -diff * multiplier
+            else:
+                self.auto_trade_active_id = None
+                
+        total_daily_pnl = closed_pnl + floating_pnl
+        self.daily_closed_pnl = total_daily_pnl
+        
+        # 1. Check cumulative daily stop-loss halt (5% of capital)
+        if total_daily_pnl <= -daily_limit:
+            print(f"🛑 DAILY LOSS HALT: Intraday P&L ({total_daily_pnl:.2f}) hit/exceeded 5% limit ({-daily_limit:.2f}). Halting all trading.")
+            self.daily_stop_limit_hit = True
+            self.settings["auto_trade_mode"] = "OFF"
+            self.save_settings()
+            if active_trade:
+                journal.close_trade(active_trade["id"], spot)
+                active_trade["reason"] = f"Intraday 5% SL limit hit at ₹{total_daily_pnl:.2f}"
+                journal.save_journal()
+                self.auto_trade_active_id = None
+            return
+
+        # 2. Manage Active Position (if exists)
+        if active_trade:
+            # Check 2% trade stop loss limit
+            if floating_pnl <= -trade_limit:
+                journal.close_trade(active_trade["id"], spot)
+                active_trade["reason"] = f"Trade 2% SL limit hit at ₹{floating_pnl:.2f}"
+                journal.save_journal()
+                self.auto_trade_active_id = None
+                print(f"🤖 AUTO-TRADE: Closed position due to 2% Trade SL limit (₹{floating_pnl:.2f})")
+                return
+                
+            # Check Trailing Stop Loss (TSL)
+            strat = active_trade["strategy"]
+            is_bullish = "CE" in strat or "Bull" in strat
+            
+            tsl_offset = float(self.settings.get("trailing_sl_pts", 30.0))
+            if is_bullish:
+                self.highest_lowest_spot_since_entry = max(self.highest_lowest_spot_since_entry, spot)
+                self.trailed_sl_price = self.highest_lowest_spot_since_entry - tsl_offset
+                if spot < self.trailed_sl_price:
+                    journal.close_trade(active_trade["id"], spot)
+                    active_trade["reason"] = f"Trailing SL hit (Trailed to {self.trailed_sl_price:.2f}, Spot {spot:.2f})"
+                    journal.save_journal()
+                    self.auto_trade_active_id = None
+                    print(f"🤖 AUTO-TRADE: Closed position CE due to Trailing SL ({self.trailed_sl_price:.2f})")
+                    return
+            else:
+                self.highest_lowest_spot_since_entry = min(self.highest_lowest_spot_since_entry, spot)
+                self.trailed_sl_price = self.highest_lowest_spot_since_entry + tsl_offset
+                if spot > self.trailed_sl_price:
+                    journal.close_trade(active_trade["id"], spot)
+                    active_trade["reason"] = f"Trailing SL hit (Trailed to {self.trailed_sl_price:.2f}, Spot {spot:.2f})"
+                    journal.save_journal()
+                    self.auto_trade_active_id = None
+                    print(f"🤖 AUTO-TRADE: Closed position PE due to Trailing SL ({self.trailed_sl_price:.2f})")
+                    return
+            
+            # Check for AI recommendation change exit
+            rec = self.current_recommendation
+            should_close = False
+            if rec == "No Trade":
+                should_close = True
+            elif is_bullish and ("PE" in rec or "Bear" in rec or "Short Strangle" in rec or "Iron Condor" in rec):
+                should_close = True
+            elif not is_bullish and ("CE" in rec or "Bull" in rec or "Short Strangle" in rec or "Iron Condor" in rec):
+                should_close = True
+                
+            if should_close:
+                journal.close_trade(active_trade["id"], spot)
+                active_trade["reason"] = f"AI Signal shifted to {rec}"
+                journal.save_journal()
+                self.auto_trade_active_id = None
+                print(f"🤖 AUTO-TRADE: Closed position (AI Signal shifted to {rec})")
+                return
+
+        # 3. Open New Position (if none exists)
+        else:
+            rec = self.current_recommendation
+            conf = self.confidence
+            if conf >= 65.0 and rec in ["Buy CE", "Buy PE", "Bull Call Spread", "Bear Put Spread", "Bull Put Spread", "Bear Call Spread"]:
+                self.highest_lowest_spot_since_entry = spot
+                tsl_offset = float(self.settings.get("trailing_sl_pts", 30.0))
+                is_bullish = "CE" in rec or "Bull" in rec
+                self.initial_sl_price = spot - tsl_offset if is_bullish else spot + tsl_offset
+                self.trailed_sl_price = self.initial_sl_price
+                
+                atm_strike = round(spot / 100.0) * 100 if preferred_index.lower() == "sensex" else round(spot / 50.0) * 50
+                
+                if mode == "Live":
+                    legs_to_order = []
+                    instrument_key = None
+                    option_type = "CE" if is_bullish else "PE"
+                    for item in self.option_chain:
+                        if item["strike"] == atm_strike:
+                            instrument_key = item["call_instrument_key"] if is_bullish else item["put_instrument_key"]
+                            break
+                    if not instrument_key:
+                        instrument_key = f"SIM_{option_type.upper()}_{atm_strike}"
+                        
+                    legs_to_order.append(LiveLegOrder(
+                        instrument_key=instrument_key,
+                        quantity=suggested_lots * lot_size,
+                        transaction_type="BUY",
+                        order_type="MARKET",
+                        price=0.0,
+                        strike=atm_strike,
+                        option_type=option_type
+                    ))
+                    
+                    order_req = LiveOrderRequest(strategy=rec, legs=legs_to_order)
+                    try:
+                        res = execute_live_order(order_req)
+                        if res.get("status") in ["SUCCESS", "PARTIAL_SUCCESS"] and "trade" in res:
+                            self.auto_trade_active_id = res["trade"]["id"]
+                            print(f"⚡ AUTO-TRADE REAL: Placed {rec} position successfully (ID: {self.auto_trade_active_id})")
+                    except Exception as e:
+                        print(f"❌ AUTO-TRADE REAL: Failed placing order: {e}")
+                else:
+                    trade = journal.add_trade(
+                        strategy=rec,
+                        entry_price=spot,
+                        strikes=[f"{atm_strike} Strike"],
+                        confidence=conf,
+                        reason=f"Live Auto Paper: AI Signal {rec} at {conf:.1f}%",
+                        size=suggested_lots,
+                        execution_type="Paper",
+                        lot_size=lot_size
+                    )
+                    self.auto_trade_active_id = trade["id"]
+                    print(f"🤖 AUTO-TRADE PAPER: Entered {rec} position (ID: {self.auto_trade_active_id})")
 
     def evaluate_decision_engine(self):
         """Executes the weighted scoring scoring engine and selects strategies."""
@@ -1804,6 +1988,10 @@ def get_market_data():
         "tertiary_recommendation": tertiary_rec,
         "reasoning": state.rec_reasoning,
         "negation": state.rec_negation,
+        "auto_trade_mode": state.settings.get("auto_trade_mode", "OFF"),
+        "trailing_sl_pts": state.settings.get("trailing_sl_pts", 30.0),
+        "daily_stop_limit_hit": state.daily_stop_limit_hit,
+        "daily_pnl": round(state.daily_closed_pnl, 2),
         "timeframe_trends": {
             "m15": state.analyze_timeframe(state.candles_15m)["trend"],
             "m5": state.analyze_timeframe(state.candles_5m)["trend"],
