@@ -1630,6 +1630,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
+    // Hook up daily halt reset button
+    const btnResetHalt = document.getElementById('btn-reset-halt');
+    if (btnResetHalt) {
+        btnResetHalt.addEventListener('click', async () => {
+            try {
+                const r = await fetch('/api/reset-daily-halt', { method: 'POST' });
+                const res = await r.json();
+                if (res.status === 'SUCCESS') {
+                    showToast('Daily halt cleared. Auto-Paper re-enabled.', 100, 'bull', 'DAILY HALT RESET');
+                    await fetchMarketData();
+                }
+            } catch (e) { console.error('Reset halt failed:', e); }
+        });
+    }
+
     // Hook up Start and Stop buttons
     const btnStart = document.getElementById('btn-engine-start');
     if (btnStart) btnStart.addEventListener('click', startEngineFeed);

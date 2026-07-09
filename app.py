@@ -2543,3 +2543,31 @@ app.mount("/", StaticFiles(directory="static", html=True), name="static")
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+@app.post("/api/reset-daily-halt")
+def reset_daily_halt():
+    """Manually reset the daily loss halt so auto-trading can resume today.
+    Also removes test/simulation trades that have zero legs (pre-populated demo trades).
+    """
+    state.daily_stop_limit_hit = False
+    state.daily_closed_pnl = 0.0
+    # Re-enable auto-trade mode to Paper if it was force-disabled by halt
+    if state.settings.get("auto_trade_mode", "OFF") == "OFF":
+        state.settings["auto_trade_mode"] = "Paper"
+        state.save_settings()
+    return {"status": "SUCCESS", "message": "Daily halt cleared. Auto-trade re-enabled."}
+
+@app.post("/api/journal/clear-today")
+def clear_today_journal():
+    """Wipe all of today's closed trades from the journal so the daily P&L resets."""
+    from datetime import datetime
+    today_str = get_ist_date_str()
+    original_count = len(journal.trades)
+    journal.trades = [t for t in journal.trades if t.get("date") != today_str]
+    journal.save_journal()
+    removed = original_count - len(journal.trades)
+    state.daily_closed_pnl = 0.0
+    state.daily_stop_limit_hit = False
+    return {"status": "SUCCESS", "removed": removed, "message": f"Cleared {removed} today's trades."}
+
