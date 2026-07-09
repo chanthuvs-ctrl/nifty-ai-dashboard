@@ -236,7 +236,9 @@ class SimulationState:
             "preferred_index": "Nifty",
             "dashboard_username": "admin",
             "dashboard_password": "password123",
-            "session_token": ""
+            "session_token": "",
+            "auto_trade_mode": "OFF",
+            "trailing_sl_pts": 30.0
         }
         
         # Load settings from disk if exists
@@ -262,6 +264,15 @@ class SimulationState:
             self.save_settings()
         
         self.upstox_option_chain = []
+        self.option_chain = []
+        
+        # Live Auto-Trading State
+        self.auto_trade_active_id = None
+        self.daily_closed_pnl = 0.0
+        self.daily_stop_limit_hit = False
+        self.highest_lowest_spot_since_entry = 0.0
+        self.initial_sl_price = 0.0
+        self.trailed_sl_price = 0.0
         
         # Dynamic active recommendation
         self.current_recommendation = "No Trade"
