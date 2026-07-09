@@ -1,5 +1,37 @@
 // Globals
 let previousStrategy = null;
+// Helper to sync three-state auto-trade buttons styling dynamically
+function syncAutoTradeButtonVisuals(containerId, activeMode) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    container.querySelectorAll('button').forEach(btn => {
+        const btnMode = btn.getAttribute('data-mode');
+        if (btnMode === activeMode) {
+            btn.classList.add('active');
+            // Custom styling for active button
+            if (activeMode === 'OFF') {
+                btn.style.color = 'var(--text-primary)';
+                btn.style.background = 'rgba(148, 163, 184, 0.15)';
+                btn.style.boxShadow = 'none';
+            } else if (activeMode === 'Paper') {
+                btn.style.color = 'var(--neon-cyan)';
+                btn.style.background = 'rgba(0, 229, 255, 0.08)';
+                btn.style.boxShadow = '0 0 8px rgba(0, 229, 255, 0.2)';
+            } else if (activeMode === 'Live') {
+                btn.style.color = 'var(--neon-bear)';
+                btn.style.background = 'rgba(235, 94, 85, 0.08)';
+                btn.style.boxShadow = '0 0 10px rgba(235, 94, 85, 0.3)';
+            }
+        } else {
+            btn.classList.remove('active');
+            btn.style.color = 'var(--text-muted)';
+            btn.style.background = 'none';
+            btn.style.boxShadow = 'none';
+        }
+    });
+}
+
 let audioCtx = null;
 let marketPollingInterval = null;
 let isEngineRunning = true;
@@ -588,6 +620,15 @@ async function fetchMarketData() {
         // Refresh journal list & logs
         await fetchJournal();
         await fetchLogs();
+        
+        // Sync auto-trade header button group state
+        const currentMode = data.auto_trade_mode || 'OFF';
+        syncAutoTradeButtonVisuals('hdr-auto-trade-group', currentMode);
+        
+        const dailyHaltBadge = document.getElementById('daily-halt-badge');
+        if (dailyHaltBadge) {
+            dailyHaltBadge.style.display = data.daily_stop_limit_hit ? 'flex' : 'none';
+        }
         
     } catch (e) {
         console.error("Failed fetching live market data:", e);
@@ -1241,6 +1282,10 @@ async function saveSettings() {
         const dbUser = document.getElementById('set-auth-user').value;
         const dbPass = document.getElementById('set-auth-pass').value;
         
+        const activeModalBtn = document.querySelector('#modal-auto-trade-group button.active');
+        const autoTradeMode = activeModalBtn ? activeModalBtn.getAttribute('data-mode') : 'OFF';
+        const trailingSl = parseFloat(document.getElementById('set-trailing-sl').value) || 30.0;
+        
         const req = {
             capital: capital,
             risk_pct: risk,
@@ -1251,7 +1296,9 @@ async function saveSettings() {
             upstox_access_token: token,
             upstox_expiry_date: expiry,
             dashboard_username: dbUser,
-            dashboard_password: dbPass
+            dashboard_password: dbPass,
+            auto_trade_mode: autoTradeMode,
+            trailing_sl_pts: trailingSl
         };
         
         const resp = await fetch('/api/settings', {
@@ -1535,6 +1582,40 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error("Failed initializing dropdowns:", e);
     }
     
+    // Hook up header auto-trade button group clicks
+    document.querySelectorAll('#hdr-auto-trade-group button').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const mode = btn.getAttribute('data-mode');
+            try {
+                const settingsResp = await fetch('/api/settings');
+                const settings = await settingsResp.json();
+                
+                settings.auto_trade_mode = mode;
+                
+                const saveResp = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(settings)
+                });
+                const saveRes = await saveResp.json();
+                if (saveRes.status === "SUCCESS") {
+                    showToast(`AUTO-TRADE: ${mode.toUpperCase()}`, 100, "neutral", "SETTINGS UPDATED");
+                    await fetchMarketData();
+                }
+            } catch (err) {
+                console.error("Failed saving header auto-trade setting:", err);
+            }
+        });
+    });
+
+    // Hook up settings modal auto-trade button selections
+    document.querySelectorAll('#modal-auto-trade-group button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const mode = btn.getAttribute('data-mode');
+            syncAutoTradeButtonVisuals('modal-auto-trade-group', mode);
+        });
+    });
+
     // Hook up Start and Stop buttons
     const btnStart = document.getElementById('btn-engine-start');
     if (btnStart) btnStart.addEventListener('click', startEngineFeed);
@@ -1567,6 +1648,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('set-upstox-token').value = settings.upstox_access_token || '';
             document.getElementById('set-auth-user').value = settings.dashboard_username || 'admin';
             document.getElementById('set-auth-pass').value = settings.dashboard_password || 'password123';
+
+            // Sync modal auto-trade fields
+            syncAutoTradeButtonVisuals('modal-auto-trade-group', settings.auto_trade_mode || 'OFF');
+            document.getElementById('set-trailing-sl').value = settings.trailing_sl_pts || 30.0;
             
             // Populate Expiry Dates list dropdown dynamically
             const expirySelect = document.getElementById('set-upstox-expiry');
