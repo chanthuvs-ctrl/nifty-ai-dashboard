@@ -607,6 +607,7 @@ class SimulationState:
         ]
 
     def tick_5s(self, override_type: Optional[str] = None):
+        self.check_daily_reset()
         """Simulate market price tick update every 5 seconds or handle manual overrides."""
         # 1. Update spot price
         old_spot = self.spot_price
@@ -860,13 +861,8 @@ class SimulationState:
         if self.recalculation_trigger != "Schedule" or (now - self.last_rec_time >= 60):
             self.evaluate_decision_engine()
             
-        # Daily date rollover reset
-        today_str = get_ist_date_str()
-        if today_str != getattr(self, "last_trade_date", ""):
-            self.daily_stop_limit_hit = False
-            self.daily_closed_pnl = 0.0
-            self.last_trade_date = today_str
-            print(f"🌅 New day detected ({today_str}). Resetting daily auto-trade halt limits.")
+        # Daily 09:00 AM reset and trading session rules check
+        self.check_daily_reset()
 
         # Run live automated trading execution tick
         if not self.daily_stop_limit_hit:
@@ -1144,6 +1140,29 @@ class SimulationState:
         if mode == "OFF":
             return
             
+        ist_now = get_ist_datetime()
+        ist_time = ist_now.time()
+        
+        # 1. Trading start check (09:30 IST)
+        if ist_time < datetime.time(9, 30):
+            return
+            
+        # 2. Trading stop & force square-off (15:00 IST)
+        if ist_time >= datetime.time(15, 0):
+            if self.auto_trade_active_id:
+                active_trade = None
+                for t in journal.trades:
+                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN":
+                        active_trade = t
+                        break
+                if active_trade:
+                    journal.close_trade(active_trade["id"], self.spot_price)
+                    active_trade["reason"] = "Force Square-off (15:00 IST Trading Session Close)"
+                    journal.save_journal()
+                    self.auto_trade_active_id = None
+                    print("🤖 AUTO-TRADE: Force squared off open position at 15:00 IST.")
+            return
+            
         capital = self.settings.get("capital", 500000.0)
         daily_limit = capital * 0.05
         trade_limit = capital * 0.02
@@ -1361,6 +1380,43 @@ class SimulationState:
                     )
                     self.auto_trade_active_id = trade["id"]
                     print(f"🤖 AUTO-TRADE PAPER: Entered {rec} position (ID: {self.auto_trade_active_id})")
+
+    def check_daily_reset(self):
+        """Checks and enforces daily reset and time-based automation rules."""
+        ist_now = get_ist_datetime()
+        today_date = ist_now.strftime("%Y-%m-%d")
+        ist_time = ist_now.time()
+        
+        # 1. 09:00 AM IST Daily Reset
+        if getattr(self, "last_daily_reset_date", "") != today_date:
+            if ist_time >= datetime.time(9, 0):
+                self.daily_closed_pnl = 0.0
+                self.daily_stop_limit_hit = False
+                self.auto_trade_active_id = None
+                
+                # Clear today's trades from journal to reset today_trades and today_legs counters
+                journal.trades = [t for t in journal.trades if t.get("date") != today_date]
+                journal.save_journal()
+                
+                self.last_daily_reset_date = today_date
+                
+                # Append to change log
+                self.change_log.append({
+                    "time": get_ist_time_str(),
+                    "prev_strategy": "N/A",
+                    "new_strategy": self.current_recommendation,
+                    "confidence": f"{self.confidence:.1f}%",
+                    "reason": "🌅 Daily reset completed",
+                    "indicators_changed": "Daily counters cleared"
+                })
+                print("🌅 Daily reset completed")
+                
+        # 2. After 15:30 IST: Disable all automation
+        if ist_time >= datetime.time(15, 30):
+            if self.settings.get("auto_trade_mode", "OFF") != "OFF":
+                self.settings["auto_trade_mode"] = "OFF"
+                self.save_settings()
+                print("🤖 AUTO-TRADE: Session ended. Automation disabled after 15:30 IST.")
 
     def evaluate_decision_engine(self):
         """Executes the weighted scoring scoring engine and selects strategies."""
@@ -1912,6 +1968,7 @@ class SyncRequest(BaseModel):
 
 @app.get("/api/market-data")
 def get_market_data():
+    state.check_daily_reset()
     fallback_active = False
     if state.settings.get("feed_mode") == "Upstox":
         success = state.fetch_upstox_data()
@@ -2121,8 +2178,8 @@ def get_market_data():
         "trailing_sl_pts": state.settings.get("trailing_sl_pts", 30.0),
         "daily_stop_limit_hit": state.daily_stop_limit_hit,
         "daily_pnl": round(state.daily_closed_pnl, 2),
-        "today_trades": sum(1 for t in journal.trades if t.get("status") == "CLOSED"),
-        "today_legs": sum(len(t.get("legs") or []) or 1 for t in journal.trades if t.get("status") == "CLOSED"),
+        "today_trades": sum(1 for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str()),
+        "today_legs": sum(len(t.get("legs") or []) or 1 for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str()),
         "timeframe_trends": {
             "m15": state.analyze_timeframe(state.candles_15m)["trend"],
             "m5": state.analyze_timeframe(state.candles_5m)["trend"],

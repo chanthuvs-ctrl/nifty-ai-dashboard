@@ -21,6 +21,11 @@ All notable changes to this project will be documented in this file.
 - **PnL Engine Calculations**: Corrected the booked P&L calculation at trade close so closed trades no longer record ₹0 or fall back improperly when strikes shift outside the active option chain window. Real-time options pricing logic now falls back gracefully to the Black-Scholes pricing engine when live quotes are missing.
 - **PnL Separation**: Separated Booked P&L (realized CLOSED trades only) from Floating P&L (unrealized OPEN trades only) across the backend state and frontend views.
 
+### Added
+- **Trading Session Hours Enforcements**: Automated entries and exits are strictly gated between 09:30 AM IST and 03:00 PM IST. At exactly 03:00 PM IST, any active position is force squared off.
+- **Auto-Disable Automation**: Auto trading mode is automatically set to OFF after 03:30 PM IST.
+- **09:00 AM Daily Reset**: Counters for today's trades, today's legs, daily closed P&L, and halt flags are reset at exactly 09:00 AM IST daily, writing a log to the dashboard change timeline.
+
 ### Changed
 - **UI Positions Rename**: Renamed visible text labels from "Journal" to "Positions" across the main dashboard header and panels while keeping DOM element IDs intact for system consistency.
 

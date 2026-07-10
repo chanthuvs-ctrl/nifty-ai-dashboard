@@ -6,12 +6,12 @@
 - [x] **Realized P&L Accuracy**: Ensure closed trades calculate option leg differential exactly, and fall back to spot differential safely if option chain lookup fails.
 - [ ] **Est. Brokerage Calculation**: Track estimated brokerage (0.5% of total premiums collected/paid) per trade and display the daily sum on the stats bar.
 - [x] **Dual P&L Displays**: Completely separate Booked P&L (realized) from Floating P&L (active positions) to avoid confusing combined numbers.
-- [ ] **Daily Crossover Reset**: Auto-reset trade counts, total legs, and daily closed P&L at 9:00 AM IST daily.
+- [x] **Daily Crossover Reset**: Auto-reset trade counts, total legs, and daily closed P&L at 9:00 AM IST daily.
 
 ### Position Management
 - [ ] **Premium-based Trailing SL**: Change option buy SL to 10% of premium, capped at 2% of capital. Use premium-based or percentage-based trailing instead of index spot points.
 - [ ] **Signal Stabilization Cooldown**: Enforce a 2-minute confirmation filter before acting on exit recommendation shifts to prevent false oscillations in volatile markets.
-- [ ] **Strict Trading Hours**: Only open new trades between 9:30 AM and 3:00 PM IST. Force square-off of all active auto-trades at 3:00 PM IST.
+- [x] **Strict Trading Hours**: Only open new trades between 9:30 AM and 3:00 PM IST. Force square-off of all active auto-trades at 3:00 PM IST.
 
 ### UI & Lot Sizing
 - [ ] **Capital-Based Lot Calculator**: Correct lot calculator so sizing is driven by SL limits and margin constraints rather than raw capital division.
