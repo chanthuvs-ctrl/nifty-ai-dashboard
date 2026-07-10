@@ -535,6 +535,141 @@ class SimulationState:
             return 0.0
         return ((self.spot_price - prev_price) / prev_price) * 100.0
 
+    def get_available_capital(self) -> float:
+        """Returns the capital to be used for lot sizing calculations."""
+        mode = self.settings.get("auto_trade_mode", "OFF")
+        token = self.settings.get("upstox_access_token")
+        
+        if mode == "Live" and token:
+            url = "https://api.upstox.com/v2/user/profile/balance"
+            headers = {
+                "Accept": "application/json",
+                "Authorization": f"Bearer {token}"
+            }
+            try:
+                resp = requests.get(url, headers=headers, timeout=5)
+                if resp.status_code == 200:
+                    res_json = resp.json()
+                    if res_json.get("status") == "success":
+                        equity_data = res_json.get("data", {}).get("equity", {})
+                        available = equity_data.get("available_margin")
+                        if available is not None:
+                            print(f"💰 Upstox Live Capital Query: ₹{available:.2f} available.")
+                            return float(available)
+            except Exception as e:
+                print(f"⚠️ Failed to query Upstox available capital: {e}")
+                
+        # Default fallback to manual capital setting
+        return float(self.settings.get("capital", 500000.0))
+
+    def calculate_suggested_lots_and_margin(self, strategy: str, spot: float) -> tuple:
+        """Calculates suggested lots, margin required, and risk amount based on capital and strategy type."""
+        capital = self.get_available_capital()
+        preferred_index = self.settings.get("preferred_index", "Nifty")
+        lot_size = 20 if preferred_index.lower() == "sensex" else 65
+        
+        # Max SL amount: 2% of capital
+        max_risk = capital * 0.02
+        
+        # 1. Option Buying (Buy CE, Buy PE)
+        if "Buy CE" in strategy or "Buy PE" in strategy:
+            # Fetch ATM premium (LTP)
+            atm_premium = 100.0
+            if preferred_index.lower() == "sensex":
+                atm_strike = round(spot / 100.0) * 100
+            else:
+                atm_strike = round(spot / 50.0) * 50
+                
+            for item in self.option_chain:
+                if item.get("strike") == atm_strike:
+                    if "CE" in strategy:
+                        atm_premium = item.get("call_price", 100.0)
+                    else:
+                        atm_premium = item.get("put_price", 100.0)
+                    break
+            
+            # SL = 10% premium. Risk per lot = premium * lot_size * 0.10
+            risk_per_lot = atm_premium * lot_size * 0.10
+            suggested_lots = max(1, int(max_risk / risk_per_lot))
+            margin_per_lot = atm_premium * lot_size
+            
+            margin_required = suggested_lots * margin_per_lot
+            risk_amount = suggested_lots * risk_per_lot
+            return suggested_lots, margin_required, risk_amount
+
+        # 2. Short Strangle
+        elif "Strangle" in strategy:
+            # Margin = ₹1,50,000 per pair
+            MARGIN_STRANGLE = 150000.0
+            
+            if preferred_index.lower() == "sensex":
+                atm_strike = round(spot / 100.0) * 100
+                strike_interval = 100
+            else:
+                atm_strike = round(spot / 50.0) * 50
+                strike_interval = 50
+                
+            call_premium = 100.0
+            put_premium = 100.0
+            for item in self.option_chain:
+                if item.get("strike") == atm_strike + strike_interval:
+                    call_premium = item.get("call_price", 100.0)
+                if item.get("strike") == atm_strike - strike_interval:
+                    put_premium = item.get("put_price", 100.0)
+                    
+            collected = call_premium + put_premium
+            # Risk is 50% of premium collected
+            risk_per_lot = collected * 0.50 * lot_size
+            
+            # Respect both margin (80% capital allocation limit) and 2% risk
+            max_lots_by_risk = max(1, int(max_risk / risk_per_lot))
+            max_lots_by_margin = max(1, int((capital * 0.80) / MARGIN_STRANGLE))
+            
+            suggested_lots = min(max_lots_by_risk, max_lots_by_margin)
+            margin_required = suggested_lots * MARGIN_STRANGLE
+            risk_amount = suggested_lots * risk_per_lot
+            return suggested_lots, margin_required, risk_amount
+
+        # 3. Spreads (Bull Call, Bear Put, Bull Put, Bear Call) or Iron Condor
+        else:
+            # Margin = ₹50,000 per lot
+            MARGIN_SPREAD = 50000.0
+            
+            if preferred_index.lower() == "sensex":
+                atm_strike = round(spot / 100.0) * 100
+                strike_interval = 100
+            else:
+                atm_strike = round(spot / 50.0) * 50
+                strike_interval = 50
+                
+            leg1_premium = 100.0
+            leg2_premium = 60.0
+            for item in self.option_chain:
+                if item.get("strike") == atm_strike:
+                    if "Call" in strategy or "CE" in strategy:
+                        leg1_premium = item.get("call_price", 100.0)
+                    else:
+                        leg1_premium = item.get("put_price", 100.0)
+                if "Call" in strategy or "CE" in strategy:
+                    if item.get("strike") == atm_strike + strike_interval:
+                        leg2_premium = item.get("call_price", 60.0)
+                else:
+                    if item.get("strike") == atm_strike - strike_interval:
+                        leg2_premium = item.get("put_price", 60.0)
+            
+            net_premium = abs(leg1_premium - leg2_premium)
+            # Risk is 50% of net premium
+            risk_per_lot = net_premium * 0.50 * lot_size
+            
+            # Respect both margin (80% capital allocation limit) and 2% risk
+            max_lots_by_risk = max(1, int(max_risk / risk_per_lot))
+            max_lots_by_margin = max(1, int((capital * 0.80) / MARGIN_SPREAD))
+            
+            suggested_lots = min(max_lots_by_risk, max_lots_by_margin)
+            margin_required = suggested_lots * MARGIN_SPREAD
+            risk_amount = suggested_lots * risk_per_lot
+            return suggested_lots, margin_required, risk_amount
+
     def get_option_buy_strategies(self) -> List[Dict]:
         # Calculate rolling 2-minute change
         mom_pct = self.get_rolling_momentum()
@@ -545,8 +680,20 @@ class SimulationState:
         preferred_index = self.settings.get("preferred_index", "Nifty")
         lot_size = 20 if preferred_index.lower() == "sensex" else 65
         
-        # Risk per lot (Delta 0.5 * 30 points stop loss * lot size)
-        risk_per_lot = 0.5 * 30.0 * lot_size
+        # Fetch ATM premium (LTP)
+        atm_premium = 100.0
+        if preferred_index.lower() == "sensex":
+            atm_strike = round(self.spot_price / 100.0) * 100
+        else:
+            atm_strike = round(self.spot_price / 50.0) * 50
+            
+        for item in self.option_chain:
+            if item.get("strike") == atm_strike:
+                atm_premium = item.get("call_price", 100.0)
+                break
+                
+        # SL = 10% premium. Risk per lot = premium * lot_size * 0.10
+        risk_per_lot = atm_premium * lot_size * 0.10
         suggested_lots = max(1, int(max_risk / risk_per_lot))
         
         # Momentum strategy status
@@ -1163,17 +1310,15 @@ class SimulationState:
                     print("🤖 AUTO-TRADE: Force squared off open position at 15:00 IST.")
             return
             
-        capital = self.settings.get("capital", 500000.0)
+        capital = self.get_available_capital()
         daily_limit = capital * 0.05
-        trade_limit = capital * 0.02
         preferred_index = self.settings.get("preferred_index", "Nifty")
         lot_size = 20 if preferred_index.lower() == "sensex" else 65
-        
-        # Determine lot sizing based on max 2% trade limit risk
-        risk_per_lot = 30.0 * lot_size
-        suggested_lots = max(1, int(trade_limit / risk_per_lot))
-        
         spot = self.spot_price
+        
+        # Determine lot sizing based on max 2% trade limit risk & margins
+        suggested_lots, margin_required, risk_amount = self.calculate_suggested_lots_and_margin(rec, spot)
+        trade_limit = risk_amount
         
         # Calculate today's closed P&L
         today_str = get_ist_date_str()
@@ -2144,18 +2289,9 @@ def get_market_data():
         secondary_rec = "Iron Condor"
         tertiary_rec = "No Trade"
 
-    margin_req = 120000.0 if "Spread" in state.current_recommendation or "Short" in state.current_recommendation else 15000.0
+    # Determine lot sizing based on max 2% trade limit risk & margins
+    suggested_lots, margin_required, risk_amount = state.calculate_suggested_lots_and_margin(state.current_recommendation, spot)
     lot_size = 20 if preferred_index.lower() == "sensex" else 65
-    
-    if "Buy CE" in state.current_recommendation or "Buy PE" in state.current_recommendation:
-        # Option Buying strategy: limit risk to 2% of capital
-        max_risk = state.settings.get("capital", 500000.0) * 0.02
-        risk_per_lot = 0.5 * 30.0 * lot_size
-        suggested_lots = max(1, int(max_risk / risk_per_lot))
-    else:
-        # Spreads or Option Selling
-        max_risk = state.settings["capital"] * (state.settings["risk_pct"] / 100.0)
-        suggested_lots = max(1, int(state.settings["capital"] / margin_req))
 
     state.option_chain = option_chain
     return {
@@ -2216,8 +2352,8 @@ def get_market_data():
             "target": f"{spot + 80.0:.1f}" if "CE" in state.current_recommendation or "Bull" in state.current_recommendation else f"{spot - 80.0:.1f}",
             "stop_loss": f"{spot - 30.0:.1f}" if "CE" in state.current_recommendation or "Bull" in state.current_recommendation else f"{spot + 30.0:.1f}",
             "risk_reward": "1:2.6",
-            "max_risk": f"₹{max_risk:.2f}",
-            "margin_required": f"₹{margin_req * suggested_lots:.2f}",
+            "max_risk": f"₹{risk_amount:.2f}",
+            "margin_required": f"₹{margin_required:.2f}",
             "lot_size": lot_size,
             "suggested_lots": suggested_lots,
             "theta_decay": "-₹350/lot day",
@@ -2488,17 +2624,8 @@ def execute_live_order(data: LiveOrderRequest):
 def trigger_action(data: TriggerOverride):
     state.tick_5s(override_type=data.override_type)
     
-    preferred_index = state.settings.get("preferred_index", "Nifty")
-    lot_size = 20 if preferred_index.lower() == "sensex" else 65
-    margin_req = 120000.0 if "Spread" in state.current_recommendation or "Short" in state.current_recommendation else 15000.0
-    
-    if "Buy CE" in state.current_recommendation or "Buy PE" in state.current_recommendation:
-        max_risk = state.settings.get("capital", 500000.0) * 0.02
-        risk_per_lot = 0.5 * 30.0 * lot_size
-        suggested_lots = max(1, int(max_risk / risk_per_lot))
-    else:
-        max_risk = state.settings["capital"] * (state.settings["risk_pct"] / 100.0)
-        suggested_lots = max(1, int(state.settings["capital"] / margin_req))
+    # Determine lot sizing based on max 2% trade limit risk & margins
+    suggested_lots, margin_required, risk_amount = state.calculate_suggested_lots_and_margin(state.current_recommendation, state.spot_price)
         
     return {
         "status": "SUCCESS", 

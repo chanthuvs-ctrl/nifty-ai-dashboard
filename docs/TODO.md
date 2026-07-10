@@ -14,7 +14,7 @@
 - [x] **Strict Trading Hours**: Only open new trades between 9:30 AM and 3:00 PM IST. Force square-off of all active auto-trades at 3:00 PM IST.
 
 ### UI & Lot Sizing
-- [ ] **Capital-Based Lot Calculator**: Correct lot calculator so sizing is driven by SL limits and margin constraints rather than raw capital division.
+- [x] **Capital-Based Lot Calculator**: Correct lot calculator so sizing is driven by SL limits and margin constraints rather than raw capital division.
 - [x] **Positions Labeling**: Rename all occurrences of "Journal" to "Positions" throughout the UI.
 - [ ] **Modals Exit Buttons**: Add a close (`✕`) button to all modals and control overlays.
 

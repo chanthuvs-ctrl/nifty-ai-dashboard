@@ -25,6 +25,7 @@ All notable changes to this project will be documented in this file.
 - **Trading Session Hours Enforcements**: Automated entries and exits are strictly gated between 09:30 AM IST and 03:00 PM IST. At exactly 03:00 PM IST, any active position is force squared off.
 - **Auto-Disable Automation**: Auto trading mode is automatically set to OFF after 03:30 PM IST.
 - **09:00 AM Daily Reset**: Counters for today's trades, today's legs, daily closed P&L, and halt flags are reset at exactly 09:00 AM IST daily, writing a log to the dashboard change timeline.
+- **Realistic Lot Sizing Engine**: Replaced basic capital division with dynamic risk-based and margin-based sizing. Option Buying is capped at 10% premium SL (not exceeding 2% capital risk). Strangles (₹1.5L/lot pair) and Spreads (₹50k/lot) respect both margin allocations and 2% risk. Available capital is fetched live from the Upstox balance API in real trading mode, falling back to manual settings for paper trading.
 
 ### Changed
 - **UI Positions Rename**: Renamed visible text labels from "Journal" to "Positions" across the main dashboard header and panels while keeping DOM element IDs intact for system consistency.
