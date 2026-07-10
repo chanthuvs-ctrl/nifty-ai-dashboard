@@ -1176,7 +1176,7 @@ class SimulationState:
                 self.auto_trade_active_id = None
                 
         total_daily_pnl = closed_pnl + floating_pnl
-        self.daily_closed_pnl = total_daily_pnl
+        self.daily_closed_pnl = closed_pnl
         
         # 1. Check cumulative daily stop-loss halt (5% of capital)
         if total_daily_pnl <= -daily_limit:
@@ -1746,14 +1746,35 @@ class TradeJournal:
                     pnl = 0.0
                     for leg in trade["legs"]:
                         # Look up current LTP of this leg from the option chain
-                        leg_exit_price = leg["entry_price"]  # default fallback
+                        leg_exit_price = None
+                        
+                        # 1. Look up in state.option_chain
                         for item in state.option_chain:
                             if item.get("call_instrument_key") == leg["instrument_key"]:
-                                leg_exit_price = item.get("call_price", leg["entry_price"])
+                                leg_exit_price = item.get("call_price")
                                 break
                             elif item.get("put_instrument_key") == leg["instrument_key"]:
-                                leg_exit_price = item.get("put_price", leg["entry_price"])
+                                leg_exit_price = item.get("put_price")
                                 break
+                        
+                        # 2. Look up in state.upstox_option_chain (part of PnL calculation engine)
+                        if leg_exit_price is None:
+                            if state.settings.get("feed_mode") == "Upstox" and state.upstox_option_chain:
+                                for chain_item in state.upstox_option_chain:
+                                    if chain_item.get("strike") == leg.get("strike"):
+                                        if leg.get("option_type") == "CE":
+                                            leg_exit_price = chain_item.get("call_price")
+                                        else:
+                                            leg_exit_price = chain_item.get("put_price")
+                                        break
+                                        
+                        # 3. Fallback to Black-Scholes Greeks pricing (part of PnL calculation engine)
+                        if leg_exit_price is None:
+                            t_years = 4.0 / 365.0
+                            r = 0.07
+                            is_call = leg["option_type"].upper() == "CE"
+                            opt_res = calculate_greeks(exit_spot, leg["strike"], t_years, state.vix / 100.0, r, is_call)
+                            leg_exit_price = opt_res["price"]
                         
                         leg_diff = leg_exit_price - leg["entry_price"]
                         if leg["action"] == "BUY":

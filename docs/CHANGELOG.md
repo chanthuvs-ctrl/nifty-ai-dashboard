@@ -15,12 +15,18 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [1.1.0] - Planned
+## [1.1.0] - 2026-07-11
 
-### Security & Compliance
-- Standardize on token-based authorization and session state lock.
+### Fixed
+- **PnL Engine Calculations**: Corrected the booked P&L calculation at trade close so closed trades no longer record ₹0 or fall back improperly when strikes shift outside the active option chain window. Real-time options pricing logic now falls back gracefully to the Black-Scholes pricing engine when live quotes are missing.
+- **PnL Separation**: Separated Booked P&L (realized CLOSED trades only) from Floating P&L (unrealized OPEN trades only) across the backend state and frontend views.
 
-### Automated Trades Refinement
-- Add 2-minute signal debouncing.
-- Restrict entries to 9:30 AM - 3:00 PM IST window.
-- Implement premium-based trailing stop-loss gates.
+### Changed
+- **UI Positions Rename**: Renamed visible text labels from "Journal" to "Positions" across the main dashboard header and panels while keeping DOM element IDs intact for system consistency.
+
+---
+
+## [1.2.0] - Planned
+
+### Option Buying MTF Filters
+- Add 15m/5m/1m macro trend/RSI pullback checks.

@@ -3,9 +3,9 @@
 ## Version 1.1
 
 ### Critical Stability & Tracking
-- [ ] **Realized P&L Accuracy**: Ensure closed trades calculate option leg differential exactly, and fall back to spot differential safely if option chain lookup fails.
+- [x] **Realized P&L Accuracy**: Ensure closed trades calculate option leg differential exactly, and fall back to spot differential safely if option chain lookup fails.
 - [ ] **Est. Brokerage Calculation**: Track estimated brokerage (0.5% of total premiums collected/paid) per trade and display the daily sum on the stats bar.
-- [ ] **Dual P&L Displays**: Completely separate Booked P&L (realized) from Floating P&L (active positions) to avoid confusing combined numbers.
+- [x] **Dual P&L Displays**: Completely separate Booked P&L (realized) from Floating P&L (active positions) to avoid confusing combined numbers.
 - [ ] **Daily Crossover Reset**: Auto-reset trade counts, total legs, and daily closed P&L at 9:00 AM IST daily.
 
 ### Position Management
@@ -15,7 +15,7 @@
 
 ### UI & Lot Sizing
 - [ ] **Capital-Based Lot Calculator**: Correct lot calculator so sizing is driven by SL limits and margin constraints rather than raw capital division.
-- [ ] **Positions Labeling**: Rename all occurrences of "Journal" to "Positions" throughout the UI.
+- [x] **Positions Labeling**: Rename all occurrences of "Journal" to "Positions" throughout the UI.
 - [ ] **Modals Exit Buttons**: Add a close (`✕`) button to all modals and control overlays.
 
 ---
