@@ -303,6 +303,10 @@ class SimulationState:
         self.signal_change_pending_since = 0.0
         self.pending_exit_signal = "" 
         
+        # Trailing Stop Activation State (v1.1)
+        self.trail_activated = False
+        self.peak_pnl_since_activation = -999999.0
+        
         # Dynamic active recommendation
         self.current_recommendation = "No Trade"
         self.confidence = 50.0
@@ -1334,6 +1338,11 @@ class SimulationState:
                 floating_pnl = self.calculate_trade_pnl(active_trade, spot)
             else:
                 self.auto_trade_active_id = None
+                self.trail_activated = False
+                self.peak_pnl_since_activation = -999999.0
+        else:
+            self.trail_activated = False
+            self.peak_pnl_since_activation = -999999.0
                 
         rec = self.current_recommendation
         strategy_for_sizing = active_trade["strategy"] if active_trade else rec
@@ -1372,6 +1381,7 @@ class SimulationState:
                 journal.save_journal()
                 self.auto_trade_active_id = None
                 self.signal_change_pending = False
+                self.trail_activated = False
                 print(f"🤖 AUTO-TRADE: Closed position due to 2% Trade SL limit (₹{floating_pnl:.2f})")
                 return
                 
@@ -1386,10 +1396,51 @@ class SimulationState:
                 journal.save_journal()
                 self.auto_trade_active_id = None
                 self.signal_change_pending = False
+                self.trail_activated = False
                 print(f"🤖 AUTO-TRADE: Closed position due to Profit Target hit (₹{floating_pnl:.2f})")
                 return
+                
+            # C. Check Trailing Stop Loss based ONLY on trade P&L (Never use Nifty point movement)
+            tsl_offset = float(self.settings.get("trailing_sl_pts", 30.0))
+            active_lot_size = active_trade.get("lot_size", lot_size)
+            tsl_offset_currency = tsl_offset * active_lot_size * active_size
             
-            # C. Check for AI recommendation change exit with confirmation delay
+            is_option_buy = "Buy CE" in strat or "Buy PE" in strat
+            is_strangle = "Strangle" in strat
+            
+            if is_option_buy:
+                # Option Buy: Activate trail only after profit reaches 4% of trading capital
+                activation_threshold = capital * 0.04
+            elif is_strangle:
+                # Short Strangle: Activate after configured profit threshold (default 1% capital)
+                activation_threshold = self.settings.get("strangle_trail_activation", capital * 0.01)
+            else:
+                # Spreads: Activate after configured profit threshold (default 1% capital)
+                activation_threshold = self.settings.get("spread_trail_activation", capital * 0.01)
+                
+            # Check for trailing activation
+            if not getattr(self, "trail_activated", False):
+                if floating_pnl >= activation_threshold:
+                    self.trail_activated = True
+                    self.peak_pnl_since_activation = floating_pnl
+                    print(f"📈 AUTO-TRADE: Trailing SL activated! Net PnL (₹{floating_pnl:.2f}) reached threshold (₹{activation_threshold:.2f})")
+            
+            # If activated, trail and check stop
+            if getattr(self, "trail_activated", False):
+                self.peak_pnl_since_activation = max(self.peak_pnl_since_activation, floating_pnl)
+                trailed_sl_pnl = self.peak_pnl_since_activation - tsl_offset_currency
+                
+                if floating_pnl < trailed_sl_pnl:
+                    journal.close_trade(active_trade["id"], spot)
+                    active_trade["reason"] = f"Trailing SL hit (Trailed to P&L ₹{trailed_sl_pnl:.2f}, Peak P&L ₹{self.peak_pnl_since_activation:.2f}, Current P&L ₹{floating_pnl:.2f})"
+                    journal.save_journal()
+                    self.auto_trade_active_id = None
+                    self.signal_change_pending = False
+                    self.trail_activated = False
+                    print(f"🤖 AUTO-TRADE: Closed position due to PnL-based Trailing SL (Trailed: ₹{trailed_sl_pnl:.2f}, Current: ₹{floating_pnl:.2f})")
+                    return
+            
+            # D. Check for AI recommendation change exit with confirmation delay
             is_bullish = "CE" in strat or "Bull" in strat
             is_bearish = "PE" in strat or "Bear" in strat
             is_neutral = "Strangle" in strat or "Condor" in strat
@@ -1422,6 +1473,7 @@ class SimulationState:
                         journal.save_journal()
                         self.auto_trade_active_id = None
                         self.signal_change_pending = False
+                        self.trail_activated = False
                         print(f"🤖 AUTO-TRADE: Closed position (AI Signal shift to {rec} confirmed)")
                         return
                     else:
