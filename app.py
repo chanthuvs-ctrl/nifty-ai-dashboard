@@ -1981,6 +1981,12 @@ class TradeJournal:
         
     def add_trade(self, strategy: str, entry_price: float, strikes: List[str], confidence: float, reason: str, size: int = 1, execution_type: str = "Paper", lot_size: int = 65, legs: Optional[List[Dict]] = None):
         trade_id = str(len(self.trades) + 1)
+        entry_premium = 0.0
+        if legs:
+            entry_premium = sum(leg["entry_price"] * leg["quantity"] for leg in legs)
+        else:
+            entry_premium = entry_price * lot_size * size
+            
         trade = {
             "id": trade_id,
             "date": get_ist_date_str(),
@@ -1997,7 +2003,8 @@ class TradeJournal:
             "outcome": "PENDING",
             "execution_type": execution_type,
             "lot_size": lot_size,
-            "legs": legs
+            "legs": legs,
+            "brokerage": round(0.005 * entry_premium, 2)
         }
         self.trades.append(trade)
         self.save_journal()
@@ -2019,6 +2026,8 @@ class TradeJournal:
                 # If we have stored option legs, calculate exact realized P&L based on option prices!
                 if "legs" in trade and trade["legs"]:
                     pnl = 0.0
+                    entry_premium = sum(leg["entry_price"] * leg["quantity"] for leg in trade["legs"])
+                    exit_premium = 0.0
                     for leg in trade["legs"]:
                         # Look up current LTP of this leg from the option chain
                         leg_exit_price = None
@@ -2051,14 +2060,20 @@ class TradeJournal:
                             opt_res = calculate_greeks(exit_spot, leg["strike"], t_years, state.vix / 100.0, r, is_call)
                             leg_exit_price = opt_res["price"]
                         
+                        leg["exit_price"] = leg_exit_price
+                        exit_premium += leg_exit_price * leg["quantity"]
                         leg_diff = leg_exit_price - leg["entry_price"]
                         if leg["action"] == "BUY":
                             pnl += leg_diff * leg["quantity"]
                         else:
                             pnl -= leg_diff * leg["quantity"]
+                    trade["brokerage"] = round(0.005 * (entry_premium + exit_premium), 2)
                 else:
                     pnl_points = calculate_trade_pnl_points(strat, diff)
                     pnl = pnl_points * multiplier
+                    entry_premium = trade["entry_spot"] * trade["lot_size"] * trade["size"]
+                    exit_premium = exit_spot * trade["lot_size"] * trade["size"]
+                    trade["brokerage"] = round(0.005 * (entry_premium + exit_premium), 2)
                     
                 trade["pnl"] = round(pnl, 2)
                 trade["outcome"] = "WIN" if pnl > 0 else "LOSS"
@@ -2349,6 +2364,8 @@ def get_market_data():
         "trailing_sl_pts": state.settings.get("trailing_sl_pts", 30.0),
         "daily_stop_limit_hit": state.daily_stop_limit_hit,
         "daily_pnl": round(state.daily_closed_pnl, 2),
+        "daily_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if t.get("date") == get_ist_date_str()), 2),
+        "total_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades), 2),
         "today_trades": sum(1 for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str()),
         "today_legs": sum(len(t.get("legs") or []) or 1 for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str()),
         "timeframe_trends": {

@@ -4,7 +4,7 @@
 
 ### Critical Stability & Tracking
 - [x] **Realized P&L Accuracy**: Ensure closed trades calculate option leg differential exactly, and fall back to spot differential safely if option chain lookup fails.
-- [ ] **Est. Brokerage Calculation**: Track estimated brokerage (0.5% of total premiums collected/paid) per trade and display the daily sum on the stats bar.
+- [x] **Est. Brokerage Calculation**: Track estimated brokerage (0.5% of total premiums collected/paid) per trade and display the daily sum on the stats bar.
 - [x] **Dual P&L Displays**: Completely separate Booked P&L (realized) from Floating P&L (active positions) to avoid confusing combined numbers.
 - [x] **Daily Crossover Reset**: Auto-reset trade counts, total legs, and daily closed P&L at 9:00 AM IST daily.
 

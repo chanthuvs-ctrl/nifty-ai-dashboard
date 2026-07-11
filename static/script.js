@@ -639,6 +639,11 @@ async function fetchMarketData() {
         if (tradeEl) tradeEl.textContent = todayTrades;
         if (legEl) legEl.textContent = todayLegs;
         
+        const dailyBrokerageEl = document.getElementById('stats-daily-brokerage');
+        const totalBrokerageEl = document.getElementById('stats-total-brokerage');
+        if (dailyBrokerageEl) dailyBrokerageEl.textContent = '₹' + (data.daily_brokerage || 0.0).toFixed(2);
+        if (totalBrokerageEl) totalBrokerageEl.textContent = '₹' + (data.total_brokerage || 0.0).toFixed(2);
+        
         const dailyHaltBadge = document.getElementById('daily-halt-badge');
         if (dailyHaltBadge) {
             dailyHaltBadge.style.display = data.daily_stop_limit_hit ? 'flex' : 'none';
@@ -828,7 +833,7 @@ async function fetchJournal() {
             if (!body) return;
             body.innerHTML = "";
             if (list.length === 0) {
-                body.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted)">No active ${typeLabel.toLowerCase()} trades right now.</td></tr>`;
+                body.innerHTML = `<tr><td colspan="9" style="text-align:center; color:var(--text-muted)">No active ${typeLabel.toLowerCase()} trades right now.</td></tr>`;
             } else {
                 list.forEach(pos => {
                     const tr = document.createElement('tr');
@@ -887,6 +892,7 @@ async function fetchJournal() {
                         <td>${size} lot(s)</td>
                         <td>₹${currentSpot.toFixed(2)}</td>
                         <td class="font-bold ${totalPnl >= 0 ? 'text-bull' : 'text-bear'}">₹${totalPnl.toFixed(2)}</td>
+                        <td style="color: var(--text-muted);">₹${(pos.brokerage || 0.0).toFixed(2)}</td>
                         <td>
                             <button class="btn ${btnClass} btn-close-pos" data-id="${pos.id}" data-exit="${currentSpot}">
                                 ${btnText}
@@ -936,7 +942,7 @@ async function fetchJournal() {
             if (!body) return;
             body.innerHTML = "";
             if (list.length === 0) {
-                body.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted)">No closed ${typeLabel.toLowerCase()} trade logs.</td></tr>`;
+                body.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted)">No closed ${typeLabel.toLowerCase()} trade logs.</td></tr>`;
             } else {
                 list.forEach(pos => {
                     const tr = document.createElement('tr');
@@ -948,6 +954,7 @@ async function fetchJournal() {
                         <td>₹${pos.entry_spot.toFixed(2)}</td>
                         <td>₹${pos.exit_spot.toFixed(2)}</td>
                         <td class="font-bold ${pos.pnl >= 0 ? 'text-bull' : 'text-bear'}">₹${pos.pnl.toFixed(2)}</td>
+                        <td style="color: var(--text-muted);">₹${(pos.brokerage || 0.0).toFixed(2)}</td>
                         <td><span class="badge-pro" style="background:${pos.pnl >= 0 ? 'rgba(0,230,118,0.1)' : 'rgba(255,23,68,0.1)'}">${pos.outcome}</span></td>
                         <td class="text-secondary">${pos.reason}</td>
                     `;
