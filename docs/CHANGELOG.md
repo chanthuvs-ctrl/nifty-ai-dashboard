@@ -30,6 +30,7 @@ All notable changes to this project will be documented in this file.
 - **AI Signal Confirmation Delay**: Added a 120-second confirmation delay on exits due to AI Signal change. If the signal reverses back to normal during the cooldown, the cooldown is cancelled and the trade continues, avoiding multiple trades from temporary signal fluctuations.
 - **PnL-based Trailing Stop-Loss**: Enforced that trailing stop-loss checks run exclusively on trade P&L (never on index spot levels). Option buys activate trailing only after profit exceeds 4% of trading capital. Strangles and spreads activate after configured threshold (default 1% capital).
 - **Estimated Brokerage System**: Added a 0.5% brokerage estimation on the premium of every leg transaction (entry and exit) for all trades. It tracks individual trade brokerage, displays it as a separate column in active and closed tables in the Positions panel, and sums up the Daily Brokerage and Total Historical Brokerage in the header stats bar without subtracting it from Net P&L.
+- **Database Cleanup & Purge Endpoint**: Added a secure `DELETE /api/journal/all` endpoint (requires authentication cookie) to purge all historical trades from the database and reset daily state properties, and cleared all existing demo positions.
 
 ### Changed
 - **UI Positions Rename**: Renamed visible text labels from "Journal" to "Positions" across the main dashboard header and panels while keeping DOM element IDs intact for system consistency.

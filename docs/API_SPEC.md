@@ -190,3 +190,18 @@ Default local host: `http://localhost:8000`
 - **Method**: `POST`
 - **Purpose**: Deletes all of today's trades and resets closed P&L to zero.
 - **Response**: `{"status": "SUCCESS", "removed": 2}`
+
+---
+
+## 10. Delete All Journal Trades
+- **URL**: `/api/journal/all`
+- **Method**: `DELETE`
+- **Purpose**: Purges all historical trades from the database (requires authentication cookie).
+- **Response**:
+  ```json
+  {
+    "status": "SUCCESS",
+    "removed": 15,
+    "message": "All trades deleted successfully."
+  }
+  ```

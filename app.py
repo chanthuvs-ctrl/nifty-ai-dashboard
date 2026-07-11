@@ -2817,6 +2817,28 @@ def clear_today_journal():
     state.daily_stop_limit_hit = False
     return {"status": "SUCCESS", "removed": removed, "message": f"Cleared {removed} today's trades."}
 
+@app.delete("/api/journal/all")
+def delete_all_journal_trades(request: Request):
+    """Wipe all trades in the database (requires authentication)."""
+    session_token = request.cookies.get("session_token")
+    expected_token = state.settings.get("session_token")
+    if not session_token or not expected_token or session_token != expected_token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    original_count = len(journal.trades)
+    journal.trades = []
+    journal.save_journal()
+    
+    state.daily_closed_pnl = 0.0
+    state.daily_stop_limit_hit = False
+    state.auto_trade_active_id = None
+    
+    return {
+        "status": "SUCCESS", 
+        "removed": original_count, 
+        "message": "All trades deleted successfully."
+    }
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":
