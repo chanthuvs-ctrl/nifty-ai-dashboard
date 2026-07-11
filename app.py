@@ -1299,12 +1299,14 @@ class SimulationState:
         ist_now = get_ist_datetime()
         ist_time = ist_now.time()
         
+        feed_mode = self.settings.get("feed_mode", "Simulation")
+        
         # 1. Trading start check (09:30 IST)
-        if ist_time < datetime.time(9, 30):
+        if feed_mode != "Simulation" and ist_time < datetime.time(9, 30):
             return
             
         # 2. Trading stop & force square-off (15:00 IST)
-        if ist_time >= datetime.time(15, 0):
+        if feed_mode != "Simulation" and ist_time >= datetime.time(15, 0):
             if self.auto_trade_active_id:
                 active_trade = None
                 for t in journal.trades:
@@ -1696,8 +1698,10 @@ class SimulationState:
                 })
                 print("🌅 Daily reset completed")
                 
-        # 2. After 15:30 IST: Disable all automation
-        if ist_time >= datetime.time(15, 30):
+        feed_mode = self.settings.get("feed_mode", "Simulation")
+        
+        # 2. After 15:30 IST: Disable all automation (only for non-Simulation feeds)
+        if feed_mode != "Simulation" and ist_time >= datetime.time(15, 30):
             if self.settings.get("auto_trade_mode", "OFF") != "OFF":
                 self.settings["auto_trade_mode"] = "OFF"
                 self.save_settings()
