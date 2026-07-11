@@ -298,6 +298,11 @@ class SimulationState:
         self.trailed_sl_price = 0.0
         self.last_trade_date = get_ist_date_str()
         
+        # AI Signal Change Cooldown State (v1.1)
+        self.signal_change_pending = False
+        self.signal_change_pending_since = 0.0
+        self.pending_exit_signal = "" 
+        
         # Dynamic active recommendation
         self.current_recommendation = "No Trade"
         self.confidence = 50.0
@@ -1316,15 +1321,6 @@ class SimulationState:
         lot_size = 20 if preferred_index.lower() == "sensex" else 65
         spot = self.spot_price
         
-        # Determine lot sizing based on max 2% trade limit risk & margins
-        suggested_lots, margin_required, risk_amount = self.calculate_suggested_lots_and_margin(rec, spot)
-        trade_limit = risk_amount
-        
-        # Calculate today's closed P&L
-        today_str = get_ist_date_str()
-        today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str]
-        closed_pnl = sum(t.get("pnl", 0.0) for t in today_closed)
-        
         # Calculate current floating P&L of active position
         floating_pnl = 0.0
         active_trade = None
@@ -1338,6 +1334,18 @@ class SimulationState:
                 floating_pnl = self.calculate_trade_pnl(active_trade, spot)
             else:
                 self.auto_trade_active_id = None
+                
+        rec = self.current_recommendation
+        strategy_for_sizing = active_trade["strategy"] if active_trade else rec
+        
+        # Determine lot sizing based on max 2% trade limit risk & margins
+        suggested_lots, margin_required, risk_amount = self.calculate_suggested_lots_and_margin(strategy_for_sizing, spot)
+        trade_limit = risk_amount
+        
+        # Calculate today's closed P&L
+        today_str = get_ist_date_str()
+        today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str]
+        closed_pnl = sum(t.get("pnl", 0.0) for t in today_closed)
                 
         total_daily_pnl = closed_pnl + floating_pnl
         self.daily_closed_pnl = closed_pnl
@@ -1357,37 +1365,31 @@ class SimulationState:
 
         # 2. Manage Active Position (if exists)
         if active_trade:
-            # Check 2% trade stop loss limit
+            # A. Check 2% trade stop loss limit (Hard SL hit)
             if floating_pnl <= -trade_limit:
                 journal.close_trade(active_trade["id"], spot)
                 active_trade["reason"] = f"Trade 2% SL limit hit at ₹{floating_pnl:.2f}"
                 journal.save_journal()
                 self.auto_trade_active_id = None
+                self.signal_change_pending = False
                 print(f"🤖 AUTO-TRADE: Closed position due to 2% Trade SL limit (₹{floating_pnl:.2f})")
                 return
                 
-            # Check Trailing Stop Loss (TSL) based on Total Position P&L (amount)
-            tsl_offset = float(self.settings.get("trailing_sl_pts", 30.0))
+            # B. Check Profit Target hit
+            strat = active_trade["strategy"]
+            is_spread_or_sell = "Spread" in strat or "Short" in strat or "Condor" in strat
             active_size = active_trade.get("size", suggested_lots)
-            active_lot_size = active_trade.get("lot_size", lot_size)
-            tsl_offset_currency = tsl_offset * active_lot_size * active_size
-            
-            # Update peak P&L seen since entry (highest_lowest_spot_since_entry re-purposed as highest_pnl_seen)
-            self.highest_lowest_spot_since_entry = max(self.highest_lowest_spot_since_entry, floating_pnl)
-            
-            # Trail Stop Loss price level in P&L currency (trailed_sl_price re-purposed as trailed_sl_pnl)
-            self.trailed_sl_price = max(self.trailed_sl_price, self.highest_lowest_spot_since_entry - tsl_offset_currency)
-            
-            if floating_pnl < self.trailed_sl_price:
+            tp_target = 2500.0 * active_size if is_spread_or_sell else 1500.0 * active_size
+            if floating_pnl >= tp_target:
                 journal.close_trade(active_trade["id"], spot)
-                active_trade["reason"] = f"Trailing SL hit (Trailed to P&L ₹{self.trailed_sl_price:.2f}, Current P&L ₹{floating_pnl:.2f})"
+                active_trade["reason"] = f"Profit Target hit at ₹{floating_pnl:.2f} (Target: ₹{tp_target:.2f})"
                 journal.save_journal()
                 self.auto_trade_active_id = None
-                print(f"🤖 AUTO-TRADE: Closed position due to Trailing SL (Trailed P&L: ₹{self.trailed_sl_price:.2f}, Current P&L: ₹{floating_pnl:.2f})")
+                self.signal_change_pending = False
+                print(f"🤖 AUTO-TRADE: Closed position due to Profit Target hit (₹{floating_pnl:.2f})")
                 return
             
-            # Check for AI recommendation change exit
-            strat = active_trade["strategy"]
+            # C. Check for AI recommendation change exit with confirmation delay
             is_bullish = "CE" in strat or "Bull" in strat
             is_bearish = "PE" in strat or "Bear" in strat
             is_neutral = "Strangle" in strat or "Condor" in strat
@@ -1404,12 +1406,32 @@ class SimulationState:
                 should_close = True
                 
             if should_close:
-                journal.close_trade(active_trade["id"], spot)
-                active_trade["reason"] = f"AI Signal shifted to {rec}"
-                journal.save_journal()
-                self.auto_trade_active_id = None
-                print(f"🤖 AUTO-TRADE: Closed position (AI Signal shifted to {rec})")
-                return
+                # Add confirmation delay: 120 seconds
+                if not getattr(self, "signal_change_pending", False):
+                    self.signal_change_pending = True
+                    self.signal_change_pending_since = time.time()
+                    self.pending_exit_signal = rec
+                    print(f"⏰ AUTO-TRADE: AI Signal shifted to {rec}. Starting 120s confirmation cooldown...")
+                else:
+                    elapsed = time.time() - self.signal_change_pending_since
+                    remaining = max(0, int(120.0 - elapsed))
+                    if elapsed >= 120.0:
+                        # Cooldown completed, close trade
+                        journal.close_trade(active_trade["id"], spot)
+                        active_trade["reason"] = f"AI Signal shifted to {rec} (Confirmed after 120s cooldown)"
+                        journal.save_journal()
+                        self.auto_trade_active_id = None
+                        self.signal_change_pending = False
+                        print(f"🤖 AUTO-TRADE: Closed position (AI Signal shift to {rec} confirmed)")
+                        return
+                    else:
+                        print(f"⏰ AUTO-TRADE: AI Signal shift pending confirmation ({remaining}s remaining)...")
+            else:
+                # If signal reversed/restored within cooldown, cancel pending exit
+                if getattr(self, "signal_change_pending", False):
+                    self.signal_change_pending = False
+                    self.pending_exit_signal = ""
+                    print("⏰ AUTO-TRADE: Cancelled pending exit (AI Signal restored).")
 
         # 3. Open New Position (if none exists)
         else:
@@ -2130,46 +2152,7 @@ def get_market_data():
     
     spot = state.spot_price
     
-    # 1. Update Trailing Stop Loss on Open positions
-    for trade in journal.trades:
-        if trade.get("status") != "OPEN":
-            continue
-            
-        strat = trade.get("strategy", "")
-        # For momentum strategies or general option buy strategy, trail stop loss
-        is_bearish = "PE" in strat or "Bear" in strat or "Put" in strat or "Short" in strat
-        entry = trade.get("entry_spot", spot)
-        
-        # Initialize trailing parameters if not present
-        if "highest_spot_seen" not in trade and "lowest_spot_seen" not in trade:
-            if is_bearish:
-                trade["lowest_spot_seen"] = entry
-                trade["trailing_stop_spot"] = entry + 30.0
-            else:
-                trade["highest_spot_seen"] = entry
-                trade["trailing_stop_spot"] = entry - 30.0
-                
-        # Update trailing stops based on spot movement
-        if is_bearish:
-            if spot < trade["lowest_spot_seen"]:
-                trade["lowest_spot_seen"] = spot
-                # Trail stop down (lock in profit)
-                trade["trailing_stop_spot"] = spot + 30.0
-            elif spot >= trade["trailing_stop_spot"]:
-                # Trailing Stop hit! Close position
-                journal.close_trade(trade["id"], spot)
-                trade["reason"] = f"Trailing Stop Loss Hit (Peak: {trade['lowest_spot_seen']:.1f}, Trigger: {trade['trailing_stop_spot']:.1f})"
-                journal.save_journal()
-        else:
-            if spot > trade["highest_spot_seen"]:
-                trade["highest_spot_seen"] = spot
-                # Trail stop up (lock in profit)
-                trade["trailing_stop_spot"] = spot - 30.0
-            elif spot <= trade["trailing_stop_spot"]:
-                # Trailing Stop hit! Close position
-                journal.close_trade(trade["id"], spot)
-                trade["reason"] = f"Trailing Stop Loss Hit (Peak: {trade['highest_spot_seen']:.1f}, Trigger: {trade['trailing_stop_spot']:.1f})"
-                journal.save_journal()
+    # 1. Trailing Stop Loss on Open positions based purely on Nifty point movement removed per v1.1 rules.
                 
     # 2. Check 2% Capital Protection (Auto-Exit) separately for Paper and Live
     capital = state.settings.get("capital", 500000.0)
