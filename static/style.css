@@ -1097,6 +1097,18 @@ body {
 }
 
 @media (max-width: 768px) {
+    #stats-bar {
+        flex-wrap: wrap !important;
+        height: auto !important;
+        justify-content: center !important;
+        padding: 8px 12px !important;
+        gap: 6px 10px !important;
+        width: 100% !important;
+        margin-right: 0 !important;
+        margin-bottom: 10px !important;
+        box-sizing: border-box;
+    }
+    
     .app-header {
         flex-direction: column !important;
         gap: 15px;

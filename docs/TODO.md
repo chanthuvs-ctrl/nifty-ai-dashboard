@@ -16,7 +16,7 @@
 ### UI & Lot Sizing
 - [x] **Capital-Based Lot Calculator**: Correct lot calculator so sizing is driven by SL limits and margin constraints rather than raw capital division.
 - [x] **Positions Labeling**: Rename all occurrences of "Journal" to "Positions" throughout the UI.
-- [ ] **Modals Exit Buttons**: Add a close (`✕`) button to all modals and control overlays.
+- [x] **Modals Exit Buttons**: Add a close (`✕`) button to all modals and control overlays.
 
 ---
 
