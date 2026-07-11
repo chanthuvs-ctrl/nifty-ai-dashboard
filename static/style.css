@@ -80,6 +80,8 @@ body {
     top: 0;
     z-index: 100;
     backdrop-filter: blur(10px);
+    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .header-brand {
@@ -2288,7 +2290,7 @@ body {
 
     .dashboard-grid {
         display: grid !important;
-        grid-template-columns: 1.62fr 1fr !important;
+        grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr) !important;
         grid-template-rows: auto auto auto auto !important;
         gap: 18px !important;
     }
@@ -2323,5 +2325,21 @@ body {
     #panel-journal {
         grid-column: 1 / 3 !important;
         grid-row: 4 / 5 !important;
+    }
+}
+
+/* Responsive Academy layout on mobile & tablet viewports */
+@media (max-width: 1023px) {
+    .academy-grid {
+        grid-template-columns: 1fr !important;
+        padding: 0 10px !important;
+        min-height: auto !important;
+        gap: 15px !important;
+    }
+    .academy-sidebar {
+        max-height: 380px !important;
+    }
+    .academy-sidebar-header {
+        padding-bottom: 8px;
     }
 }
