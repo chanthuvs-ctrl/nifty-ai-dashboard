@@ -1385,60 +1385,126 @@ class SimulationState:
                 print(f"🤖 AUTO-TRADE: Closed position due to 2% Trade SL limit (₹{floating_pnl:.2f})")
                 return
                 
-            # B. Check Profit Target hit
             strat = active_trade["strategy"]
-            is_spread_or_sell = "Spread" in strat or "Short" in strat or "Condor" in strat
             active_size = active_trade.get("size", suggested_lots)
-            tp_target = 2500.0 * active_size if is_spread_or_sell else 1500.0 * active_size
-            if floating_pnl >= tp_target:
-                journal.close_trade(active_trade["id"], spot)
-                active_trade["reason"] = f"Profit Target hit at ₹{floating_pnl:.2f} (Target: ₹{tp_target:.2f})"
-                journal.save_journal()
-                self.auto_trade_active_id = None
-                self.signal_change_pending = False
-                self.trail_activated = False
-                print(f"🤖 AUTO-TRADE: Closed position due to Profit Target hit (₹{floating_pnl:.2f})")
-                return
-                
-            # C. Check Trailing Stop Loss based ONLY on trade P&L (Never use Nifty point movement)
-            tsl_offset = float(self.settings.get("trailing_sl_pts", 30.0))
-            active_lot_size = active_trade.get("lot_size", lot_size)
-            tsl_offset_currency = tsl_offset * active_lot_size * active_size
             
+            # C. Profit Management & Trailing Stop-Loss stage checks
             is_option_buy = "Buy CE" in strat or "Buy PE" in strat
             is_strangle = "Strangle" in strat
             
             if is_option_buy:
-                # Option Buy: Activate trail only after profit reaches 4% of trading capital
                 activation_threshold = capital * 0.04
             elif is_strangle:
-                # Short Strangle: Activate after configured profit threshold (default 1% capital)
                 activation_threshold = self.settings.get("strangle_trail_activation", capital * 0.01)
             else:
-                # Spreads: Activate after configured profit threshold (default 1% capital)
                 activation_threshold = self.settings.get("spread_trail_activation", capital * 0.01)
                 
-            # Check for trailing activation
-            if not getattr(self, "trail_activated", False):
-                if floating_pnl >= activation_threshold:
-                    self.trail_activated = True
-                    self.peak_pnl_since_activation = floating_pnl
-                    print(f"📈 AUTO-TRADE: Trailing SL activated! Net PnL (₹{floating_pnl:.2f}) reached threshold (₹{activation_threshold:.2f})")
-            
-            # If activated, trail and check stop
-            if getattr(self, "trail_activated", False):
-                self.peak_pnl_since_activation = max(self.peak_pnl_since_activation, floating_pnl)
-                trailed_sl_pnl = self.peak_pnl_since_activation - tsl_offset_currency
+            # Initialize stage properties on trade if not present
+            if "stage" not in active_trade:
+                active_trade["stage"] = "OPEN"
+            if "peak_pnl" not in active_trade:
+                active_trade["peak_pnl"] = max(0.0, floating_pnl)
+            else:
+                active_trade["peak_pnl"] = max(active_trade["peak_pnl"], floating_pnl)
+            if "locked_profit" not in active_trade:
+                active_trade["locked_profit"] = 0.0
+            if "trail_activated" not in active_trade:
+                active_trade["trail_activated"] = False
+            if "initial_risk" not in active_trade:
+                active_trade["initial_risk"] = calculate_trade_initial_risk(active_trade, capital)
                 
-                if floating_pnl < trailed_sl_pnl:
-                    journal.close_trade(active_trade["id"], spot)
-                    active_trade["reason"] = f"Trailing SL hit (Trailed to P&L ₹{trailed_sl_pnl:.2f}, Peak P&L ₹{self.peak_pnl_since_activation:.2f}, Current P&L ₹{floating_pnl:.2f})"
-                    journal.save_journal()
-                    self.auto_trade_active_id = None
-                    self.signal_change_pending = False
-                    self.trail_activated = False
-                    print(f"🤖 AUTO-TRADE: Closed position due to PnL-based Trailing SL (Trailed: ₹{trailed_sl_pnl:.2f}, Current: ₹{floating_pnl:.2f})")
-                    return
+            # Read variables
+            current_stage = active_trade["stage"]
+            peak_pnl = active_trade["peak_pnl"]
+            R = active_trade["initial_risk"]
+            entry_brokerage = active_trade.get("brokerage", 0.0)
+            total_costs = 3.0 * entry_brokerage
+            
+            # Transition triggers
+            # Stage 1 -> Stage 2 (OPEN -> RISK)
+            if current_stage == "OPEN":
+                current_stage = "RISK"
+                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): OPEN -> RISK (Risk carrying started, Hard SL active)")
+            
+            # Stage 2 -> Stage 3 (RISK -> BREAKEVEN)
+            if current_stage == "RISK" and floating_pnl >= R:
+                current_stage = "BREAKEVEN"
+                active_trade["locked_profit"] = total_costs
+                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): RISK -> BREAKEVEN (Profit reached 1R: ₹{floating_pnl:.2f} >= ₹{R:.2f}). SL moved to cover transaction costs (₹{total_costs:.2f}).")
+                
+            # Stage 3 -> Stage 4 (BREAKEVEN -> PROFIT PROTECTION)
+            # Trailing stops / lock profit activates at >= 2R AND when trailing activation threshold is met
+            if current_stage == "BREAKEVEN" and floating_pnl >= 2.0 * R and floating_pnl >= activation_threshold:
+                current_stage = "PROFIT PROTECTION"
+                active_trade["trail_activated"] = True
+                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): BREAKEVEN -> PROFIT PROTECTION (Profit reached 2R & activation threshold: ₹{floating_pnl:.2f} >= ₹{2.0*R:.2f}). Trailing profit locks active.")
+                
+            # Stage 4 -> Stage 5 (PROFIT PROTECTION -> PROFIT MAXIMIZATION)
+            if current_stage == "PROFIT PROTECTION" and floating_pnl >= 6.0 * R:
+                current_stage = "PROFIT MAXIMIZATION"
+                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): PROFIT PROTECTION -> PROFIT MAXIMIZATION (Profit reached 6R: ₹{floating_pnl:.2f} >= ₹{6.0*R:.2f}). Holding for maximized returns.")
+            
+            # Store back stage
+            active_trade["stage"] = current_stage
+            
+            # Dynamic Lock Profit calculation for PROFIT PROTECTION / PROFIT MAXIMIZATION
+            if current_stage in ["PROFIT PROTECTION", "PROFIT MAXIMIZATION"]:
+                multiple = peak_pnl / R if R > 0 else 0
+                lock_pct = 0.0
+                if multiple >= 10.0:
+                    lock_pct = 0.90
+                elif multiple >= 8.0:
+                    lock_pct = 0.80
+                elif multiple >= 6.0:
+                    lock_pct = 0.70
+                elif multiple >= 5.0:
+                    lock_pct = 0.60
+                elif multiple >= 4.0:
+                    lock_pct = 0.50
+                elif multiple >= 3.0:
+                    lock_pct = 0.40
+                elif multiple >= 2.0:
+                    lock_pct = 0.30
+                else:
+                    lock_pct = 0.30
+                    
+                calculated_lock = peak_pnl * lock_pct
+                if calculated_lock > active_trade["locked_profit"]:
+                    print(f"🔒 PROFIT LOCK UPDATE (ID {active_trade['id']}): ₹{active_trade['locked_profit']:.2f} -> ₹{calculated_lock:.2f} (Lock Pct: {lock_pct*100:.0f}%, Peak PnL: ₹{peak_pnl:.2f})")
+                    active_trade["locked_profit"] = round(calculated_lock, 2)
+            
+            # Save progress so far
+            journal.save_journal()
+            
+            # Exits Evaluation
+            sl_hit = False
+            exit_reason = ""
+            
+            if current_stage == "RISK":
+                # Check Hard SL
+                if floating_pnl <= -R:
+                    sl_hit = True
+                    exit_reason = f"Hard SL hit (Limit: -₹{R:.2f}, Current PnL: ₹{floating_pnl:.2f})"
+            elif current_stage == "BREAKEVEN":
+                # Check Breakeven SL
+                if floating_pnl < total_costs:
+                    sl_hit = True
+                    exit_reason = f"Breakeven SL hit (Stop: ₹{total_costs:.2f}, Current PnL: ₹{floating_pnl:.2f})"
+            elif current_stage in ["PROFIT PROTECTION", "PROFIT MAXIMIZATION"]:
+                # Check Locked Profit trailing stop
+                locked_threshold = active_trade["locked_profit"]
+                if floating_pnl < locked_threshold:
+                    sl_hit = True
+                    exit_reason = f"Profit Protection SL hit (Stop: ₹{locked_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
+                    
+            if sl_hit:
+                journal.close_trade(active_trade["id"], spot)
+                active_trade["reason"] = exit_reason
+                journal.save_journal()
+                self.auto_trade_active_id = None
+                self.signal_change_pending = False
+                print(f"🤖 AUTO-TRADE: Closed position (ID {active_trade['id']}). Reason: {exit_reason}")
+                return
             
             # D. Check for AI recommendation change exit with confirmation delay
             is_bullish = "CE" in strat or "Bull" in strat
@@ -1962,6 +2028,29 @@ def calculate_trade_pnl_points(strategy: str, diff: float) -> float:
 # 4. PAPER TRADING & TRADE JOURNAL ENGINE
 # ==========================================
 
+def calculate_trade_initial_risk(trade, capital):
+    strat = trade.get("strategy", "")
+    size = trade.get("size", 1)
+    lot_size = trade.get("lot_size", 65)
+    
+    if "Buy CE" in strat or "Buy PE" in strat:
+        if "legs" in trade and trade["legs"]:
+            premium = sum(leg["entry_price"] * leg["quantity"] for leg in trade["legs"])
+        else:
+            premium = trade["entry_spot"] * lot_size * size
+        return round(premium * 0.10, 2)
+    else:
+        if "legs" in trade and trade["legs"]:
+            if "Strangle" in strat:
+                premium = sum(leg["entry_price"] * leg["quantity"] for leg in trade["legs"])
+            else: # Spreads/Iron Condor
+                buy_prem = sum(leg["entry_price"] * leg["quantity"] for leg in trade["legs"] if leg["action"] == "BUY")
+                sell_prem = sum(leg["entry_price"] * leg["quantity"] for leg in trade["legs"] if leg["action"] == "SELL")
+                premium = abs(sell_prem - buy_prem)
+            return round(premium * 0.50, 2)
+        else:
+            return round(capital * 0.02, 2)
+
 class TradeJournal:
     def __init__(self):
         self.trades: List[Dict] = []
@@ -1979,7 +2068,7 @@ class TradeJournal:
         except Exception as e:
             print(f"Failed to save journal: {e}")
         
-    def add_trade(self, strategy: str, entry_price: float, strikes: List[str], confidence: float, reason: str, size: int = 1, execution_type: str = "Paper", lot_size: int = 65, legs: Optional[List[Dict]] = None):
+    def add_trade(self, strategy: str, entry_price: float, strikes: List[str], confidence: float, reason: str, size: int = 1, execution_type: str = "Paper", lot_size: int = 65, legs: Optional[List[Dict]] = None, initial_risk: Optional[float] = None):
         trade_id = str(len(self.trades) + 1)
         entry_premium = 0.0
         if legs:
@@ -2004,8 +2093,18 @@ class TradeJournal:
             "execution_type": execution_type,
             "lot_size": lot_size,
             "legs": legs,
-            "brokerage": round(0.005 * entry_premium, 2)
+            "brokerage": round(0.005 * entry_premium, 2),
+            "stage": "OPEN",
+            "locked_profit": 0.0,
+            "trail_activated": False,
+            "peak_pnl": 0.0
         }
+        
+        if initial_risk is None:
+            capital = float(state.settings.get("capital", 500000.0)) if 'state' in globals() else 500000.0
+            initial_risk = calculate_trade_initial_risk(trade, capital)
+        trade["initial_risk"] = initial_risk
+        
         self.trades.append(trade)
         self.save_journal()
         return trade

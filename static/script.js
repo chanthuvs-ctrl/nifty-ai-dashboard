@@ -884,9 +884,21 @@ async function fetchJournal() {
                     
                     const typeBadge = `<span class="badge-pro" style="background: rgba(${typeColor}, 0.12); color: rgb(${typeColor}); border: 1px solid rgb(${typeColor}); font-size: 0.58rem; padding: 2px 5px; margin-left: 6px;">${typeLabel}</span>`;
                     
+                    let stageInfo = "";
+                    if (pos.stage) {
+                        stageInfo = `<div style="font-size:0.65rem; color:var(--text-muted); margin-top:4px; width:100%; display:flex; gap:8px; font-weight:normal; font-family:monospace;">
+                            <span>Stage: <strong style="color:var(--neon-accent);">${pos.stage}</strong></span>
+                            <span>Locked: <strong style="color:var(--neon-bull);">₹${(pos.locked_profit || 0.0).toFixed(2)}</strong></span>
+                            <span>Trailing: <strong style="color:${pos.trail_activated ? 'var(--neon-cyan)' : 'var(--text-dim)'};">${pos.trail_activated ? 'YES' : 'NO'}</strong></span>
+                        </div>`;
+                    }
+                    
                     tr.innerHTML = `
                         <td>${pos.time}</td>
-                        <td class="font-bold" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">${pos.strategy} ${typeBadge} ${alertBadge}</td>
+                        <td class="font-bold" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+                            <div style="display:flex; align-items:center; gap:4px; width:100%;">${pos.strategy} ${typeBadge} ${alertBadge}</div>
+                            ${stageInfo}
+                        </td>
                         <td>${pos.strikes.join(', ')}</td>
                         <td>₹${entry.toFixed(2)}</td>
                         <td>${size} lot(s)</td>

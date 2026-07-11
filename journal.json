@@ -2,7 +2,7 @@
     {
         "id": "1",
         "date": "2026-07-12",
-        "time": "00:21:02",
+        "time": "10:00:00",
         "strategy": "Buy CE",
         "entry_spot": 24200.0,
         "strikes": [
@@ -11,10 +11,10 @@
         "confidence": "90.0%",
         "size": 1,
         "status": "CLOSED",
-        "exit_spot": 24210.0,
-        "pnl": 650.0,
-        "reason": "Mock Trade",
-        "outcome": "WIN",
+        "exit_spot": 24072.861343351902,
+        "pnl": -117.75,
+        "reason": "Hard SL hit (Limit: -\u20b9650.00, Current PnL: \u20b9-700.00)",
+        "outcome": "LOSS",
         "execution_type": "Paper",
         "lot_size": 65,
         "legs": [
@@ -25,30 +25,14 @@
                 "action": "BUY",
                 "entry_price": 100.0,
                 "quantity": 65,
-                "exit_price": 110.0
+                "exit_price": 98.18842963930001
             }
         ],
-        "brokerage": 68.25
-    },
-    {
-        "id": "2",
-        "date": "2026-07-12",
-        "time": "00:21:02",
-        "strategy": "Buy PE",
-        "entry_spot": 24200.0,
-        "strikes": [
-            "24200 PE"
-        ],
-        "confidence": "90.0%",
-        "size": 1,
-        "status": "CLOSED",
-        "exit_spot": 24220.0,
-        "pnl": -1040.0,
-        "reason": "Mock Spot Trade",
-        "outcome": "LOSS",
-        "execution_type": "Paper",
-        "lot_size": 65,
-        "legs": null,
-        "brokerage": 15736.5
+        "brokerage": 64.41,
+        "stage": "RISK",
+        "locked_profit": 0.0,
+        "trail_activated": false,
+        "peak_pnl": 0.0,
+        "initial_risk": 650.0
     }
 ]
