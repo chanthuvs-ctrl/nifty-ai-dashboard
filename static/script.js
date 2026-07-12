@@ -505,15 +505,15 @@ async function fetchMarketData() {
             recTitle.className = "rec-strategy-title text-purple";
         }
         
-        document.getElementById('confidence-text').innerText = `${data.confidence.toFixed(0)}%`;
+        document.getElementById('confidence-text').innerText = `${data.confidence.toFixed(1)}%`;
         document.getElementById('confidence-circle').setAttribute('stroke-dasharray', `${data.confidence}, 100`);
         
         // Rec Sound Alert triggers
         if (previousStrategy !== null && previousStrategy !== data.recommendation) {
             playAlertChime();
             const notificationType = data.recommendation.includes("PE") || data.recommendation.includes("Bear") ? "bear" : (data.recommendation === "No Trade" ? "neutral" : "bull");
-            showToast(data.recommendation, data.confidence, notificationType);
-            showNotification("Strategy Alert Shift", `New strategy: ${data.recommendation} (Confidence: ${data.confidence}%)`);
+            showToast(data.recommendation, data.confidence.toFixed(1), notificationType);
+            showNotification("Strategy Alert Shift", `New strategy: ${data.recommendation} (Confidence: ${data.confidence.toFixed(1)}%)`);
         }
         previousStrategy = data.recommendation;
         
@@ -558,7 +558,7 @@ async function fetchMarketData() {
         if (bannerRecText) {
             const recVal = data.recommendation.toUpperCase();
             if (recVal !== "NO TRADE") {
-                bannerRecText.innerText = `${recVal} (${data.confidence.toFixed(0)}% CONF)`;
+                bannerRecText.innerText = `${recVal} (${data.confidence.toFixed(1)}% CONF)`;
             } else {
                 bannerRecText.innerText = recVal;
             }
