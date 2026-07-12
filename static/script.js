@@ -1654,6 +1654,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnResetHalt) {
         btnResetHalt.addEventListener('click', async () => {
             try {
+                // Clear local storage backup before resetting on server to prevent restore loops
+                localStorage.removeItem('nifty_journal_trades');
+                
                 const r = await fetch('/api/reset-daily-halt', { method: 'POST' });
                 const res = await r.json();
                 if (res.status === 'SUCCESS') {
