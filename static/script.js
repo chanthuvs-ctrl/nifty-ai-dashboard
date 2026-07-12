@@ -37,6 +37,7 @@ let marketPollingInterval = null;
 let isEngineRunning = true;
 let globalOptionChain = null;
 let liveChart = null;
+let livePnlChart = null;
 let chartStrategyChanges = [];
 
 // Global Diagnostics Error Handler
@@ -2052,6 +2053,84 @@ function ensureLegs(pos, optionChain) {
 // LIVE PRICE CHART WITH STRATEGY ANNOTATIONS
 // ==========================================
 
+function initLivePnlChart() {
+    const ctx = document.getElementById('live-pnl-chart');
+    if (!ctx) return;
+    
+    livePnlChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Session P&L (INR)',
+                    data: [],
+                    borderColor: '#00e5ff',
+                    backgroundColor: 'rgba(0, 229, 255, 0.05)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    fill: true,
+                    tension: 0.2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += (context.parsed.y >= 0 ? '+' : '') + '₹' + context.parsed.y.toFixed(2);
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.04)'
+                    },
+                    ticks: {
+                        color: 'var(--text-muted)',
+                        font: { size: 9 },
+                        maxRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: 8
+                    }
+                },
+                y: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.04)'
+                    },
+                    ticks: {
+                        color: 'var(--text-muted)',
+                        font: { size: 9 },
+                        callback: function(value) {
+                            return (value >= 0 ? '+' : '') + '₹' + value;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 function initLiveChart() {
     const ctx = document.getElementById('live-price-chart');
     if (!ctx) return;
@@ -2206,6 +2285,26 @@ async function fetchChartData() {
         liveChart.data.datasets[1].data = vwaps;
         liveChart.data.datasets[2].data = ema20s;
         liveChart.data.datasets[3].data = ema50s;
+        
+        if (!livePnlChart) {
+            initLivePnlChart();
+        }
+        if (livePnlChart) {
+            const pnls = history.map(p => p.pnl || 0.0);
+            livePnlChart.data.labels = labels;
+            livePnlChart.data.datasets[0].data = pnls;
+            
+            const lastPnl = pnls[pnls.length - 1] || 0.0;
+            if (lastPnl >= 0) {
+                livePnlChart.data.datasets[0].borderColor = '#00e676';
+                livePnlChart.data.datasets[0].backgroundColor = 'rgba(0, 230, 118, 0.05)';
+            } else {
+                livePnlChart.data.datasets[0].borderColor = '#ff1744';
+                livePnlChart.data.datasets[0].backgroundColor = 'rgba(255, 23, 68, 0.05)';
+            }
+            
+            livePnlChart.update('none');
+        }
         
         // Build strategy change annotations
         const annotations = {};
