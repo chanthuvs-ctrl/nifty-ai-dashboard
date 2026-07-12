@@ -1266,11 +1266,73 @@ class SimulationState:
                 pnl -= diff * multiplier
         return pnl
 
+    def update_option_chain(self):
+        spot = self.spot_price
+        preferred_index = self.settings.get("preferred_index", "Nifty")
+        if preferred_index.lower() == "sensex":
+            atm_strike = round(spot / 100.0) * 100
+            strike_interval = 100
+            upstox_filter_width = 600
+        else:
+            atm_strike = round(spot / 50.0) * 50
+            strike_interval = 50
+            upstox_filter_width = 300
+            
+        option_chain = []
+        if self.settings.get("feed_mode") == "Upstox" and self.upstox_option_chain:
+            option_chain = [x for x in self.upstox_option_chain if abs(x["strike"] - atm_strike) <= upstox_filter_width]
+            option_chain = sorted(option_chain, key=lambda x: x["strike"])
+        else:
+            t_years = 4.0 / 365.0
+            r = 0.07
+            for i in range(-6, 7):
+                strike = atm_strike + (i * strike_interval)
+                dist_from_atm = abs(strike - spot)
+                iv_strike = (self.vix / 100.0) + (dist_from_atm / 1000.0) * 0.10
+                
+                call_greeks = calculate_greeks(spot, strike, t_years, iv_strike, r, is_call=True)
+                put_greeks = calculate_greeks(spot, strike, t_years, iv_strike, r, is_call=False)
+                
+                base_oi = 5000000 / (1 + (dist_from_atm / 150.0) ** 2)
+                call_oi = int(base_oi * (1.2 if strike > spot else 0.8) * (1.1 - 0.2 * (self.pcr - 1.0)))
+                put_oi = int(base_oi * (0.8 if strike > spot else 1.2) * (self.pcr))
+                
+                call_change_oi = int(call_oi * random.uniform(-0.05, 0.08))
+                put_change_oi = int(put_oi * random.uniform(-0.05, 0.08))
+                
+                option_chain.append({
+                    "strike": strike,
+                    "call_oi": call_oi,
+                    "call_change_oi": call_change_oi,
+                    "call_iv": f"{iv_strike*100:.1f}%",
+                    "call_delta": call_greeks["delta"],
+                    "call_theta": call_greeks["theta"],
+                    "call_vega": call_greeks["vega"],
+                    "call_price": call_greeks["price"],
+                    "call_bid": max(0.05, call_greeks["price"] - 0.2),
+                    "call_ask": call_greeks["price"] + 0.2,
+                    "call_instrument_key": f"SIM_CALL_{strike}",
+                    "put_price": put_greeks["price"],
+                    "put_bid": max(0.05, put_greeks["price"] - 0.2),
+                    "put_ask": put_greeks["price"] + 0.2,
+                    "put_delta": put_greeks["delta"],
+                    "put_theta": put_greeks["theta"],
+                    "put_vega": put_greeks["vega"],
+                    "put_iv": f"{iv_strike*100:.1f}%",
+                    "put_change_oi": put_change_oi,
+                    "put_oi": put_oi,
+                    "put_instrument_key": f"SIM_PUT_{strike}"
+                })
+        self.option_chain = option_chain
+
     def _auto_trade_tick(self):
         """Automated trading logic processing at each tick."""
         mode = self.settings.get("auto_trade_mode", "OFF")
         if mode == "OFF":
             return
+            
+        # Ensure fresh option chain is built
+        self.update_option_chain()
             
         ist_now = get_ist_datetime()
         ist_time = ist_now.time()
@@ -1281,8 +1343,9 @@ class SimulationState:
         if feed_mode != "Simulation" and ist_time < datetime.time(9, 30):
             return
             
-        # 2. Trading stop & force square-off (15:00 IST)
-        if feed_mode != "Simulation" and ist_time >= datetime.time(15, 0):
+        # 2. Trading stop & force square-off (15:00 IST for Live, 15:30 IST for Paper)
+        close_time = datetime.time(15, 0) if mode == "Live" else datetime.time(15, 30)
+        if feed_mode != "Simulation" and ist_time >= close_time:
             if self.auto_trade_active_id:
                 active_trade = None
                 for t in journal.trades:
@@ -1291,10 +1354,10 @@ class SimulationState:
                         break
                 if active_trade:
                     journal.close_trade(active_trade["id"], self.spot_price)
-                    active_trade["reason"] = "Force Square-off (15:00 IST Trading Session Close)"
+                    active_trade["reason"] = f"Force Square-off ({close_time.strftime('%H:%M')} IST Trading Session Close)"
                     journal.save_journal()
                     self.auto_trade_active_id = None
-                    print("🤖 AUTO-TRADE: Force squared off open position at 15:00 IST.")
+                    print(f"🤖 AUTO-TRADE: Force squared off open position at {close_time.strftime('%H:%M')} IST.")
             return
             
         capital = self.get_available_capital()
@@ -2441,7 +2504,7 @@ def get_market_data():
     suggested_lots, margin_required, risk_amount = state.calculate_suggested_lots_and_margin(state.current_recommendation, spot)
     lot_size = 20 if preferred_index.lower() == "sensex" else 65
 
-    state.option_chain = option_chain
+    state.update_option_chain()
     return {
         "spot_price": round(spot, 2),
         "change_pct": state.intraday_change_pct,
