@@ -1,5 +1,7 @@
 import math
 import random
+
+VERSION = "2.7.4" 
 import time
 import os
 import json
@@ -2703,6 +2705,7 @@ def get_market_data():
     suggested_lots, margin_required, risk_amount = state.calculate_suggested_lots_and_margin(state.current_recommendation, spot)
     lot_size = 20 if preferred_index.lower() == "sensex" else 65
     return {
+        "version": VERSION,
         "spot_price": round(spot, 2),
         "change_pct": state.intraday_change_pct,
         "change_val": state.intraday_change_val,
