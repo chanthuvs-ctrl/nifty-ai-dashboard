@@ -162,13 +162,15 @@ function triggerTradeAudioAlert(tradeId, type) {
 
 // Circular canvas gauge drawer helper
 function drawGauge(canvasId, value, minVal, maxVal, unit, isVix = false) {
-    const canvas = document.getElementById(canvasId);
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
-    
-    ctx.clearRect(0, 0, w, h);
+    try {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const w = canvas.width;
+        const h = canvas.height;
+        
+        ctx.clearRect(0, 0, w, h);
     
     const cx = w / 2;
     const cy = h - 10;
@@ -217,6 +219,9 @@ function drawGauge(canvasId, value, minVal, maxVal, unit, isVix = false) {
     ctx.arc(cx, cy, 4, 0, 2 * Math.PI);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
+    } catch (e) {
+        console.error("Error drawing gauge " + canvasId + ":", e);
+    }
 }
 
 // Trigger browser push notification
@@ -394,8 +399,10 @@ async function fetchMarketData() {
         if (versionBadge && data.version) {
             versionBadge.textContent = `PRODUCTION v${data.version}`;
         }
-        document.getElementById('hdr-nifty-spot').innerText = data.spot_price.toLocaleString('en-IN', {minimumFractionDigits: 2});
-        document.getElementById('hdr-nifty-meta').innerText = `${data.price_source} | ${data.price_date} ${data.price_time}`;
+        const elSpot = document.getElementById('hdr-nifty-spot');
+        if (elSpot) elSpot.innerText = data.spot_price.toLocaleString('en-IN', {minimumFractionDigits: 2});
+        const elMeta = document.getElementById('hdr-nifty-meta');
+        if (elMeta) elMeta.innerText = `${data.price_source} | ${data.price_date} ${data.price_time}`;
         
         // Update session status badge dynamically
         const badge = document.getElementById('engine-status-badge');
@@ -434,20 +441,29 @@ async function fetchMarketData() {
         
         const chainTitle = document.getElementById('option-chain-title');
         if (chainTitle) chainTitle.innerText = isSensex ? 'Sensex Live Option Chain' : 'Nifty Live Option Chain';
-        changeHdr.innerText = `${changeAmtVal >= 0 ? '+' : ''}${changeAmtVal.toFixed(2)} (${changePctVal >= 0 ? '+' : ''}${changePctVal.toFixed(2)}%)`;
-        changeHdr.className = `ticker-change ${changeAmtVal >= 0 ? 'up' : 'down'}`;
+        if (changeHdr) {
+            changeHdr.innerText = `${changeAmtVal >= 0 ? '+' : ''}${changeAmtVal.toFixed(2)} (${changePctVal >= 0 ? '+' : ''}${changePctVal.toFixed(2)}%)`;
+            changeHdr.className = `ticker-change ${changeAmtVal >= 0 ? 'up' : 'down'}`;
+        }
         
-        document.getElementById('hdr-vix').innerText = data.vix.toFixed(2);
+        const elHdrVix = document.getElementById('hdr-vix');
+        if (elHdrVix) elHdrVix.innerText = data.vix.toFixed(2);
         const vixStatus = document.getElementById('hdr-vix-status');
-        vixStatus.innerText = data.vix > 18 ? 'Volatile' : 'Stable';
-        vixStatus.className = `ticker-change ${data.vix > 18 ? 'down' : 'up'}`;
+        if (vixStatus) {
+            vixStatus.innerText = data.vix > 18 ? 'Volatile' : 'Stable';
+            vixStatus.className = `ticker-change ${data.vix > 18 ? 'down' : 'up'}`;
+        }
         
-        document.getElementById('hdr-pcr').innerText = data.pcr.toFixed(2);
+        const elHdrPcr = document.getElementById('hdr-pcr');
+        if (elHdrPcr) elHdrPcr.innerText = data.pcr.toFixed(2);
         const pcrStatus = document.getElementById('hdr-pcr-status');
-        pcrStatus.innerText = data.pcr > 1.25 ? 'Bullish' : (data.pcr < 0.75 ? 'Bearish' : 'Neutral');
-        pcrStatus.className = `ticker-change ${data.pcr > 1.25 ? 'up' : (data.pcr < 0.75 ? 'down' : '')}`;
+        if (pcrStatus) {
+            pcrStatus.innerText = data.pcr > 1.25 ? 'Bullish' : (data.pcr < 0.75 ? 'Bearish' : 'Neutral');
+            pcrStatus.className = `ticker-change ${data.pcr > 1.25 ? 'up' : (data.pcr < 0.75 ? 'down' : '')}`;
+        }
         
-        document.getElementById('hdr-max-pain').innerText = data.indicators.max_pain;
+        const elMaxPain = document.getElementById('hdr-max-pain');
+        if (elMaxPain) elMaxPain.innerText = data.indicators.max_pain;
         
         // Update timeframe trends
         if (data.timeframe_trends) {
@@ -475,38 +491,60 @@ async function fetchMarketData() {
         }
         
         // Setup regime description dynamically
-        let rDesc = `Spot index above VWAP: ${data.indicators.vwap}. ATR: ${data.indicators.atr}. EMA 20: ${data.indicators.ema_20}.`;
-        document.getElementById('regime-desc').innerText = rDesc;
+        const elRegimeDesc = document.getElementById('regime-desc');
+        if (elRegimeDesc) {
+            let rDesc = `Spot index above VWAP: ${data.indicators.vwap}. ATR: ${data.indicators.atr}. EMA 20: ${data.indicators.ema_20}.`;
+            elRegimeDesc.innerText = rDesc;
+        }
         
         // Progress Bars
-        document.getElementById('txt-adx').innerText = data.indicators.adx.toFixed(1);
-        document.getElementById('bar-adx').style.width = `${(data.indicators.adx / 60) * 100}%`;
-        document.getElementById('txt-rsi').innerText = data.indicators.rsi.toFixed(1);
-        document.getElementById('bar-rsi').style.width = `${data.indicators.rsi}%`;
+        const elTxtAdx = document.getElementById('txt-adx');
+        if (elTxtAdx) elTxtAdx.innerText = data.indicators.adx.toFixed(1);
+        const elBarAdx = document.getElementById('bar-adx');
+        if (elBarAdx) elBarAdx.style.width = `${(data.indicators.adx / 60) * 100}%`;
+        const elTxtRsi = document.getElementById('txt-rsi');
+        if (elTxtRsi) elTxtRsi.innerText = data.indicators.rsi.toFixed(1);
+        const elBarRsi = document.getElementById('bar-rsi');
+        if (elBarRsi) elBarRsi.style.width = `${data.indicators.rsi}%`;
         
         // 3. Circular dials PCR & VIX
         drawGauge('canvas-pcr', data.pcr, 0.4, 1.8, '', false);
         drawGauge('canvas-vix', data.vix, 9.0, 30.0, '%', true);
-        document.getElementById('val-pcr').innerText = data.pcr.toFixed(2);
-        document.getElementById('val-vix').innerText = `${data.vix.toFixed(1)}%`;
+        const elValPcr = document.getElementById('val-pcr');
+        if (elValPcr) elValPcr.innerText = data.pcr.toFixed(2);
+        const elValVix = document.getElementById('val-vix');
+        if (elValVix) elValVix.innerText = `${data.vix.toFixed(1)}%`;
         
         // 4. Primary Recommendation hero card
-        const recTitle = document.getElementById('rec-strategy');
-        recTitle.innerText = data.recommendation.toUpperCase();
-        
-        // Rec colors
-        if (data.recommendation.includes("CE") || data.recommendation.includes("Bull")) {
-            recTitle.className = "rec-strategy-title text-bull";
-        } else if (data.recommendation.includes("PE") || data.recommendation.includes("Bear")) {
-            recTitle.className = "rec-strategy-title text-bear";
-        } else if (data.recommendation === "No Trade") {
-            recTitle.className = "rec-strategy-title text-gold";
-        } else {
-            recTitle.className = "rec-strategy-title text-purple";
+        try {
+            const recTitle = document.getElementById('rec-strategy');
+            if (recTitle && data.recommendation) {
+                recTitle.innerText = data.recommendation.toUpperCase();
+                
+                // Rec colors
+                if (data.recommendation.includes("CE") || data.recommendation.includes("Bull")) {
+                    recTitle.className = "rec-strategy-title text-bull";
+                } else if (data.recommendation.includes("PE") || data.recommendation.includes("Bear")) {
+                    recTitle.className = "rec-strategy-title text-bear";
+                } else if (data.recommendation === "No Trade") {
+                    recTitle.className = "rec-strategy-title text-gold";
+                } else {
+                    recTitle.className = "rec-strategy-title text-purple";
+                }
+            }
+            
+            const confVal = (data.confidence !== undefined && data.confidence !== null) ? data.confidence : 0.0;
+            const elConfText = document.getElementById('confidence-text');
+            if (elConfText) {
+                elConfText.innerText = `${confVal.toFixed(1)}%`;
+            }
+            const elConfCircle = document.getElementById('confidence-circle');
+            if (elConfCircle) {
+                elConfCircle.setAttribute('stroke-dasharray', `${confVal}, 100`);
+            }
+        } catch (e) {
+            console.error("Error updating recommendation hero card:", e);
         }
-        
-        document.getElementById('confidence-text').innerText = `${data.confidence.toFixed(1)}%`;
-        document.getElementById('confidence-circle').setAttribute('stroke-dasharray', `${data.confidence}, 100`);
         
         // Rec Sound Alert triggers
         if (previousStrategy !== null && previousStrategy !== data.recommendation) {
