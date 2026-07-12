@@ -606,37 +606,13 @@ class SimulationState:
             risk_amount = suggested_lots * risk_per_lot
             return suggested_lots, margin_required, risk_amount
 
-        # 2. Short Strangle
-        elif "Strangle" in strategy:
-            # Margin = ₹1,50,000 per pair
-            MARGIN_STRANGLE = 150000.0
-            
-            if preferred_index.lower() == "sensex":
-                atm_strike = round(spot / 100.0) * 100
-                strike_interval = 100
-            else:
-                atm_strike = round(spot / 50.0) * 50
-                strike_interval = 50
-                
-            call_premium = 100.0
-            put_premium = 100.0
-            for item in self.option_chain:
-                if item.get("strike") == atm_strike + strike_interval:
-                    call_premium = item.get("call_price", 100.0)
-                if item.get("strike") == atm_strike - strike_interval:
-                    put_premium = item.get("put_price", 100.0)
-                    
-            collected = call_premium + put_premium
-            # Risk is 50% of premium collected
-            risk_per_lot = collected * 0.50 * lot_size
-            
-            # Respect both margin (80% capital allocation limit) and 2% risk
-            max_lots_by_risk = max(1, int(max_risk / risk_per_lot))
-            max_lots_by_margin = max(1, int((capital * 0.80) / MARGIN_STRANGLE))
-            
-            suggested_lots = min(max_lots_by_risk, max_lots_by_margin)
+        # 2. Short Strangle / Short Straddle
+        elif "Strangle" in strategy or "Straddle" in strategy:
+            # Execution Size Formula: Lots = floor((Capital * 0.80) / 160,000)
+            MARGIN_STRANGLE = 160000.0
+            suggested_lots = max(1, int((capital * 0.80) / MARGIN_STRANGLE))
             margin_required = suggested_lots * MARGIN_STRANGLE
-            risk_amount = suggested_lots * risk_per_lot
+            risk_amount = max_risk
             return suggested_lots, margin_required, risk_amount
 
         # 3. Spreads (Bull Call, Bear Put, Bull Put, Bear Call) or Iron Condor
@@ -1587,9 +1563,28 @@ class SimulationState:
                 elif rec == "Bear Call Spread":
                     legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "SELL"})
                     legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "BUY"})
-                elif rec == "Short Strangle":
-                    legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "SELL"})
-                    legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "SELL"})
+                elif rec == "Short Strangle" or rec == "Short Straddle":
+                    # Locate deep OTM Buy hedge strikes closest to ₹2 premium
+                    hedge_call_strike = atm_strike + 5 * strike_interval
+                    hedge_put_strike = atm_strike - 5 * strike_interval
+                    if self.option_chain:
+                        calls = [x for x in self.option_chain if x.get("call_price") is not None]
+                        if calls:
+                            hedge_call_item = min(calls, key=lambda x: abs(x["call_price"] - 2.0))
+                            hedge_call_strike = hedge_call_item["strike"]
+                        puts = [x for x in self.option_chain if x.get("put_price") is not None]
+                        if puts:
+                            hedge_put_item = min(puts, key=lambda x: abs(x["put_price"] - 2.0))
+                            hedge_put_strike = hedge_put_item["strike"]
+                    
+                    sell_call_strike = atm_strike + strike_interval if rec == "Short Strangle" else atm_strike
+                    sell_put_strike = atm_strike - strike_interval if rec == "Short Strangle" else atm_strike
+                    
+                    # BUY legs must be appended first so they execute first
+                    legs_to_order.append({"strike": hedge_call_strike, "option_type": "CE", "action": "BUY"})
+                    legs_to_order.append({"strike": hedge_put_strike, "option_type": "PE", "action": "BUY"})
+                    legs_to_order.append({"strike": sell_call_strike, "option_type": "CE", "action": "SELL"})
+                    legs_to_order.append({"strike": sell_put_strike, "option_type": "PE", "action": "SELL"})
                 elif rec == "Iron Condor":
                     legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "SELL"})
                     legs_to_order.append({"strike": atm_strike + 2*strike_interval, "option_type": "CE", "action": "BUY"})
@@ -2649,6 +2644,28 @@ class LiveOrderRequest(BaseModel):
     strategy: str
     legs: List[LiveLegOrder]
 
+def wait_for_order_fill(order_id: str, token: str) -> bool:
+    url = f"https://api.upstox.com/v2/order/history?order_id={order_id}"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {token}"
+    }
+    for _ in range(10): # retry for 10 times (approx 5 seconds)
+        try:
+            resp = requests.get(url, headers=headers, timeout=3)
+            if resp.status_code == 200:
+                res_json = resp.json()
+                if res_json.get("status") == "success":
+                    order_data = res_json.get("data", [{}])
+                    # order history returns a list of states, check if any is "complete"
+                    if any(state.get("status") == "complete" for state in order_data):
+                        print(f"✅ Upstox Order {order_id} filled successfully.")
+                        return True
+        except Exception as e:
+            print(f"Error checking order status: {e}")
+        time.sleep(0.5)
+    return False
+
 @app.post("/api/execute-live")
 def execute_live_order(data: LiveOrderRequest):
     token = state.settings.get("upstox_access_token")
@@ -2684,6 +2701,10 @@ def execute_live_order(data: LiveOrderRequest):
         })
         
     if mode != "Upstox" or not token:
+        # Mock Live execution (simulate the tiny fill delay for Strangle/Straddle BUY legs)
+        if "Strangle" in data.strategy or "Straddle" in data.strategy:
+            time.sleep(0.05)
+            
         trade = journal.add_trade(
             strategy=data.strategy,
             entry_price=state.spot_price,
@@ -2711,40 +2732,112 @@ def execute_live_order(data: LiveOrderRequest):
     placed_orders = []
     failed_orders = []
     
-    for leg in data.legs:
-        payload = {
-            "quantity": leg.quantity,
-            "product": "I", # "I" for Intraday (MIS)
-            "validity": "DAY",
-            "price": leg.price,
-            "tag": "decision-engine",
-            "instrument_token": leg.instrument_key,
-            "order_type": leg.order_type,
-            "transaction_type": leg.transaction_type,
-            "disclosed_quantity": 0,
-            "trigger_price": 0.0,
-            "is_amo": False
-        }
+    is_strangle_or_straddle = "Strangle" in data.strategy or "Straddle" in data.strategy
+    
+    if is_strangle_or_straddle:
+        buy_legs = [leg for leg in data.legs if leg.transaction_type == "BUY"]
+        sell_legs = [leg for leg in data.legs if leg.transaction_type == "SELL"]
         
-        try:
-            resp = requests.post(url, json=payload, headers=headers, timeout=5)
-            res_json = resp.json()
-            if resp.status_code == 200 and res_json.get("status") == "success":
-                placed_orders.append({
-                    "leg": leg.instrument_key,
-                    "order_id": res_json.get("data", {}).get("order_id")
-                })
-            else:
-                err_msg = res_json.get("errors", [{}])[0].get("message", "Unknown error") if isinstance(res_json.get("errors"), list) else str(res_json)
+        # Step 1: Execute the deep OTM Buy hedge legs first
+        buy_success_ids = []
+        for leg in buy_legs:
+            payload = {
+                "quantity": leg.quantity,
+                "product": "I",
+                "validity": "DAY",
+                "price": leg.price,
+                "tag": "decision-engine",
+                "instrument_token": leg.instrument_key,
+                "order_type": leg.order_type,
+                "transaction_type": leg.transaction_type,
+                "disclosed_quantity": 0,
+                "trigger_price": 0.0,
+                "is_amo": False
+            }
+            try:
+                resp = requests.post(url, json=payload, headers=headers, timeout=5)
+                res_json = resp.json()
+                if resp.status_code == 200 and res_json.get("status") == "success":
+                    order_id = res_json.get("data", {}).get("order_id")
+                    placed_orders.append({
+                        "leg": leg.instrument_key,
+                        "order_id": order_id
+                    })
+                    buy_success_ids.append(order_id)
+                else:
+                    err_msg = res_json.get("errors", [{}])[0].get("message", "Unknown error") if isinstance(res_json.get("errors"), list) else str(res_json)
+                    failed_orders.append({"leg": leg.instrument_key, "error": err_msg})
+            except Exception as e:
+                failed_orders.append({"leg": leg.instrument_key, "error": str(e)})
+                
+        # Step 2: Await API confirmation that the Buy legs have been filled
+        for o_id in buy_success_ids:
+            wait_for_order_fill(o_id, token)
+            
+        # Step 3: Execute the core Sell legs
+        for leg in sell_legs:
+            payload = {
+                "quantity": leg.quantity,
+                "product": "I",
+                "validity": "DAY",
+                "price": leg.price,
+                "tag": "decision-engine",
+                "instrument_token": leg.instrument_key,
+                "order_type": leg.order_type,
+                "transaction_type": leg.transaction_type,
+                "disclosed_quantity": 0,
+                "trigger_price": 0.0,
+                "is_amo": False
+            }
+            try:
+                resp = requests.post(url, json=payload, headers=headers, timeout=5)
+                res_json = resp.json()
+                if resp.status_code == 200 and res_json.get("status") == "success":
+                    placed_orders.append({
+                        "leg": leg.instrument_key,
+                        "order_id": res_json.get("data", {}).get("order_id")
+                    })
+                else:
+                    err_msg = res_json.get("errors", [{}])[0].get("message", "Unknown error") if isinstance(res_json.get("errors"), list) else str(res_json)
+                    failed_orders.append({"leg": leg.instrument_key, "error": err_msg})
+            except Exception as e:
+                failed_orders.append({"leg": leg.instrument_key, "error": str(e)})
+                
+    else:
+        # Standard sequential execution for other strategies
+        for leg in data.legs:
+            payload = {
+                "quantity": leg.quantity,
+                "product": "I",
+                "validity": "DAY",
+                "price": leg.price,
+                "tag": "decision-engine",
+                "instrument_token": leg.instrument_key,
+                "order_type": leg.order_type,
+                "transaction_type": leg.transaction_type,
+                "disclosed_quantity": 0,
+                "trigger_price": 0.0,
+                "is_amo": False
+            }
+            try:
+                resp = requests.post(url, json=payload, headers=headers, timeout=5)
+                res_json = resp.json()
+                if resp.status_code == 200 and res_json.get("status") == "success":
+                    placed_orders.append({
+                        "leg": leg.instrument_key,
+                        "order_id": res_json.get("data", {}).get("order_id")
+                    })
+                else:
+                    err_msg = res_json.get("errors", [{}])[0].get("message", "Unknown error") if isinstance(res_json.get("errors"), list) else str(res_json)
+                    failed_orders.append({
+                        "leg": leg.instrument_key,
+                        "error": err_msg
+                    })
+            except Exception as e:
                 failed_orders.append({
                     "leg": leg.instrument_key,
-                    "error": err_msg
+                    "error": str(e)
                 })
-        except Exception as e:
-            failed_orders.append({
-                "leg": leg.instrument_key,
-                "error": str(e)
-            })
             
     legs_desc = [f"{leg.transaction_type} {leg.instrument_key.split('|')[-1]} x {leg.quantity}" for leg in data.legs]
     trade = journal.add_trade(
