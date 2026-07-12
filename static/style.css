@@ -1198,9 +1198,9 @@ body {
 
 /* Tab Navigation Styles */
 .btn-tab {
-    background: rgba(30, 41, 59, 0.5);
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
+    background: rgba(30, 41, 59, 0.55) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-secondary) !important;
     padding: 6px 14px;
     font-size: 0.72rem;
     font-weight: 700;
@@ -1213,16 +1213,16 @@ body {
 }
 
 .btn-tab.active {
-    background: var(--neon-cyan);
-    border-color: var(--neon-cyan);
-    color: #060b13;
-    box-shadow: 0 0 10px rgba(0, 217, 245, 0.3);
+    background: var(--neon-cyan) !important;
+    border-color: var(--neon-cyan) !important;
+    color: #060b13 !important;
+    box-shadow: 0 0 10px rgba(0, 217, 245, 0.3) !important;
 }
 
 .btn-tab:hover:not(.active) {
-    background: rgba(30, 41, 59, 0.85);
-    color: var(--text-primary);
-    border-color: var(--text-secondary);
+    background: rgba(30, 41, 59, 0.85) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--text-secondary) !important;
 }
 
 /* TRADING ACADEMY GRID & LAYOUT */
@@ -2341,5 +2341,28 @@ body {
     }
     .academy-sidebar-header {
         padding-bottom: 8px;
+    }
+}
+
+/* Overlay panel absolute positioning for close buttons & tab headers */
+.overlay-panel .close-overlay-btn {
+    position: absolute !important;
+    right: 16px !important;
+    top: 16px !important;
+    z-index: 110 !important;
+}
+
+@media (max-width: 950px) {
+    .overlay-panel .panel-header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 12px !important;
+        padding-right: 48px !important; /* Prevent overlap with absolute close button */
+    }
+    .overlay-panel .journal-tabs {
+        margin-right: 0 !important;
+        width: 100% !important;
+        display: flex !important;
+        gap: 8px !important;
     }
 }
