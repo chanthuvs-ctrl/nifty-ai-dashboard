@@ -1272,11 +1272,11 @@ class SimulationState:
         if preferred_index.lower() == "sensex":
             atm_strike = round(spot / 100.0) * 100
             strike_interval = 100
-            upstox_filter_width = 600
+            upstox_filter_width = 1200
         else:
             atm_strike = round(spot / 50.0) * 50
             strike_interval = 50
-            upstox_filter_width = 300
+            upstox_filter_width = 600
             
         option_chain = []
         if self.settings.get("feed_mode") == "Upstox" and self.upstox_option_chain:
@@ -1285,13 +1285,20 @@ class SimulationState:
         else:
             t_years = 4.0 / 365.0
             r = 0.07
-            for i in range(-6, 7):
+            import math
+            for i in range(-12, 13):
                 strike = atm_strike + (i * strike_interval)
                 dist_from_atm = abs(strike - spot)
                 iv_strike = (self.vix / 100.0) + (dist_from_atm / 1000.0) * 0.10
                 
                 call_greeks = calculate_greeks(spot, strike, t_years, iv_strike, r, is_call=True)
                 put_greeks = calculate_greeks(spot, strike, t_years, iv_strike, r, is_call=False)
+                
+                # Apply realistic premium decay for simulated OTM options
+                decay = math.exp(-dist_from_atm / 80.0)
+                
+                c_price = max(0.05, call_greeks["price"] * decay)
+                p_price = max(0.05, put_greeks["price"] * decay)
                 
                 base_oi = 5000000 / (1 + (dist_from_atm / 150.0) ** 2)
                 call_oi = int(base_oi * (1.2 if strike > spot else 0.8) * (1.1 - 0.2 * (self.pcr - 1.0)))
@@ -1305,19 +1312,19 @@ class SimulationState:
                     "call_oi": call_oi,
                     "call_change_oi": call_change_oi,
                     "call_iv": f"{iv_strike*100:.1f}%",
-                    "call_delta": call_greeks["delta"],
-                    "call_theta": call_greeks["theta"],
-                    "call_vega": call_greeks["vega"],
-                    "call_price": call_greeks["price"],
-                    "call_bid": max(0.05, call_greeks["price"] - 0.2),
-                    "call_ask": call_greeks["price"] + 0.2,
+                    "call_delta": round(call_greeks["delta"] * decay, 3),
+                    "call_theta": round(call_greeks["theta"] * decay, 2),
+                    "call_vega": round(call_greeks["vega"] * decay, 2),
+                    "call_price": round(c_price, 2),
+                    "call_bid": round(max(0.05, c_price - 0.2), 2),
+                    "call_ask": round(c_price + 0.2, 2),
                     "call_instrument_key": f"SIM_CALL_{strike}",
-                    "put_price": put_greeks["price"],
-                    "put_bid": max(0.05, put_greeks["price"] - 0.2),
-                    "put_ask": put_greeks["price"] + 0.2,
-                    "put_delta": put_greeks["delta"],
-                    "put_theta": put_greeks["theta"],
-                    "put_vega": put_greeks["vega"],
+                    "put_price": round(p_price, 2),
+                    "put_bid": round(max(0.05, p_price - 0.2), 2),
+                    "put_ask": round(p_price + 0.2, 2),
+                    "put_delta": round(put_greeks["delta"] * decay, 3),
+                    "put_theta": round(put_greeks["theta"] * decay, 2),
+                    "put_vega": round(put_greeks["vega"] * decay, 2),
                     "put_iv": f"{iv_strike*100:.1f}%",
                     "put_change_oi": put_change_oi,
                     "put_oi": put_oi,
@@ -2423,52 +2430,8 @@ def get_market_data():
         strike_interval = 50
         upstox_filter_width = 300
     
-    option_chain = []
-    if state.settings.get("feed_mode") == "Upstox" and state.upstox_option_chain:
-        option_chain = [x for x in state.upstox_option_chain if abs(x["strike"] - atm_strike) <= upstox_filter_width]
-        option_chain = sorted(option_chain, key=lambda x: x["strike"])
-    else:
-        t_years = 4.0 / 365.0
-        r = 0.07
-        
-        for i in range(-6, 7):
-            strike = atm_strike + (i * strike_interval)
-            dist_from_atm = abs(strike - spot)
-            iv_strike = (state.vix / 100.0) + (dist_from_atm / 1000.0) * 0.10
-            
-            call_greeks = calculate_greeks(spot, strike, t_years, iv_strike, r, is_call=True)
-            put_greeks = calculate_greeks(spot, strike, t_years, iv_strike, r, is_call=False)
-            
-            base_oi = 5000000 / (1 + (dist_from_atm / 150.0) ** 2)
-            call_oi = int(base_oi * (1.2 if strike > spot else 0.8) * (1.1 - 0.2 * (state.pcr - 1.0)))
-            put_oi = int(base_oi * (0.8 if strike > spot else 1.2) * (state.pcr))
-            
-            call_change_oi = int(call_oi * random.uniform(-0.05, 0.08))
-            put_change_oi = int(put_oi * random.uniform(-0.05, 0.08))
-            
-            option_chain.append({
-                "strike": strike,
-                "call_oi": call_oi,
-                "call_change_oi": call_change_oi,
-                "call_iv": f"{iv_strike*100:.1f}%",
-                "call_delta": call_greeks["delta"],
-                "call_theta": call_greeks["theta"],
-                "call_vega": call_greeks["vega"],
-                "call_price": call_greeks["price"],
-                "call_bid": max(0.05, call_greeks["price"] - 0.2),
-                "call_ask": call_greeks["price"] + 0.2,
-                "call_instrument_key": f"SIM_CALL_{strike}",
-                "put_price": put_greeks["price"],
-                "put_bid": max(0.05, put_greeks["price"] - 0.2),
-                "put_ask": put_greeks["price"] + 0.2,
-                "put_delta": put_greeks["delta"],
-                "put_theta": put_greeks["theta"],
-                "put_vega": put_greeks["vega"],
-                "put_iv": f"{iv_strike*100:.1f}%",
-                "put_change_oi": put_change_oi,
-                "put_oi": put_oi,
-                "put_instrument_key": f"SIM_PUT_{strike}"
-            })
+    state.update_option_chain()
+    option_chain = state.option_chain
         
     min_pain = float("inf")
     max_pain_strike = atm_strike
@@ -2503,8 +2466,6 @@ def get_market_data():
     # Determine lot sizing based on max 2% trade limit risk & margins
     suggested_lots, margin_required, risk_amount = state.calculate_suggested_lots_and_margin(state.current_recommendation, spot)
     lot_size = 20 if preferred_index.lower() == "sensex" else 65
-
-    state.update_option_chain()
     return {
         "spot_price": round(spot, 2),
         "change_pct": state.intraday_change_pct,
