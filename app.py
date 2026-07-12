@@ -571,6 +571,102 @@ class SimulationState:
         # Default fallback to manual capital setting
         return float(self.settings.get("capital", 500000.0))
 
+    def query_upstox_basket_margin(self, strategy: str, spot: float) -> Optional[float]:
+        token = self.settings.get("upstox_access_token")
+        if not token or not self.option_chain:
+            return None
+            
+        preferred_index = self.settings.get("preferred_index", "Nifty")
+        strike_interval = 100 if preferred_index.lower() == "sensex" else 50
+        atm_strike = round(spot / 100.0) * 100 if preferred_index.lower() == "sensex" else round(spot / 50.0) * 50
+        lot_size = 20 if preferred_index.lower() == "sensex" else 65
+        
+        # Build the mock 1-lot order legs for margin calculation
+        legs_to_order = []
+        if strategy == "Buy CE":
+            legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "BUY"})
+        elif strategy == "Buy PE":
+            legs_to_order.append({"strike": atm_strike, "option_type": "PE", "action": "BUY"})
+        elif strategy == "Bull Call Spread":
+            legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "BUY"})
+            legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "SELL"})
+        elif strategy == "Bear Put Spread":
+            legs_to_order.append({"strike": atm_strike, "option_type": "PE", "action": "BUY"})
+            legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "SELL"})
+        elif strategy == "Bull Put Spread":
+            legs_to_order.append({"strike": atm_strike, "option_type": "PE", "action": "SELL"})
+            legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "BUY"})
+        elif strategy == "Bear Call Spread":
+            legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "SELL"})
+            legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "BUY"})
+        elif strategy == "Short Strangle" or strategy == "Short Straddle":
+            # Locate deep OTM Buy hedge strikes closest to ₹2 premium (strictly < ₹5 and OTM)
+            hedge_call_strike = atm_strike + 5 * strike_interval
+            hedge_put_strike = atm_strike - 5 * strike_interval
+            calls = [x for x in self.option_chain if x.get("call_price") is not None and x["call_price"] < 5.0 and x["strike"] > atm_strike]
+            if calls:
+                hedge_call_item = min(calls, key=lambda x: abs(x["call_price"] - 2.0))
+                hedge_call_strike = hedge_call_item["strike"]
+            puts = [x for x in self.option_chain if x.get("put_price") is not None and x["put_price"] < 5.0 and x["strike"] < atm_strike]
+            if puts:
+                hedge_put_item = min(puts, key=lambda x: abs(x["put_price"] - 2.0))
+                hedge_put_strike = hedge_put_item["strike"]
+            
+            sell_call_strike = atm_strike + strike_interval if strategy == "Short Strangle" else atm_strike
+            sell_put_strike = atm_strike - strike_interval if strategy == "Short Strangle" else atm_strike
+            
+            legs_to_order.append({"strike": hedge_call_strike, "option_type": "CE", "action": "BUY"})
+            legs_to_order.append({"strike": hedge_put_strike, "option_type": "PE", "action": "BUY"})
+            legs_to_order.append({"strike": sell_call_strike, "option_type": "CE", "action": "SELL"})
+            legs_to_order.append({"strike": sell_put_strike, "option_type": "PE", "action": "SELL"})
+        elif strategy == "Iron Condor":
+            legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "SELL"})
+            legs_to_order.append({"strike": atm_strike + 2*strike_interval, "option_type": "CE", "action": "BUY"})
+            legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "SELL"})
+            legs_to_order.append({"strike": atm_strike - 2*strike_interval, "option_type": "PE", "action": "BUY"})
+            
+        instruments = []
+        for leg in legs_to_order:
+            k = leg["strike"]
+            ot = leg["option_type"]
+            act = leg["action"]
+            
+            instrument_key = None
+            for item in self.option_chain:
+                if item.get("strike") == k:
+                    instrument_key = item.get("call_instrument_key") if ot == "CE" else item.get("put_instrument_key")
+                    break
+            if not instrument_key:
+                instrument_key = f"SIM_{ot.upper()}_{k}"
+                
+            instruments.append({
+                "instrument_key": instrument_key,
+                "quantity": lot_size,
+                "transaction_type": act,
+                "product": "I"
+            })
+            
+        if not instruments:
+            return None
+            
+        url = "https://api.upstox.com/v2/charges/margin"
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}"
+        }
+        try:
+            resp = requests.post(url, json={"instruments": instruments}, headers=headers, timeout=5)
+            if resp.status_code == 200:
+                res_json = resp.json()
+                if res_json.get("status") == "success":
+                    final_margin = float(res_json.get("data", {}).get("final_margin", 0.0))
+                    if final_margin > 0:
+                        return final_margin
+        except Exception as e:
+            print(f"⚠️ Failed to query Upstox margin calculator API: {e}")
+        return None
+
     def calculate_suggested_lots_and_margin(self, strategy: str, spot: float) -> tuple:
         """Calculates suggested lots, margin required, and risk amount based on capital and strategy type."""
         capital = self.get_available_capital()
@@ -608,10 +704,17 @@ class SimulationState:
 
         # 2. Short Strangle / Short Straddle
         elif "Strangle" in strategy or "Straddle" in strategy:
-            # Execution Size Formula: Lots = floor((Capital * 0.80) / 160,000)
-            MARGIN_STRANGLE = 160000.0
-            suggested_lots = max(1, int((capital * 0.80) / MARGIN_STRANGLE))
-            margin_required = suggested_lots * MARGIN_STRANGLE
+            # Query dynamic broker margin first
+            broker_margin = self.query_upstox_basket_margin(strategy, spot)
+            if broker_margin is not None and broker_margin > 0:
+                suggested_lots = max(1, int((capital * 0.80) / broker_margin))
+                margin_required = suggested_lots * broker_margin
+            else:
+                # Static fallback
+                MARGIN_STRANGLE = 160000.0
+                suggested_lots = max(1, int((capital * 0.80) / MARGIN_STRANGLE))
+                margin_required = suggested_lots * MARGIN_STRANGLE
+                
             risk_amount = max_risk
             return suggested_lots, margin_required, risk_amount
 
@@ -648,10 +751,19 @@ class SimulationState:
             
             # Respect both margin (80% capital allocation limit) and 2% risk
             max_lots_by_risk = max(1, int(max_risk / risk_per_lot))
-            max_lots_by_margin = max(1, int((capital * 0.80) / MARGIN_SPREAD))
             
+            # Query dynamic broker margin first
+            broker_margin = self.query_upstox_basket_margin(strategy, spot)
+            if broker_margin is not None and broker_margin > 0:
+                max_lots_by_margin = max(1, int((capital * 0.80) / broker_margin))
+                margin_per_lot = broker_margin
+            else:
+                MARGIN_SPREAD = 50000.0
+                max_lots_by_margin = max(1, int((capital * 0.80) / MARGIN_SPREAD))
+                margin_per_lot = MARGIN_SPREAD
+                
             suggested_lots = min(max_lots_by_risk, max_lots_by_margin)
-            margin_required = suggested_lots * MARGIN_SPREAD
+            margin_required = suggested_lots * margin_per_lot
             risk_amount = suggested_lots * risk_per_lot
             return suggested_lots, margin_required, risk_amount
 
