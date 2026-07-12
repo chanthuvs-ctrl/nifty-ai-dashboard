@@ -3279,6 +3279,21 @@ def clear_today_journal():
     state.daily_stop_limit_hit = False
     return {"status": "SUCCESS", "removed": removed, "message": f"Cleared {removed} today's trades."}
 
+@app.post("/api/journal/wipe-all-trades")
+def wipe_all_trades_endpoint():
+    """Directly delete all trades and reset daily halt conditions."""
+    journal.trades = []
+    journal.save_journal()
+    
+    state.daily_closed_pnl = 0.0
+    state.daily_stop_limit_hit = False
+    state.auto_trade_active_id = None
+    
+    return {
+        "status": "SUCCESS",
+        "message": "All trades and daily P&L have been cleared successfully."
+    }
+
 @app.delete("/api/journal/all")
 def delete_all_journal_trades(request: Request):
     """Wipe all trades in the database (requires authentication)."""

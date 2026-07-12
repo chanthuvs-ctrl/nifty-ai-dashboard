@@ -1748,6 +1748,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Modal buttons trigger
     const btnSettings = document.getElementById('btn-settings');
     if (btnSettings) {
+        // Wipe database button click handler (v2.7.2)
+        const btnWipeDatabase = document.getElementById('btn-wipe-database');
+        if (btnWipeDatabase) {
+            btnWipeDatabase.addEventListener('click', async () => {
+                if (confirm("Are you absolutely sure you want to WIPE all trade journals, history, and reset P&L to zero? This action cannot be undone.")) {
+                    try {
+                        localStorage.setItem('prevent_restore', 'true');
+                        localStorage.removeItem('nifty_journal_trades');
+                        
+                        const resp = await fetch('/api/journal/wipe-all-trades', { method: 'POST' });
+                        const res = await resp.json();
+                        if (res.status === "SUCCESS") {
+                            showToast("Journal wiped successfully", 100, "neutral", "DATABASE CLEARED");
+                            document.getElementById('settings-modal').style.display = 'none';
+                            await fetchMarketData();
+                            window.location.reload();
+                        }
+                    } catch (e) {
+                        console.error("Failed wiping trade database:", e);
+                    }
+                }
+            });
+        }
+
         btnSettings.addEventListener('click', async () => {
             // Load settings first
             const resp = await fetch('/api/settings');
