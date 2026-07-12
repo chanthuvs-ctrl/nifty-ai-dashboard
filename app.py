@@ -672,14 +672,14 @@ class SimulationState:
     def calculate_paper_intraday_pnl(self) -> float:
         try:
             today_str = get_ist_date_str()
-            today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str and t.get("execution_type") == "Paper"]
+            today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str and not t.get("execution_type", "Paper").startswith("Live")]
             closed_pnl = sum(t.get("pnl", 0.0) for t in today_closed)
             
             floating_pnl = 0.0
             if self.auto_trade_active_id:
                 active_trade = None
                 for t in journal.trades:
-                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN" and t.get("execution_type") == "Paper":
+                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN" and not t.get("execution_type", "Paper").startswith("Live"):
                         active_trade = t
                         break
                 if active_trade:
@@ -692,14 +692,14 @@ class SimulationState:
     def calculate_real_intraday_pnl(self) -> float:
         try:
             today_str = get_ist_date_str()
-            today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str and t.get("execution_type") == "Live"]
+            today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str and t.get("execution_type", "Paper").startswith("Live")]
             closed_pnl = sum(t.get("pnl", 0.0) for t in today_closed)
             
             floating_pnl = 0.0
             if self.auto_trade_active_id:
                 active_trade = None
                 for t in journal.trades:
-                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN" and t.get("execution_type") == "Live":
+                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN" and t.get("execution_type", "Paper").startswith("Live"):
                         active_trade = t
                         break
                 if active_trade:
@@ -3292,6 +3292,7 @@ def wipe_all_trades_endpoint():
     state.daily_closed_pnl = 0.0
     state.daily_stop_limit_hit = False
     state.auto_trade_active_id = None
+    state.price_history = []
     
     return {
         "status": "SUCCESS",
