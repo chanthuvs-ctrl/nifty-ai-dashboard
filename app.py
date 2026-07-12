@@ -1683,27 +1683,75 @@ class SimulationState:
                 should_close = True
                 
             if should_close:
-                # Add confirmation delay: 120 seconds
-                if not getattr(self, "signal_change_pending", False):
-                    self.signal_change_pending = True
-                    self.signal_change_pending_since = time.time()
-                    self.pending_exit_signal = rec
-                    print(f"⏰ AUTO-TRADE: AI Signal shifted to {rec}. Starting 120s confirmation cooldown...")
+                # Volatility Hysteresis Buffer Calculation (v2.1)
+                # Standard Nifty buffer is VIX-scaled, approx 20-35 points.
+                vix_val = getattr(self, "vix", 15.0)
+                buffer = spot * (vix_val / 100.0) / 100.0
+                
+                # Boundary Breach Conditions
+                entry_spot = active_trade.get("entry_spot", spot)
+                instant_exit_triggered = False
+                instant_exit_reason = ""
+                
+                if is_bullish and spot < entry_spot - buffer:
+                    instant_exit_triggered = True
+                    instant_exit_reason = f"Hysteresis boundary breached: Bullish trade spot ({spot:.2f}) dropped below entry ({entry_spot:.2f}) minus volatility buffer ({buffer:.2f})"
+                elif is_bearish and spot > entry_spot + buffer:
+                    instant_exit_triggered = True
+                    instant_exit_reason = f"Hysteresis boundary breached: Bearish trade spot ({spot:.2f}) rose above entry ({entry_spot:.2f}) plus volatility buffer ({buffer:.2f})"
+                elif is_neutral:
+                    # Neutral strategies sell options at strikes around ATM
+                    sell_call_strike = None
+                    sell_put_strike = None
+                    for leg in active_trade.get("legs", []):
+                        if leg.get("action") == "SELL":
+                            if leg.get("option_type") == "CE":
+                                sell_call_strike = leg.get("strike")
+                            elif leg.get("option_type") == "PE":
+                                sell_put_strike = leg.get("strike")
+                    
+                    preferred_index = self.settings.get("preferred_index", "Nifty")
+                    strike_interval = 100 if preferred_index.lower() == "sensex" else 50
+                    if not sell_call_strike:
+                        sell_call_strike = entry_spot + strike_interval
+                    if not sell_put_strike:
+                        sell_put_strike = entry_spot - strike_interval
+                        
+                    if spot >= sell_call_strike or spot <= sell_put_strike:
+                        instant_exit_triggered = True
+                        instant_exit_reason = f"Neutral boundary breached: Spot ({spot:.2f}) crossed sell strike boundaries (Put: {sell_put_strike} / Call: {sell_call_strike})"
+                
+                if instant_exit_triggered:
+                    journal.close_trade(active_trade["id"], spot)
+                    active_trade["reason"] = f"AI Signal shifted to {rec} ({instant_exit_reason})"
+                    journal.save_journal()
+                    self.auto_trade_active_id = None
+                    self.signal_change_pending = False
+                    self.trail_activated = False
+                    print(f"🤖 AUTO-TRADE: Closed position instantly. Reason: {instant_exit_reason}")
+                    return
                 else:
-                    elapsed = time.time() - self.signal_change_pending_since
-                    remaining = max(0, int(120.0 - elapsed))
-                    if elapsed >= 120.0:
-                        # Cooldown completed, close trade
-                        journal.close_trade(active_trade["id"], spot)
-                        active_trade["reason"] = f"AI Signal shifted to {rec} (Confirmed after 120s cooldown)"
-                        journal.save_journal()
-                        self.auto_trade_active_id = None
-                        self.signal_change_pending = False
-                        self.trail_activated = False
-                        print(f"🤖 AUTO-TRADE: Closed position (AI Signal shift to {rec} confirmed)")
-                        return
+                    # Add confirmation delay: 120 seconds if inside boundaries
+                    if not getattr(self, "signal_change_pending", False):
+                        self.signal_change_pending = True
+                        self.signal_change_pending_since = time.time()
+                        self.pending_exit_signal = rec
+                        print(f"⏰ AUTO-TRADE: AI Signal shifted to {rec} (Inside boundaries). Starting 120s confirmation cooldown...")
                     else:
-                        print(f"⏰ AUTO-TRADE: AI Signal shift pending confirmation ({remaining}s remaining)...")
+                        elapsed = time.time() - self.signal_change_pending_since
+                        remaining = max(0, int(120.0 - elapsed))
+                        if elapsed >= 120.0:
+                            # Cooldown completed, close trade
+                            journal.close_trade(active_trade["id"], spot)
+                            active_trade["reason"] = f"AI Signal shifted to {rec} (Confirmed after 120s cooldown)"
+                            journal.save_journal()
+                            self.auto_trade_active_id = None
+                            self.signal_change_pending = False
+                            self.trail_activated = False
+                            print(f"🤖 AUTO-TRADE: Closed position (AI Signal shift to {rec} confirmed after cooldown)")
+                            return
+                        else:
+                            print(f"⏰ AUTO-TRADE: AI Signal shift pending confirmation ({remaining}s remaining)...")
             else:
                 # If signal reversed/restored within cooldown, cancel pending exit
                 if getattr(self, "signal_change_pending", False):
