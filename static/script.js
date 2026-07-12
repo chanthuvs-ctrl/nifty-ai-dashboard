@@ -2103,11 +2103,13 @@ function initLivePnlChart() {
             },
             scales: {
                 x: {
+                    display: true,
                     grid: {
-                        color: 'rgba(255, 255, 255, 0.04)'
+                        color: 'rgba(255, 255, 255, 0.04)',
+                        drawBorder: false
                     },
                     ticks: {
-                        color: 'var(--text-muted)',
+                        color: '#64748b',
                         font: { size: 9 },
                         maxRotation: 0,
                         autoSkip: true,
@@ -2115,14 +2117,17 @@ function initLivePnlChart() {
                     }
                 },
                 y: {
+                    display: true,
+                    position: 'right',
                     grid: {
-                        color: 'rgba(255, 255, 255, 0.04)'
+                        color: 'rgba(255, 255, 255, 0.04)',
+                        drawBorder: false
                     },
                     ticks: {
-                        color: 'var(--text-muted)',
+                        color: '#64748b',
                         font: { size: 9 },
                         callback: function(value) {
-                            return (value >= 0 ? '+' : '') + '₹' + value;
+                            return (value >= 0 ? '+' : '') + '₹' + value.toLocaleString('en-IN');
                         }
                     }
                 }
