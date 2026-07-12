@@ -1557,6 +1557,17 @@ function initDashboardToggles() {
 
 // Initialize application listeners
 document.addEventListener('DOMContentLoaded', async () => {
+    // Check if reset query parameter is present (v2.7.1)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('reset') === 'true') {
+        localStorage.removeItem('nifty_journal_trades');
+        localStorage.removeItem('nifty_settings');
+        localStorage.removeItem('prevent_restore');
+        console.log("Cleared client local storage via reset parameter.");
+        window.location.href = window.location.pathname;
+        return;
+    }
+
     // Initialize in-place panel toggles and action center
     initDashboardToggles();
     
