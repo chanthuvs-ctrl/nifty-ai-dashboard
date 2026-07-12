@@ -747,6 +747,10 @@ async function syncJournalWithServer(serverTrades) {
         localStorage.removeItem('prevent_restore');
         return serverTrades;
     }
+    if (serverTrades.length === 0) {
+        localStorage.removeItem('nifty_journal_trades');
+        return serverTrades;
+    }
     let localTrades = [];
     try {
         localTrades = JSON.parse(localStorage.getItem('nifty_journal_trades')) || [];
