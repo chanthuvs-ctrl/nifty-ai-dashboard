@@ -1627,15 +1627,15 @@ class SimulationState:
                     legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "SELL"})
                     legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "BUY"})
                 elif rec == "Short Strangle" or rec == "Short Straddle":
-                    # Locate deep OTM Buy hedge strikes closest to ₹2 premium
+                    # Locate deep OTM Buy hedge strikes closest to ₹2 premium (strictly < ₹5 and OTM)
                     hedge_call_strike = atm_strike + 5 * strike_interval
                     hedge_put_strike = atm_strike - 5 * strike_interval
                     if self.option_chain:
-                        calls = [x for x in self.option_chain if x.get("call_price") is not None]
+                        calls = [x for x in self.option_chain if x.get("call_price") is not None and x["call_price"] < 5.0 and x["strike"] > atm_strike]
                         if calls:
                             hedge_call_item = min(calls, key=lambda x: abs(x["call_price"] - 2.0))
                             hedge_call_strike = hedge_call_item["strike"]
-                        puts = [x for x in self.option_chain if x.get("put_price") is not None]
+                        puts = [x for x in self.option_chain if x.get("put_price") is not None and x["put_price"] < 5.0 and x["strike"] < atm_strike]
                         if puts:
                             hedge_put_item = min(puts, key=lambda x: abs(x["put_price"] - 2.0))
                             hedge_put_strike = hedge_put_item["strike"]
