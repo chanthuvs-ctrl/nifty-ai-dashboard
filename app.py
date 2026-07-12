@@ -2547,11 +2547,12 @@ class TradeJournal:
 journal = TradeJournal()
 
 # Pre-populate dynamic trades history only if the journal is empty
-if len(journal.trades) == 0:
-    t1 = journal.add_trade("Bull Put Spread", 22210.0, ["22200 PE", "22150 PE"], 90.0, "VIX Falling, strong put writing", size=2)
-    journal.close_trade(t1["id"], 22260.0)
-    t2 = journal.add_trade("Buy PE", 22280.0, ["22300 PE"], 75.0, "VWAP breakdowns and negative breadth", size=1)
-    journal.close_trade(t2["id"], 22230.0)
+# Commented out per user request to enable clean state testing
+# if len(journal.trades) == 0:
+#     t1 = journal.add_trade("Bull Put Spread", 22210.0, ["22200 PE", "22150 PE"], 90.0, "VIX Falling, strong put writing", size=2)
+#     journal.close_trade(t1["id"], 22260.0)
+#     t2 = journal.add_trade("Buy PE", 22280.0, ["22300 PE"], 75.0, "VWAP breakdowns and negative breadth", size=1)
+#     journal.close_trade(t2["id"], 22230.0)
 
 
 # ==========================================
