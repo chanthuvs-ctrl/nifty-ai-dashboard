@@ -392,7 +392,7 @@ async function fetchMarketData() {
         // 1. Binder Header
         const versionBadge = document.getElementById('version-badge');
         if (versionBadge && data.version) {
-            versionBadge.textContent = `INSTITUTIONAL v${data.version}`;
+            versionBadge.textContent = `PRODUCTION v${data.version}`;
         }
         document.getElementById('hdr-nifty-spot').innerText = data.spot_price.toLocaleString('en-IN', {minimumFractionDigits: 2});
         document.getElementById('hdr-nifty-meta').innerText = `${data.price_source} | ${data.price_date} ${data.price_time}`;
