@@ -704,6 +704,11 @@ function renderOptionChain(chain, spot, maxPain) {
 
 // Synchronize client journal trades with server (backup & restore)
 async function syncJournalWithServer(serverTrades) {
+    if (localStorage.getItem('prevent_restore') === 'true') {
+        localStorage.removeItem('nifty_journal_trades');
+        localStorage.removeItem('prevent_restore');
+        return serverTrades;
+    }
     let localTrades = [];
     try {
         localTrades = JSON.parse(localStorage.getItem('nifty_journal_trades')) || [];
@@ -1655,7 +1660,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnResetHalt) {
         btnResetHalt.addEventListener('click', async () => {
             try {
-                // Clear local storage backup before resetting on server to prevent restore loops
+                // Set prevent restore flag to break any race condition restore loops
+                localStorage.setItem('prevent_restore', 'true');
                 localStorage.removeItem('nifty_journal_trades');
                 
                 const r = await fetch('/api/reset-daily-halt', { method: 'POST' });
