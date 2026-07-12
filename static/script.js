@@ -32,6 +32,40 @@ function syncAutoTradeButtonVisuals(containerId, activeMode) {
     });
 }
 
+function alignDashboardViewToMode(mode) {
+    if (mode === 'Paper') {
+        // Toggle P&L chart to paper
+        const btnTogglePnl = document.getElementById('btn-toggle-pnl-type');
+        if (btnTogglePnl && btnTogglePnl.getAttribute('data-pnl-type') !== 'paper') {
+            btnTogglePnl.setAttribute('data-pnl-type', 'paper');
+            btnTogglePnl.textContent = 'Paper P&L';
+            btnTogglePnl.style.color = '#00d9f5';
+            btnTogglePnl.style.borderColor = 'rgba(0, 217, 245, 0.4)';
+            fetchChartData();
+        }
+        // Toggle journal tab to paper
+        const tabPaper = document.getElementById('tab-paper');
+        if (tabPaper) {
+            switchJournalTab('paper');
+        }
+    } else if (mode === 'Live') {
+        // Toggle P&L chart to real
+        const btnTogglePnl = document.getElementById('btn-toggle-pnl-type');
+        if (btnTogglePnl && btnTogglePnl.getAttribute('data-pnl-type') !== 'real') {
+            btnTogglePnl.setAttribute('data-pnl-type', 'real');
+            btnTogglePnl.textContent = 'Real P&L';
+            btnTogglePnl.style.color = 'var(--neon-bull)';
+            btnTogglePnl.style.borderColor = 'rgba(0, 229, 153, 0.4)';
+            fetchChartData();
+        }
+        // Toggle journal tab to live
+        const tabLive = document.getElementById('tab-live');
+        if (tabLive) {
+            switchJournalTab('live');
+        }
+    }
+}
+
 let audioCtx = null;
 let marketPollingInterval = null;
 let isEngineRunning = true;
@@ -1351,6 +1385,9 @@ async function saveSettings() {
             const cleanSettings = { ...req };
             localStorage.setItem('nifty_settings', JSON.stringify(cleanSettings));
             
+            // Align dashboard view to the newly saved mode (v2.6)
+            alignDashboardViewToMode(autoTradeMode);
+            
             document.getElementById('settings-modal').style.display = 'none';
             // Reload settings to get the correct dynamic expiries and active expiry date
             const settingsResp = await fetch('/api/settings');
@@ -1601,6 +1638,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Initial expiries populator call
         await reloadExpiries(settings);
         
+        // Align dashboard view according to loaded mode (v2.6)
+        alignDashboardViewToMode(settings.auto_trade_mode || 'OFF');
+        
         const dashboardExpiry = document.getElementById('set-dashboard-expiry');
         if (dashboardExpiry) {
             dashboardExpiry.addEventListener('change', async (e) => {
@@ -1639,6 +1679,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const saveRes = await saveResp.json();
                 if (saveRes.status === "SUCCESS") {
                     showToast(`AUTO-TRADE: ${mode.toUpperCase()}`, 100, "neutral", "SETTINGS UPDATED");
+                    // Align dashboard view to the clicked mode (v2.6)
+                    alignDashboardViewToMode(mode);
                     await fetchMarketData();
                 }
             } catch (err) {
