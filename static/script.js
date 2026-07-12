@@ -1805,6 +1805,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.initAcademy();
     }
 
+    // Toggle P&L Chart Type (v2.5)
+    const btnTogglePnlType = document.getElementById('btn-toggle-pnl-type');
+    if (btnTogglePnlType) {
+        btnTogglePnlType.addEventListener('click', () => {
+            const currentType = btnTogglePnlType.getAttribute('data-pnl-type');
+            if (currentType === 'real') {
+                btnTogglePnlType.setAttribute('data-pnl-type', 'paper');
+                btnTogglePnlType.textContent = 'Paper P&L';
+                btnTogglePnlType.style.color = '#00d9f5';
+                btnTogglePnlType.style.borderColor = 'rgba(0, 217, 245, 0.4)';
+            } else {
+                btnTogglePnlType.setAttribute('data-pnl-type', 'real');
+                btnTogglePnlType.textContent = 'Real P&L';
+                btnTogglePnlType.style.color = 'var(--neon-bull)';
+                btnTogglePnlType.style.borderColor = 'rgba(0, 229, 153, 0.4)';
+            }
+            fetchChartData();
+        });
+    }
+
     // Toggle live option chain visibility (v2.2)
     const btnToggleOptions = document.getElementById('btn-toggle-options');
     const optionsPanelContent = document.getElementById('options-panel-content');
@@ -2295,7 +2315,17 @@ async function fetchChartData() {
             initLivePnlChart();
         }
         if (livePnlChart) {
-            const pnls = history.map(p => p.pnl || 0.0);
+            const btnToggle = document.getElementById('btn-toggle-pnl-type');
+            const pnlType = btnToggle ? btnToggle.getAttribute('data-pnl-type') : 'real';
+            
+            const pnls = history.map(p => {
+                if (pnlType === 'paper') {
+                    return p.paper_pnl !== undefined ? p.paper_pnl : (p.pnl || 0.0);
+                } else {
+                    return p.real_pnl !== undefined ? p.real_pnl : (p.pnl || 0.0);
+                }
+            });
+            
             livePnlChart.data.labels = labels;
             livePnlChart.data.datasets[0].data = pnls;
             

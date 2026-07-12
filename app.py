@@ -667,6 +667,46 @@ class SimulationState:
             print(f"⚠️ Failed to query Upstox margin calculator API: {e}")
         return None
 
+    def calculate_paper_intraday_pnl(self) -> float:
+        try:
+            today_str = get_ist_date_str()
+            today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str and t.get("execution_type") == "Paper"]
+            closed_pnl = sum(t.get("pnl", 0.0) for t in today_closed)
+            
+            floating_pnl = 0.0
+            if self.auto_trade_active_id:
+                active_trade = None
+                for t in journal.trades:
+                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN" and t.get("execution_type") == "Paper":
+                        active_trade = t
+                        break
+                if active_trade:
+                    floating_pnl = self.calculate_trade_pnl(active_trade, self.spot_price)
+            return round(closed_pnl + floating_pnl, 2)
+        except Exception as e:
+            print(f"⚠️ Error calculating paper intraday P&L: {e}")
+            return 0.0
+
+    def calculate_real_intraday_pnl(self) -> float:
+        try:
+            today_str = get_ist_date_str()
+            today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str and t.get("execution_type") == "Live"]
+            closed_pnl = sum(t.get("pnl", 0.0) for t in today_closed)
+            
+            floating_pnl = 0.0
+            if self.auto_trade_active_id:
+                active_trade = None
+                for t in journal.trades:
+                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN" and t.get("execution_type") == "Live":
+                        active_trade = t
+                        break
+                if active_trade:
+                    floating_pnl = self.calculate_trade_pnl(active_trade, self.spot_price)
+            return round(closed_pnl + floating_pnl, 2)
+        except Exception as e:
+            print(f"⚠️ Error calculating real intraday P&L: {e}")
+            return 0.0
+
     def calculate_total_intraday_pnl(self) -> float:
         try:
             today_str = get_ist_date_str()
@@ -1027,7 +1067,9 @@ class SimulationState:
             "vwap": round(self.get_vwap(), 2),
             "ema20": round(self.ema_20, 2),
             "ema50": round(self.ema_50, 2),
-            "pnl": self.calculate_total_intraday_pnl()
+            "pnl": self.calculate_real_intraday_pnl(),
+            "paper_pnl": self.calculate_paper_intraday_pnl(),
+            "real_pnl": self.calculate_real_intraday_pnl()
         })
         if len(self.price_history) > 360:
             self.price_history.pop(0)
@@ -1309,7 +1351,9 @@ class SimulationState:
                 "vwap": round(self.get_vwap(), 2),
                 "ema20": round(self.ema_20, 2),
                 "ema50": round(self.ema_50, 2),
-                "pnl": self.calculate_total_intraday_pnl()
+                "pnl": self.calculate_real_intraday_pnl(),
+                "paper_pnl": self.calculate_paper_intraday_pnl(),
+                "real_pnl": self.calculate_real_intraday_pnl()
             })
             if len(self.price_history) > 360:
                 self.price_history.pop(0)
@@ -1931,6 +1975,9 @@ class SimulationState:
                 # Clear today's trades from journal to reset today_trades and today_legs counters
                 journal.trades = [t for t in journal.trades if t.get("date") != today_date]
                 journal.save_journal()
+                
+                # Reset price and P&L history to start curve from 0 at 9:00 AM (v2.5)
+                self.price_history = []
                 
                 self.last_daily_reset_date = today_date
                 

@@ -433,8 +433,10 @@
             
             <!-- Real-Time Session P&L Graph (v2.3) -->
             <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px; margin-top: 12px;">
-                <div class="panel-header" style="border: none; padding: 0; min-height: auto; margin-bottom: 8px;">
+                <div class="panel-header" style="border: none; padding: 0; min-height: auto; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
                     <h2 style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">Real-Time Session P&L</h2>
+                    <!-- Toggle button (v2.5) -->
+                    <button class="btn btn-secondary" id="btn-toggle-pnl-type" style="padding: 4px 10px; font-size: 0.65rem; font-weight: 700; color: var(--neon-bull); border-color: rgba(0, 229, 153, 0.4); cursor: pointer; text-transform: uppercase;" data-pnl-type="real">Real P&L</button>
                 </div>
                 <div class="chart-container" style="position: relative; width: 100%; height: 180px;">
                     <canvas id="live-pnl-chart"></canvas>
