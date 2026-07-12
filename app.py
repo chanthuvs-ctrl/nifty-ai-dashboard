@@ -2996,6 +2996,13 @@ def reset_daily_halt():
     """Manually reset the daily loss halt so auto-trading can resume today."""
     state.daily_stop_limit_hit = False
     state.daily_closed_pnl = 0.0
+    state.auto_trade_active_id = None
+    
+    # Wipe today's closed trades from the journal so they don't trigger the halt again
+    today_str = get_ist_date_str()
+    journal.trades = [t for t in journal.trades if t.get("date") != today_str]
+    journal.save_journal()
+    
     if state.settings.get("auto_trade_mode", "OFF") == "OFF":
         state.settings["auto_trade_mode"] = "Paper"
         state.save_settings()

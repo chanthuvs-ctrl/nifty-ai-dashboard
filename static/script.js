@@ -1658,6 +1658,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const res = await r.json();
                 if (res.status === 'SUCCESS') {
                     showToast('Daily halt cleared. Auto-Paper re-enabled.', 100, 'bull', 'DAILY HALT RESET');
+                    if (window.fetchJournal) {
+                        await window.fetchJournal();
+                    }
                     await fetchMarketData();
                 }
             } catch (e) { console.error('Reset halt failed:', e); }
