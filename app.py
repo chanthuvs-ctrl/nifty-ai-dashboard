@@ -2391,7 +2391,7 @@ class TradeJournal:
             "execution_type": execution_type,
             "lot_size": lot_size,
             "legs": legs,
-            "brokerage": round(0.005 * entry_premium, 2),
+            "brokerage": round((len(legs) * 20.0 + 0.0005 * entry_premium) if execution_type == "Live" and legs else (20.0 + 0.0005 * entry_premium) if execution_type == "Live" else 0.005 * entry_premium, 2),
             "stage": "OPEN",
             "locked_profit": 0.0,
             "trail_activated": False,
@@ -2464,13 +2464,19 @@ class TradeJournal:
                             pnl += leg_diff * leg["quantity"]
                         else:
                             pnl -= leg_diff * leg["quantity"]
-                    trade["brokerage"] = round(0.005 * (entry_premium + exit_premium), 2)
+                    if trade.get("execution_type") == "Live":
+                        trade["brokerage"] = round(40.0 + (0.0005 * (entry_premium + exit_premium)), 2)
+                    else:
+                        trade["brokerage"] = round(0.005 * (entry_premium + exit_premium), 2)
                 else:
                     pnl_points = calculate_trade_pnl_points(strat, diff)
                     pnl = pnl_points * multiplier
                     entry_premium = trade["entry_spot"] * trade["lot_size"] * trade["size"]
                     exit_premium = exit_spot * trade["lot_size"] * trade["size"]
-                    trade["brokerage"] = round(0.005 * (entry_premium + exit_premium), 2)
+                    if trade.get("execution_type") == "Live":
+                        trade["brokerage"] = round(40.0 + (0.0005 * (entry_premium + exit_premium)), 2)
+                    else:
+                        trade["brokerage"] = round(0.005 * (entry_premium + exit_premium), 2)
                     
                 trade["pnl"] = round(pnl, 2)
                 trade["outcome"] = "WIN" if pnl > 0 else "LOSS"
@@ -2714,11 +2720,11 @@ def get_market_data():
         "auto_trade_mode": state.settings.get("auto_trade_mode", "OFF"),
         "trailing_sl_pts": state.settings.get("trailing_sl_pts", 30.0),
         "daily_stop_limit_hit": state.daily_stop_limit_hit,
-        "daily_pnl": round(state.daily_closed_pnl, 2),
-        "daily_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if t.get("date") == get_ist_date_str()), 2),
-        "total_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades), 2),
-        "today_trades": sum(1 for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str()),
-        "today_legs": sum(len(t.get("legs") or []) or 1 for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str()),
+        "daily_pnl": round(sum(t.get("pnl", 0.0) for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))), 2),
+        "daily_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))), 2),
+        "total_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))), 2),
+        "today_trades": sum(1 for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))),
+        "today_legs": sum(len(t.get("legs") or []) or 1 for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))),
         "timeframe_trends": {
             "m15": state.analyze_timeframe(state.candles_15m)["trend"],
             "m5": state.analyze_timeframe(state.candles_5m)["trend"],
