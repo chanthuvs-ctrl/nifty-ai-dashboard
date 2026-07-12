@@ -66,29 +66,11 @@
                 <option value="Sensex">INDEX: SENSEX</option>
             </select>
             
-            <!-- AUTO-TRADE THREE-STATE QUICK SELECTOR -->
-            <div class="nav-tab-group" id="hdr-auto-trade-group" style="display: flex; gap: 2px; border: 1px solid var(--border-color); padding: 2px; border-radius: 6px; background: rgba(10, 18, 30, 0.6); margin-right: 4px;">
-                <button class="btn btn-secondary active" id="btn-autotrade-off" style="height: 32px; padding: 0 12px; font-size: 0.75rem; text-transform: uppercase; border: none;" data-mode="OFF">Auto OFF</button>
-                <button class="btn btn-secondary" id="btn-autotrade-paper" style="height: 32px; padding: 0 12px; font-size: 0.75rem; text-transform: uppercase; border: none;" data-mode="Paper">Auto Paper</button>
-                <button class="btn btn-secondary" id="btn-autotrade-live" style="height: 32px; padding: 0 12px; font-size: 0.75rem; text-transform: uppercase; border: none;" data-mode="Live">Auto Real</button>
-            </div>
-            
-            <!-- BOOKED P&L + TRADE STATS BAR -->
-            <div id="stats-bar" style="display: flex; align-items: center; gap: 6px; margin-right: 4px; background: rgba(10,18,30,0.7); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 10px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.4px; height: 32px;">
-                <span style="color: var(--text-dim);">P&amp;L:</span>
-                <span id="stats-booked-pnl" style="color: var(--neon-bull);">₹0.00</span>
-                <span style="color: var(--border-color);">|</span>
-                <span style="color: var(--text-dim);">Trades:</span>
-                <span id="stats-trade-count" style="color: var(--neon-accent);">0</span>
-                <span style="color: var(--border-color);">|</span>
-                <span style="color: var(--text-dim);">Legs:</span>
-                <span id="stats-leg-count" style="color: var(--neon-accent);">0</span>
-                <span style="color: var(--border-color);">|</span>
-                <span style="color: var(--text-dim);">Daily Brokerage:</span>
-                <span id="stats-daily-brokerage" style="color: var(--neon-accent);">₹0.00</span>
-                <span style="color: var(--border-color);">|</span>
-                <span style="color: var(--text-dim);">Total Brokerage:</span>
-                <span id="stats-total-brokerage" style="color: var(--neon-accent);">₹0.00</span>
+            <!-- AUTO-TRADE THREE-STATE QUICK SELECTOR (BIGGER BUTTONS) -->
+            <div class="nav-tab-group" id="hdr-auto-trade-group" style="display: flex; gap: 4px; border: 1px solid var(--border-color); padding: 4px; border-radius: 8px; background: rgba(10, 18, 30, 0.6); margin-right: 8px;">
+                <button class="btn btn-secondary active" id="btn-autotrade-off" style="padding: 10px 18px; font-size: 0.85rem; text-transform: uppercase; border: none; font-weight: 700; cursor: pointer; border-radius: 6px;" data-mode="OFF">Auto OFF</button>
+                <button class="btn btn-secondary" id="btn-autotrade-paper" style="padding: 10px 18px; font-size: 0.85rem; text-transform: uppercase; border: none; font-weight: 700; cursor: pointer; border-radius: 6px;" data-mode="Paper">Auto Paper</button>
+                <button class="btn btn-secondary" id="btn-autotrade-live" style="padding: 10px 18px; font-size: 0.85rem; text-transform: uppercase; border: none; font-weight: 700; cursor: pointer; border-radius: 6px;" data-mode="Live">Auto Real</button>
             </div>
 
             <div id="daily-halt-badge" style="display: none; font-size: 0.68rem; font-weight: 700; color: var(--neon-bear); background: rgba(235, 94, 85, 0.08); padding: 5px 8px; border-radius: 4px; border: 1px solid var(--neon-bear); align-items: center; gap: 4px; letter-spacing: 0.5px; margin-right: 4px;">
@@ -182,6 +164,40 @@
 
     <!-- MAIN DASHBOARD CONTENT -->
     <main class="dashboard-grid">
+        
+        <!-- Dedicated Portfolio Stats Panel (v2.2) -->
+        <section class="panel" id="panel-portfolio-stats" style="grid-column: 1 / 3; display: flex; flex-direction: column; background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)); border: 1px solid rgba(0, 229, 153, 0.2); border-radius: 8px; padding: 16px 20px;">
+            <div class="panel-header" style="border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px; margin-bottom: 12px;">
+                <h2 style="font-size: 0.9rem; letter-spacing: 0.5px; color: var(--text-muted); text-transform: uppercase;">PORTFOLIO PERFORMANCE & STATS</h2>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; width: 100%;">
+                <!-- P&L Card -->
+                <div style="background: rgba(2, 6, 12, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 6px; padding: 12px 16px; text-align: center;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Booked P&L</div>
+                    <div id="stats-booked-pnl" style="font-size: 2rem; font-weight: 900; color: var(--neon-bull); text-shadow: 0 0 10px rgba(0, 229, 153, 0.3);">₹0.00</div>
+                </div>
+                <!-- Trades Card -->
+                <div style="background: rgba(2, 6, 12, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 6px; padding: 12px 16px; text-align: center;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Total Trades</div>
+                    <div id="stats-trade-count" style="font-size: 2rem; font-weight: 900; color: var(--neon-accent); text-shadow: 0 0 10px rgba(0, 217, 245, 0.3);">0</div>
+                </div>
+                <!-- Legs Card -->
+                <div style="background: rgba(2, 6, 12, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 6px; padding: 12px 16px; text-align: center;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Executed Legs</div>
+                    <div id="stats-leg-count" style="font-size: 2rem; font-weight: 900; color: var(--neon-purple); text-shadow: 0 0 10px rgba(179, 136, 255, 0.3);">0</div>
+                </div>
+                <!-- Daily Brokerage Card -->
+                <div style="background: rgba(2, 6, 12, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 6px; padding: 12px 16px; text-align: center;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Daily Brokerage</div>
+                    <div id="stats-daily-brokerage" style="font-size: 2rem; font-weight: 900; color: var(--neon-bear); text-shadow: 0 0 10px rgba(255, 23, 68, 0.3);">₹0.00</div>
+                </div>
+                <!-- Total Brokerage Card -->
+                <div style="background: rgba(2, 6, 12, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 6px; padding: 12px 16px; text-align: center;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Total Brokerage</div>
+                    <div id="stats-total-brokerage" style="font-size: 2rem; font-weight: 900; color: var(--neon-bear); text-shadow: 0 0 10px rgba(255, 23, 68, 0.3);">₹0.00</div>
+                </div>
+            </div>
+        </section>
         
         <!-- COLUMN 1: REGIME & CLASSIFICATION -->
         <section class="panel overlay-panel" id="panel-regime">
@@ -435,6 +451,7 @@
         <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; position: relative;">
             <div style="display: flex; align-items: center; gap: 15px;">
                 <h2 id="option-chain-title">Nifty Live Option Chain</h2>
+                <button class="btn btn-secondary" id="btn-toggle-options" style="padding: 6px 14px; font-size: 0.75rem; font-weight: 700; margin-left: 10px; cursor: pointer; text-transform: uppercase; border-radius: 4px;">Show Chain</button>
                 <div style="display: flex; align-items: center; gap: 6px; background: rgba(30, 41, 59, 0.6); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color);">
                     <label style="font-size: 0.62rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0;">Expiry:</label>
                     <select id="set-dashboard-expiry" style="background: transparent; border: none; color: var(--neon-cyan); font-weight: 700; font-size: 0.75rem; cursor: pointer; outline: none; padding: 0 4px;"></select>
@@ -448,12 +465,14 @@
             <span class="close-overlay-btn">&times;</span>
         </div>
         
-        <!-- FALLBACK WARNING BANNER -->
-        <div id="fallback-warning-banner" style="display: none; background: rgba(235, 94, 85, 0.08); border: 1px solid var(--neon-bear); border-radius: 4px; padding: 8px 12px; margin: 10px 20px 0 20px; font-size: 0.75rem; font-weight: 600; color: var(--neon-bear); align-items: center; gap: 8px;">
-            <span>⚠️ Upstox API feed returned no active chain data. Showing Simulated Fallback option prices.</span>
-        </div>
-        <div class="table-scroll-container">
-            <table class="option-chain-table" id="option-chain-table">
+        <!-- Wrap in hidden container (v2.2) -->
+        <div id="options-panel-content" style="display: none; width: 100%;">
+            <!-- FALLBACK WARNING BANNER -->
+            <div id="fallback-warning-banner" style="display: none; background: rgba(235, 94, 85, 0.08); border: 1px solid var(--neon-bear); border-radius: 4px; padding: 8px 12px; margin: 10px 20px 0 20px; font-size: 0.75rem; font-weight: 600; color: var(--neon-bear); align-items: center; gap: 8px;">
+                <span>⚠️ Upstox API feed returned no active chain data. Showing Simulated Fallback option prices.</span>
+            </div>
+            <div class="table-scroll-container">
+                <table class="option-chain-table" id="option-chain-table">
                 <thead>
                     <tr>
                         <th colspan="6" class="col-group call-header">CALL OPTIONS</th>
@@ -480,6 +499,7 @@
                     <!-- Dynamic rendering -->
                 </tbody>
             </table>
+        </div>
         </div>
     </section>
 

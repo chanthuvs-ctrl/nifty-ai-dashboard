@@ -1803,6 +1803,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.initAcademy) {
         window.initAcademy();
     }
+
+    // Toggle live option chain visibility (v2.2)
+    const btnToggleOptions = document.getElementById('btn-toggle-options');
+    const optionsPanelContent = document.getElementById('options-panel-content');
+    if (btnToggleOptions && optionsPanelContent) {
+        btnToggleOptions.addEventListener('click', () => {
+            if (optionsPanelContent.style.display === 'none') {
+                optionsPanelContent.style.display = 'block';
+                btnToggleOptions.textContent = 'Hide Chain';
+                btnToggleOptions.style.background = 'rgba(0, 229, 153, 0.15)';
+                btnToggleOptions.style.color = 'var(--neon-bull)';
+                btnToggleOptions.style.boxShadow = '0 0 8px rgba(0, 229, 153, 0.2)';
+            } else {
+                optionsPanelContent.style.display = 'none';
+                btnToggleOptions.textContent = 'Show Chain';
+                btnToggleOptions.style.background = 'none';
+                btnToggleOptions.style.color = 'var(--text-muted)';
+                btnToggleOptions.style.boxShadow = 'none';
+            }
+        });
+    }
 });
 
 // Journal tab navigation logic
