@@ -44,16 +44,7 @@
                 <span class="ticker-label">MAX PAIN</span>
                 <span class="ticker-value text-purple" id="hdr-max-pain">22,250</span>
             </div>
-            <div class="ticker-box" style="border-left: 1px solid rgba(255,255,255,0.08); padding-left: 12px; margin-left: 4px; display: flex; gap: 12px; align-items: center;">
-                <div>
-                    <span class="ticker-label" style="color: #00d9f5; font-weight: 700; font-size: 0.6rem;">PAPER P&L</span>
-                    <span class="ticker-value" id="hdr-paper-pnl" style="color: var(--text-muted); font-size: 0.8rem;">₹0.00</span>
-                </div>
-                <div style="border-left: 1px solid rgba(255,255,255,0.08); padding-left: 12px;">
-                    <span class="ticker-label" style="color: var(--neon-bull); font-weight: 700; font-size: 0.6rem;">LIVE P&L</span>
-                    <span class="ticker-value" id="hdr-live-pnl" style="color: var(--text-muted); font-size: 0.8rem;">₹0.00</span>
-                </div>
-            </div>
+
         </div>
 
         <div class="header-actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -170,8 +161,18 @@
             <div class="panel-header" style="border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px; margin-bottom: 12px;">
                 <h2 style="font-size: 0.9rem; letter-spacing: 0.5px; color: var(--text-muted); text-transform: uppercase;">PORTFOLIO PERFORMANCE & STATS</h2>
             </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; width: 100%;">
-                <!-- P&L Card -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; width: 100%;">
+                <!-- Paper P&L Card -->
+                <div style="background: rgba(2, 6, 12, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 6px; padding: 12px 16px; text-align: center;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #00d9f5; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Paper P&L</div>
+                    <div id="hdr-paper-pnl" style="font-size: 2rem; font-weight: 900; color: var(--text-muted); text-shadow: 0 0 10px rgba(0, 217, 245, 0.2);">₹0.00</div>
+                </div>
+                <!-- Live P&L Card -->
+                <div style="background: rgba(2, 6, 12, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 6px; padding: 12px 16px; text-align: center;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--neon-bull); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Live P&L</div>
+                    <div id="hdr-live-pnl" style="font-size: 2rem; font-weight: 900; color: var(--text-muted); text-shadow: 0 0 10px rgba(0, 229, 153, 0.2);">₹0.00</div>
+                </div>
+                <!-- Booked P&L Card -->
                 <div style="background: rgba(2, 6, 12, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 6px; padding: 12px 16px; text-align: center;">
                     <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Booked P&L</div>
                     <div id="stats-booked-pnl" style="font-size: 2rem; font-weight: 900; color: var(--neon-bull); text-shadow: 0 0 10px rgba(0, 229, 153, 0.3);">₹0.00</div>
