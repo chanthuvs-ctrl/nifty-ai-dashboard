@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.0.3" 
+VERSION = "3.0.3-patch" 
 import time
 import os
 import json
@@ -2564,15 +2564,15 @@ journal = TradeJournal()
 class SettingsUpdate(BaseModel):
     capital: float
     risk_pct: float
-    preferred_broker: str
-    preferred_strategy: str
-    regime_override: str
-    feed_mode: str
-    upstox_access_token: str
-    upstox_expiry_date: str
-    dashboard_username: str
-    dashboard_password: str
-    auto_trade_mode: str = "OFF"
+    preferred_broker: Optional[str] = "Upstox"
+    preferred_strategy: Optional[str] = "All"
+    regime_override: Optional[str] = "Auto"
+    feed_mode: Optional[str] = "Simulation"
+    upstox_access_token: Optional[str] = ""
+    upstox_expiry_date: Optional[str] = ""
+    dashboard_username: Optional[str] = "admin"
+    dashboard_password: Optional[str] = "password123"
+    auto_trade_mode: Optional[str] = "OFF"
     trailing_sl_pts: float = 30.0
 
 class LoginRequest(BaseModel):
@@ -2833,15 +2833,15 @@ def get_settings():
 def update_settings(data: SettingsUpdate):
     state.settings["capital"] = data.capital
     state.settings["risk_pct"] = data.risk_pct
-    state.settings["preferred_broker"] = data.preferred_broker
-    state.settings["preferred_strategy"] = data.preferred_strategy
-    state.settings["regime_override"] = data.regime_override
-    state.settings["feed_mode"] = data.feed_mode
-    state.settings["upstox_access_token"] = data.upstox_access_token
-    state.settings["upstox_expiry_date"] = data.upstox_expiry_date
-    state.settings["dashboard_username"] = data.dashboard_username
-    state.settings["dashboard_password"] = data.dashboard_password
-    state.settings["auto_trade_mode"] = data.auto_trade_mode
+    state.settings["preferred_broker"] = data.preferred_broker or "Upstox"
+    state.settings["preferred_strategy"] = data.preferred_strategy or "All"
+    state.settings["regime_override"] = data.regime_override or "Auto"
+    state.settings["feed_mode"] = data.feed_mode or "Simulation"
+    state.settings["upstox_access_token"] = data.upstox_access_token or ""
+    state.settings["upstox_expiry_date"] = data.upstox_expiry_date or ""
+    state.settings["dashboard_username"] = data.dashboard_username or "admin"
+    state.settings["dashboard_password"] = data.dashboard_password or "password123"
+    state.settings["auto_trade_mode"] = data.auto_trade_mode or "OFF"
     state.settings["trailing_sl_pts"] = data.trailing_sl_pts
     
     # Try updating the expiry automatically based on token validity/feed mode
