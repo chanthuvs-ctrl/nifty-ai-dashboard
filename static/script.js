@@ -971,7 +971,18 @@ async function fetchJournal() {
                     
                     const typeBadge = `<span class="badge-pro" style="background: rgba(${typeColor}, 0.12); color: rgb(${typeColor}); border: 1px solid rgb(${typeColor}); font-size: 0.58rem; padding: 2px 5px; margin-left: 6px;">${typeLabel}</span>`;
                     
-                    const capital = parseFloat(localStorage.getItem('capital') || '500000');
+                                        let capital = 500000;
+                    try {
+                        const localSet = JSON.parse(localStorage.getItem('nifty_settings'));
+                        if (localSet && localSet.capital) {
+                            capital = parseFloat(localSet.capital);
+                        } else {
+                            const capInput = document.getElementById('set-capital');
+                            if (capInput) capital = parseFloat(capInput.value) || 500000;
+                        }
+                    } catch (e) {
+                        capital = 500000;
+                    }
                     const targetVal = pos.half_booked ? "50% Trailed" : `₹${(capital * 0.04).toFixed(2)}`;
                     const slVal = pos.half_booked ? "₹0.00 (Breakeven)" : `-₹${(capital * 0.02).toFixed(2)}`;
                     
@@ -1048,7 +1059,18 @@ async function fetchJournal() {
                     const tr = document.createElement('tr');
                     const typeBadge = `<span class="badge-pro" style="background: rgba(${typeColor}, 0.12); color: rgb(${typeColor}); border: 1px solid rgb(${typeColor}); font-size: 0.58rem; padding: 2px 5px; margin-left: 6px;">${typeLabel}</span>`;
                     
-                    const capital = parseFloat(localStorage.getItem('capital') || '500000');
+                                        let capital = 500000;
+                    try {
+                        const localSet = JSON.parse(localStorage.getItem('nifty_settings'));
+                        if (localSet && localSet.capital) {
+                            capital = parseFloat(localSet.capital);
+                        } else {
+                            const capInput = document.getElementById('set-capital');
+                            if (capInput) capital = parseFloat(capInput.value) || 500000;
+                        }
+                    } catch (e) {
+                        capital = 500000;
+                    }
                     const targetVal = `₹${(capital * 0.04).toFixed(2)}`;
                     const slVal = `-₹${(capital * 0.02).toFixed(2)}`;
                     const closedInfo = `<div style="font-size:0.6rem; color:var(--text-muted); margin-top:2px; font-family:monospace;">Tgt: ${targetVal} | SL: ${slVal}</div>`;
@@ -1640,15 +1662,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!panel) return;
             
             if (isMobile) {
-                if (panelId === 'panel-chart') {
-                    btn.classList.add('active');
-                    panel.classList.add('active');
-                    panel.classList.remove('hidden-panel');
-                } else {
-                    btn.classList.remove('active');
-                    panel.classList.remove('active');
-                    panel.classList.add('hidden-panel');
-                }
+                btn.classList.remove('active');
+                panel.classList.remove('active');
+                panel.classList.add('hidden-panel');
             } else {
                 btn.classList.add('active');
                 panel.classList.add('active');
