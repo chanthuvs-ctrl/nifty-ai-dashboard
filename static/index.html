@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3.0.3-patch">
+    <link rel="stylesheet" href="style.css?v=3.1.8-patch">
     <script src="chart.umd.js"></script>
     <script src="chartjs-plugin-annotation.js"></script>
 </head>
@@ -20,7 +20,7 @@
         <div class="header-brand">
             <div class="pulse-indicator" id="refresh-indicator"></div>
             <h1>INTRADAY <span class="glow-text">DECISION ENGINE</span></h1>
-            <span class="badge-pro" id="version-badge">PRODUCTION v3.0.3-patch-patch</span>
+            <span class="badge-pro" id="version-badge">PRODUCTION v3.1.8-patch-patch</span>
         </div>
         
         <div class="live-ticker-container">
@@ -161,9 +161,9 @@
             </div>
 
             <!-- MTF CONFIRMATION STATUS BAR -->
-            <div class="mtf-alignment-bar" style="display: flex; gap: 8px; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 6px; margin-top: 5px; margin-bottom: 5px; font-family: var(--font-mono); font-size: 0.68rem;">
+            <div class="mtf-alignment-bar" style="display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 6px; margin-top: 5px; margin-bottom: 5px; font-family: var(--font-mono); font-size: 0.68rem; width: 100%; box-sizing: border-box;">
                 <span style="color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">MTF Trends:</span>
-                <div style="display: flex; gap: 10px; align-items: center;">
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;">
                     <div style="display: flex; align-items: center; gap: 4px;">
                         <span style="color: var(--text-muted);">15m (Macro):</span>
                         <span id="trend-15m-badge" style="font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05);">Neutral</span>
@@ -333,6 +333,14 @@
                     </div>
                 </div>
 
+                <!-- AI DECISION MATRIX CARD -->
+                <div style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px; width: 100%; box-sizing: border-box;">
+                    <div style="font-size: 0.72rem; font-weight: 700; color: var(--neon-cyan); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">AI Trade Decision Matrix</div>
+                    <div class="decision-matrix-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;" id="decision-matrix-container">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
                 <!-- ACTION CONFIRM BUTTON -->
                 <div class="action-row" style="display: flex; gap: 10px; margin-top: 15px; width: 100%;">
                     <button class="btn btn-secondary btn-glow" id="btn-execute-paper" style="flex: 1; padding: 12px; font-size: 0.8rem; text-transform: uppercase; justify-content: center;">
@@ -443,6 +451,17 @@
                 </div>
             </div>
             
+            <!-- ATM Straddle Premium Graph (v3.1.8-patch) -->
+            <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px; margin-top: 12px;">
+                <div class="pnl-chart-header" style="border: none; padding: 0; min-height: auto; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <h2 style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">ATM Straddle Premium</h2>
+                    <span id="straddle-trend-status" style="font-size: 0.65rem; font-weight: 700; color: var(--neon-neutral); text-transform: uppercase; letter-spacing: 0.5px;">STABLE</span>
+                </div>
+                <div class="chart-container" style="position: relative; width: 100%; height: 140px;">
+                    <canvas id="live-straddle-chart"></canvas>
+                </div>
+            </div>
+            
             <!-- Strategy change log strip below chart -->
             <div class="chart-strategy-strip" id="chart-strategy-strip">
                 <div class="chart-current-strategy" id="chart-current-strat">
@@ -477,7 +496,7 @@
         </div>
         
         <!-- Wrap in hidden container (v2.2) -->
-        <div id="options-panel-content" style="display: none; width: 100%;">
+        <div id="options-panel-content" style="display: block; width: 100%;">
             <!-- FALLBACK WARNING BANNER -->
             <div id="fallback-warning-banner" style="display: none; background: rgba(235, 94, 85, 0.08); border: 1px solid var(--neon-bear); border-radius: 4px; padding: 8px 12px; margin: 10px 20px 0 20px; font-size: 0.75rem; font-weight: 600; color: var(--neon-bear); align-items: center; gap: 8px;">
                 <span>⚠️ Upstox API feed returned no active chain data. Showing Simulated Fallback option prices.</span>
@@ -1132,6 +1151,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=3.0.3-patch"></script>
+    <script src="script.js?v=3.1.8-patch"></script>
 </body>
 </html>

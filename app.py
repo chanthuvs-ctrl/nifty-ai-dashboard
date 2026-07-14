@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.0.3-patch" 
+VERSION = "3.1.8-patch" 
 import time
 import os
 import json
@@ -445,6 +445,195 @@ class SimulationState:
             
         return []
 
+    def find_hedge_strikes(self, atm_strike: float, strike_interval: float) -> tuple:
+        """Returns (hedge_call_strike, hedge_put_strike) strictly < 5.0, preferring premium closest to 2.0."""
+        hedge_call_strike = atm_strike + 5 * strike_interval
+        hedge_put_strike = atm_strike - 5 * strike_interval
+        
+        if not self.option_chain:
+            return hedge_call_strike, hedge_put_strike
+            
+        calls = [x for x in self.option_chain if x.get("call_price") is not None and 2.0 <= x["call_price"] <= 5.0 and x["strike"] > atm_strike]
+        if calls:
+            hedge_call_item = min(calls, key=lambda x: abs(x["call_price"] - 2.0))
+            hedge_call_strike = hedge_call_item["strike"]
+        else:
+            calls_any = [x for x in self.option_chain if x.get("call_price") is not None and x["strike"] > atm_strike]
+            if calls_any:
+                hedge_call_item = min(calls_any, key=lambda x: abs(x["call_price"] - 2.0))
+                hedge_call_strike = hedge_call_item["strike"]
+                
+        puts = [x for x in self.option_chain if x.get("put_price") is not None and 2.0 <= x["put_price"] <= 5.0 and x["strike"] < atm_strike]
+        if puts:
+            hedge_put_item = min(puts, key=lambda x: abs(x["put_price"] - 2.0))
+            hedge_put_strike = hedge_put_item["strike"]
+        else:
+            puts_any = [x for x in self.option_chain if x.get("put_price") is not None and x["strike"] < atm_strike]
+            if puts_any:
+                hedge_put_item = min(puts_any, key=lambda x: abs(x["put_price"] - 2.0))
+                hedge_put_strike = hedge_put_item["strike"]
+                
+        return hedge_call_strike, hedge_put_strike
+
+    def get_active_expiry_date(self) -> str:
+        """Returns the appropriate expiry date. If closest expiry is < 3 days away, returns the next expiry."""
+        pref_index = self.settings.get("preferred_index", "Nifty")
+        feed_mode = self.settings.get("feed_mode", "Simulation")
+        token = self.settings.get("upstox_access_token")
+        
+        if feed_mode == "Upstox" and token:
+            expiries = self.get_upstox_expiries(pref_index)
+            if expiries:
+                closest_expiry = expiries[0]
+                try:
+                    today = datetime.date.today()
+                    exp_date = datetime.datetime.strptime(closest_expiry, "%Y-%m-%d").date()
+                    if (exp_date - today).days < 3:
+                        if len(expiries) > 1:
+                            return expiries[1]
+                except Exception as e:
+                    print(f"⚠️ Error parsing expiry date: {e}")
+                return closest_expiry
+        
+        today = datetime.date.today()
+        target_weekday = 4 if pref_index.lower() == "sensex" else 3
+        days_ahead = (target_weekday - today.weekday()) % 7
+        if days_ahead < 3:
+            days_ahead += 7
+        next_expiry = today + datetime.timedelta(days=days_ahead)
+        return next_expiry.strftime("%Y-%m-%d")
+
+    def get_straddle_premium(self) -> float:
+        """Returns current combined ATM straddle premium LTP."""
+        pref_index = self.settings.get("preferred_index", "Nifty")
+        spot = self.spot_price
+        atm_strike = round(spot / 100.0) * 100 if pref_index.lower() == "sensex" else round(spot / 50.0) * 50
+        
+        atm_ce_ltp = 100.0
+        atm_pe_ltp = 100.0
+        for item in self.option_chain:
+            if item.get("strike") == atm_strike:
+                atm_ce_ltp = item.get("call_price", 100.0)
+                atm_pe_ltp = item.get("put_price", 100.0)
+                break
+        return round(atm_ce_ltp + atm_pe_ltp, 2)
+
+    def check_iv_crush(self) -> bool:
+        """Returns True if combined ATM straddle premium is <= its value from 5 minutes prior."""
+        if len(self.price_history) < 60:
+            return False
+        prior_straddle = self.price_history[-60].get("straddle_premium", 0.0)
+        current_straddle = self.get_straddle_premium()
+        if prior_straddle > 0.0 and current_straddle <= prior_straddle:
+            return True
+        return False
+
+    def update_opening_range(self):
+        """Updates Nifty 09:15 - 09:30 opening range boundaries."""
+        ist_now = get_ist_datetime()
+        ist_time = ist_now.time()
+        
+        if ist_time < datetime.time(9, 15):
+            self.opening_range_high = self.spot_price
+            self.opening_range_low = self.spot_price
+            return
+            
+        if datetime.time(9, 15) <= ist_time <= datetime.time(9, 30):
+            if getattr(self, "opening_range_high", None) is None or self.spot_price > self.opening_range_high:
+                self.opening_range_high = self.spot_price
+            if getattr(self, "opening_range_low", None) is None or self.spot_price < self.opening_range_low:
+                self.opening_range_low = self.spot_price
+
+    def update_candles_tick(self, override_type=None):
+        """Updates active candle metrics and handles periodic completions/closings."""
+        for candle in [self.candle_1m, self.candle_5m, self.candle_15m]:
+            candle["high"] = max(candle["high"], self.spot_price)
+            candle["low"] = min(candle["low"], self.spot_price)
+            candle["close"] = self.spot_price
+            candle["volume"] += random.uniform(50, 200)
+            candle["vwap_sum_pv"] += self.spot_price * candle["volume"]
+            candle["vwap_sum_v"] += candle["volume"]
+
+        now = time.time()
+        
+        # 1. Close 1-minute candle
+        if now - self.candle_1m["time"] >= 60 or override_type == "candle_close":
+            vwap_val = self.candle_1m["vwap_sum_pv"] / self.candle_1m["vwap_sum_v"] if self.candle_1m["vwap_sum_v"] > 0 else self.spot_price
+            self.candles_1m.append({
+                "time": self.candle_1m["time"],
+                "open": self.candle_1m["open"],
+                "high": self.candle_1m["high"],
+                "low": self.candle_1m["low"],
+                "close": self.candle_1m["close"],
+                "volume": self.candle_1m["volume"],
+                "vwap": vwap_val
+            })
+            if len(self.candles_1m) > 60:
+                self.candles_1m.pop(0)
+            self.candle_1m = {
+                "time": now,
+                "open": self.spot_price,
+                "high": self.spot_price,
+                "low": self.spot_price,
+                "close": self.spot_price,
+                "volume": 0.0,
+                "vwap_sum_pv": 0.0,
+                "vwap_sum_v": 0.0
+            }
+            
+        # 2. Close 5-minute candle
+        if now - self.candle_5m["time"] >= 300 or override_type == "candle_close":
+            vwap_val = self.candle_5m["vwap_sum_pv"] / self.candle_5m["vwap_sum_v"] if self.candle_5m["vwap_sum_v"] > 0 else self.spot_price
+            self.candles_5m.append({
+                "time": self.candle_5m["time"],
+                "open": self.candle_5m["open"],
+                "high": self.candle_5m["high"],
+                "low": self.candle_5m["low"],
+                "close": self.candle_5m["close"],
+                "volume": self.candle_5m["volume"],
+                "vwap": vwap_val
+            })
+            if len(self.candles_5m) > 60:
+                self.candles_5m.pop(0)
+            self.candle_5m = {
+                "time": now,
+                "open": self.spot_price,
+                "high": self.spot_price,
+                "low": self.spot_price,
+                "close": self.spot_price,
+                "volume": 0.0,
+                "vwap_sum_pv": 0.0,
+                "vwap_sum_v": 0.0
+            }
+            self.current_candle = self.candle_5m
+            self.recompute_indicators()
+            self.recalculation_trigger = "Completed 5-minute candle"
+            
+        # 3. Close 15-minute candle
+        if now - self.candle_15m["time"] >= 900 or override_type == "candle_close":
+            vwap_val = self.candle_15m["vwap_sum_pv"] / self.candle_15m["vwap_sum_v"] if self.candle_15m["vwap_sum_v"] > 0 else self.spot_price
+            self.candles_15m.append({
+                "time": self.candle_15m["time"],
+                "open": self.candle_15m["open"],
+                "high": self.candle_15m["high"],
+                "low": self.candle_15m["low"],
+                "close": self.candle_15m["close"],
+                "volume": self.candle_15m["volume"],
+                "vwap": vwap_val
+            })
+            if len(self.candles_15m) > 60:
+                self.candles_15m.pop(0)
+            self.candle_15m = {
+                "time": now,
+                "open": self.spot_price,
+                "high": self.spot_price,
+                "low": self.spot_price,
+                "close": self.spot_price,
+                "volume": 0.0,
+                "vwap_sum_pv": 0.0,
+                "vwap_sum_v": 0.0
+            }
+
     def update_default_expiry(self):
         pref_index = self.settings.get("preferred_index", "Nifty")
         feed_mode = self.settings.get("feed_mode", "Simulation")
@@ -602,17 +791,8 @@ class SimulationState:
             legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "SELL"})
             legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "BUY"})
         elif strategy == "Short Strangle" or strategy == "Short Straddle":
-            # Locate deep OTM Buy hedge strikes closest to ₹2 premium (strictly < ₹5 and OTM)
-            hedge_call_strike = atm_strike + 5 * strike_interval
-            hedge_put_strike = atm_strike - 5 * strike_interval
-            calls = [x for x in self.option_chain if x.get("call_price") is not None and x["call_price"] < 5.0 and x["strike"] > atm_strike]
-            if calls:
-                hedge_call_item = min(calls, key=lambda x: abs(x["call_price"] - 2.0))
-                hedge_call_strike = hedge_call_item["strike"]
-            puts = [x for x in self.option_chain if x.get("put_price") is not None and x["put_price"] < 5.0 and x["strike"] < atm_strike]
-            if puts:
-                hedge_put_item = min(puts, key=lambda x: abs(x["put_price"] - 2.0))
-                hedge_put_strike = hedge_put_item["strike"]
+            # Scan all OTM strikes with target ₹2.00 / strictly < ₹5.00
+            hedge_call_strike, hedge_put_strike = self.find_hedge_strikes(atm_strike, strike_interval)
             
             sell_call_strike = atm_strike + strike_interval if strategy == "Short Strangle" else atm_strike
             sell_put_strike = atm_strike - strike_interval if strategy == "Short Strangle" else atm_strike
@@ -913,6 +1093,7 @@ class SimulationState:
         ]
 
     def tick_5s(self, override_type: Optional[str] = None):
+        self.update_opening_range()
         self.check_daily_reset()
         """Simulate market price tick update every 5 seconds or handle manual overrides."""
         # 1. Update spot price
@@ -1067,6 +1248,7 @@ class SimulationState:
             "time": get_ist_time_str(),
             "price": round(self.spot_price, 2),
             "vwap": round(self.get_vwap(), 2),
+            "straddle_premium": self.get_straddle_premium(),
             "ema20": round(self.ema_20, 2),
             "ema50": round(self.ema_50, 2),
             "pnl": self.calculate_real_intraday_pnl(),
@@ -1076,95 +1258,7 @@ class SimulationState:
         if len(self.price_history) > 360:
             self.price_history.pop(0)
 
-        # Update current candle metrics for all three timeframes
-        for candle in [self.candle_1m, self.candle_5m, self.candle_15m]:
-            candle["high"] = max(candle["high"], self.spot_price)
-            candle["low"] = min(candle["low"], self.spot_price)
-            candle["close"] = self.spot_price
-            candle["volume"] += random.uniform(50, 200)
-            candle["vwap_sum_pv"] += self.spot_price * candle["volume"]
-            candle["vwap_sum_v"] += candle["volume"]
-
-        now = time.time()
-        
-        # 1. Check if 1 minute completed
-        if now - self.candle_1m["time"] >= 60 or override_type == "candle_close":
-            vwap_val = self.candle_1m["vwap_sum_pv"] / self.candle_1m["vwap_sum_v"] if self.candle_1m["vwap_sum_v"] > 0 else self.spot_price
-            self.candles_1m.append({
-                "time": self.candle_1m["time"],
-                "open": self.candle_1m["open"],
-                "high": self.candle_1m["high"],
-                "low": self.candle_1m["low"],
-                "close": self.candle_1m["close"],
-                "volume": self.candle_1m["volume"],
-                "vwap": vwap_val
-            })
-            if len(self.candles_1m) > 60:
-                self.candles_1m.pop(0)
-            self.candle_1m = {
-                "time": now,
-                "open": self.spot_price,
-                "high": self.spot_price,
-                "low": self.spot_price,
-                "close": self.spot_price,
-                "volume": 0.0,
-                "vwap_sum_pv": 0.0,
-                "vwap_sum_v": 0.0
-            }
-
-        # 2. Check if 5 minutes completed
-        if now - self.candle_5m["time"] >= 300 or override_type == "candle_close":
-            vwap_val = self.candle_5m["vwap_sum_pv"] / self.candle_5m["vwap_sum_v"] if self.candle_5m["vwap_sum_v"] > 0 else self.spot_price
-            self.candles_5m.append({
-                "time": self.candle_5m["time"],
-                "open": self.candle_5m["open"],
-                "high": self.candle_5m["high"],
-                "low": self.candle_5m["low"],
-                "close": self.candle_5m["close"],
-                "volume": self.candle_5m["volume"],
-                "vwap": vwap_val
-            })
-            if len(self.candles_5m) > 60:
-                self.candles_5m.pop(0)
-            self.candle_5m = {
-                "time": now,
-                "open": self.spot_price,
-                "high": self.spot_price,
-                "low": self.spot_price,
-                "close": self.spot_price,
-                "volume": 0.0,
-                "vwap_sum_pv": 0.0,
-                "vwap_sum_v": 0.0
-            }
-            # Keep alias synchronized
-            self.current_candle = self.candle_5m
-            self.recompute_indicators()
-            self.recalculation_trigger = "Completed 5-minute candle"
-
-        # 3. Check if 15 minutes completed
-        if now - self.candle_15m["time"] >= 900 or override_type == "candle_close":
-            vwap_val = self.candle_15m["vwap_sum_pv"] / self.candle_15m["vwap_sum_v"] if self.candle_15m["vwap_sum_v"] > 0 else self.spot_price
-            self.candles_15m.append({
-                "time": self.candle_15m["time"],
-                "open": self.candle_15m["open"],
-                "high": self.candle_15m["high"],
-                "low": self.candle_15m["low"],
-                "close": self.candle_15m["close"],
-                "volume": self.candle_15m["volume"],
-                "vwap": vwap_val
-            })
-            if len(self.candles_15m) > 60:
-                self.candles_15m.pop(0)
-            self.candle_15m = {
-                "time": now,
-                "open": self.spot_price,
-                "high": self.spot_price,
-                "low": self.spot_price,
-                "close": self.spot_price,
-                "volume": 0.0,
-                "vwap_sum_pv": 0.0,
-                "vwap_sum_v": 0.0
-            }
+        self.update_candles_tick(override_type)
 
         # Check immediate override recalculations or periodic recalculation
         if self.recalculation_trigger != "Schedule" or (now - self.last_rec_time >= 60):
@@ -1189,7 +1283,7 @@ class SimulationState:
 
     def fetch_upstox_data(self) -> bool:
         token = self.settings["upstox_access_token"]
-        expiry = self.settings["upstox_expiry_date"]
+        expiry = self.get_active_expiry_date()
         if not token or not expiry:
             return False
             
@@ -1224,6 +1318,8 @@ class SimulationState:
             # 1. Update spot price from underlying_spot_price of the first element
             first_item = data_list[0]
             self.spot_price = float(first_item.get("underlying_spot_price", self.spot_price))
+            self.update_opening_range()
+            self.update_candles_tick()
             self.price_source = "Upstox Live Feed (BSE India)" if preferred_index.lower() == "sensex" else "Upstox Live Feed (NSE India)"
             self.price_date = get_ist_date_str()
             self.price_time = get_ist_time_str()
@@ -1351,6 +1447,7 @@ class SimulationState:
                 "time": get_ist_time_str(),
                 "price": round(self.spot_price, 2),
                 "vwap": round(self.get_vwap(), 2),
+            "straddle_premium": self.get_straddle_premium(),
                 "ema20": round(self.ema_20, 2),
                 "ema50": round(self.ema_50, 2),
                 "pnl": self.calculate_real_intraday_pnl(),
@@ -1530,9 +1627,9 @@ class SimulationState:
         if feed_mode != "Simulation" and ist_time < datetime.time(9, 30):
             return
             
-        # 2. Trading stop & force square-off (15:00 IST for Live, 15:30 IST for Paper)
-        close_time = datetime.time(15, 0) if mode == "Live" else datetime.time(15, 30)
-        if feed_mode != "Simulation" and ist_time >= close_time:
+        # 2. Block new entries after 15:00:00 IST and aggressively close open positions
+        close_time = datetime.time(15, 0)
+        if ist_time >= close_time:
             if self.auto_trade_active_id:
                 active_trade = None
                 for t in journal.trades:
@@ -1541,10 +1638,10 @@ class SimulationState:
                         break
                 if active_trade:
                     journal.close_trade(active_trade["id"], self.spot_price)
-                    active_trade["reason"] = f"Force Square-off ({close_time.strftime('%H:%M')} IST Trading Session Close)"
+                    active_trade["reason"] = f"Force Square-off (15:00 IST Time-in-Force Kill Switch)"
                     journal.save_journal()
                     self.auto_trade_active_id = None
-                    print(f"🤖 AUTO-TRADE: Force squared off open position at {close_time.strftime('%H:%M')} IST.")
+                    print("🤖 AUTO-TRADE: Force squared off open position due to 15:00 IST Kill Switch.")
             return
             
         capital = self.get_available_capital()
@@ -1602,24 +1699,63 @@ class SimulationState:
 
         # 2. Manage Active Position (if exists)
         if active_trade:
-            # A. Check 2% trade stop loss limit (Hard SL hit)
-            if floating_pnl <= -trade_limit:
+            # A. Check 2% capital Stop Loss limit (Hard Capital SL hit)
+            capital_sl_limit = capital * 0.02
+            if floating_pnl <= -capital_sl_limit:
                 journal.close_trade(active_trade["id"], spot)
-                active_trade["reason"] = f"Trade 2% SL limit hit at ₹{floating_pnl:.2f}"
+                active_trade["reason"] = f"Capital SL limit (-2%) hit at ₹{floating_pnl:.2f}"
                 journal.save_journal()
                 self.auto_trade_active_id = None
                 self.signal_change_pending = False
                 self.trail_activated = False
-                print(f"🤖 AUTO-TRADE: Closed position due to 2% Trade SL limit (₹{floating_pnl:.2f})")
+                print(f"🤖 AUTO-TRADE: Closed position due to 2% Capital SL limit (₹{floating_pnl:.2f})")
                 return
-                
+
             strat = active_trade["strategy"]
             active_size = active_trade.get("size", suggested_lots)
-            
-            # C. Profit Management & Trailing Stop-Loss stage checks
             is_option_buy = "Buy CE" in strat or "Buy PE" in strat
-            is_strangle = "Strangle" in strat
             
+            # B. Confidence-based Exit: Option Buying position falls < 70
+            if is_option_buy and self.confidence < 70.0:
+                journal.close_trade(active_trade["id"], spot)
+                active_trade["reason"] = f"Confidence dropped below 70 (Current: {self.confidence:.1f}%)"
+                journal.save_journal()
+                self.auto_trade_active_id = None
+                self.signal_change_pending = False
+                self.trail_activated = False
+                print(f"🤖 AUTO-TRADE: Closed Option Buy position immediately due to confidence drop (<70%)")
+                return
+
+            # C. Position Exclusivity Exit: Close existing directional trade immediately if new directional strategy triggers
+            is_active_directional = "Buy" in strat or "Spread" in strat
+            is_new_directional = "Buy" in rec or "Spread" in rec
+            if is_active_directional and is_new_directional and rec != strat:
+                journal.close_trade(active_trade["id"], spot)
+                active_trade["reason"] = f"Position Exclusivity: Exited {strat} to enter new directional strategy {rec}"
+                journal.save_journal()
+                self.auto_trade_active_id = None
+                self.signal_change_pending = False
+                self.trail_activated = False
+                print(f"🤖 AUTO-TRADE: Closed {strat} immediately for position exclusivity to switch to {rec}.")
+                return
+
+            # D. Dynamic Profit Trailing (+4% of Capital)
+            if floating_pnl >= 0.04 * capital and not active_trade.get("half_booked", False):
+                half_profit = floating_pnl * 0.5
+                active_trade["half_booked"] = True
+                active_trade["booked_pnl"] = active_trade.get("booked_pnl", 0.0) + half_profit
+                active_trade["size"] = max(0.5, active_trade["size"] * 0.5)
+                for leg in active_trade.get("legs", []):
+                    leg["quantity"] = max(1, int(leg["quantity"] / 2))
+                
+                # Move SL to breakeven
+                active_trade["stage"] = "BREAKEVEN"
+                active_trade["locked_profit"] = 0.0
+                journal.save_journal()
+                print(f"🏆 DYNAMIC TRAILING: Booked 50% profit (₹{half_profit:.2f}) at +4% Capital threshold. SL moved to Breakeven entry price.")
+
+            # E. Profit Management & Trailing Stop-Loss stage checks
+            is_strangle = "Strangle" in strat
             if is_option_buy:
                 activation_threshold = capital * 0.04
             elif is_strangle:
@@ -1649,59 +1785,43 @@ class SimulationState:
             total_costs = 3.0 * entry_brokerage
             
             # Transition triggers
-            # Stage 1 -> Stage 2 (OPEN -> RISK)
             if current_stage == "OPEN":
                 current_stage = "RISK"
-                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): OPEN -> RISK (Risk carrying started, Hard SL active)")
+                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): OPEN -> RISK")
             
-            # Stage 2 -> Stage 3 (RISK -> BREAKEVEN)
             if current_stage == "RISK" and floating_pnl >= R:
                 current_stage = "BREAKEVEN"
                 active_trade["locked_profit"] = total_costs
-                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): RISK -> BREAKEVEN (Profit reached 1R: ₹{floating_pnl:.2f} >= ₹{R:.2f}). SL moved to cover transaction costs (₹{total_costs:.2f}).")
+                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): RISK -> BREAKEVEN")
                 
-            # Stage 3 -> Stage 4 (BREAKEVEN -> PROFIT PROTECTION)
-            # Trailing stops / lock profit activates at >= 2R AND when trailing activation threshold is met
             if current_stage == "BREAKEVEN" and floating_pnl >= 2.0 * R and floating_pnl >= activation_threshold:
                 current_stage = "PROFIT PROTECTION"
                 active_trade["trail_activated"] = True
-                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): BREAKEVEN -> PROFIT PROTECTION (Profit reached 2R & activation threshold: ₹{floating_pnl:.2f} >= ₹{2.0*R:.2f}). Trailing profit locks active.")
+                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): BREAKEVEN -> PROFIT PROTECTION")
                 
-            # Stage 4 -> Stage 5 (PROFIT PROTECTION -> PROFIT MAXIMIZATION)
             if current_stage == "PROFIT PROTECTION" and floating_pnl >= 6.0 * R:
                 current_stage = "PROFIT MAXIMIZATION"
-                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): PROFIT PROTECTION -> PROFIT MAXIMIZATION (Profit reached 6R: ₹{floating_pnl:.2f} >= ₹{6.0*R:.2f}). Holding for maximized returns.")
+                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): PROFIT PROTECTION -> PROFIT MAXIMIZATION")
             
             # Store back stage
             active_trade["stage"] = current_stage
             
-            # Dynamic Lock Profit calculation for PROFIT PROTECTION / PROFIT MAXIMIZATION
-            if current_stage in ["PROFIT PROTECTION", "PROFIT MAXIMIZATION"]:
+            # Dynamic Lock Profit calculation for trailing stop stage
+            if current_stage in ["PROFIT PROTECTION", "PROFIT MAXIMIZATION"] and not active_trade.get("half_booked", False):
                 multiple = peak_pnl / R if R > 0 else 0
-                lock_pct = 0.0
-                if multiple >= 10.0:
-                    lock_pct = 0.90
-                elif multiple >= 8.0:
-                    lock_pct = 0.80
-                elif multiple >= 6.0:
-                    lock_pct = 0.70
-                elif multiple >= 5.0:
-                    lock_pct = 0.60
-                elif multiple >= 4.0:
-                    lock_pct = 0.50
-                elif multiple >= 3.0:
-                    lock_pct = 0.40
-                elif multiple >= 2.0:
-                    lock_pct = 0.30
-                else:
-                    lock_pct = 0.30
-                    
+                lock_pct = 0.30
+                if multiple >= 10.0: lock_pct = 0.90
+                elif multiple >= 8.0: lock_pct = 0.80
+                elif multiple >= 6.0: lock_pct = 0.70
+                elif multiple >= 5.0: lock_pct = 0.60
+                elif multiple >= 4.0: lock_pct = 0.50
+                elif multiple >= 3.0: lock_pct = 0.40
+                
                 calculated_lock = peak_pnl * lock_pct
                 if calculated_lock > active_trade["locked_profit"]:
-                    print(f"🔒 PROFIT LOCK UPDATE (ID {active_trade['id']}): ₹{active_trade['locked_profit']:.2f} -> ₹{calculated_lock:.2f} (Lock Pct: {lock_pct*100:.0f}%, Peak PnL: ₹{peak_pnl:.2f})")
+                    print(f"🔒 PROFIT LOCK UPDATE (ID {active_trade['id']}): ₹{active_trade['locked_profit']:.2f} -> ₹{calculated_lock:.2f}")
                     active_trade["locked_profit"] = round(calculated_lock, 2)
             
-            # Save progress so far
             journal.save_journal()
             
             # Exits Evaluation
@@ -1709,17 +1829,14 @@ class SimulationState:
             exit_reason = ""
             
             if current_stage == "RISK":
-                # Check Hard SL
                 if floating_pnl <= -R:
                     sl_hit = True
                     exit_reason = f"Hard SL hit (Limit: -₹{R:.2f}, Current PnL: ₹{floating_pnl:.2f})"
             elif current_stage == "BREAKEVEN":
-                # Check Breakeven SL
                 if floating_pnl < total_costs:
                     sl_hit = True
                     exit_reason = f"Breakeven SL hit (Stop: ₹{total_costs:.2f}, Current PnL: ₹{floating_pnl:.2f})"
             elif current_stage in ["PROFIT PROTECTION", "PROFIT MAXIMIZATION"]:
-                # Check Locked Profit trailing stop
                 locked_threshold = active_trade["locked_profit"]
                 if floating_pnl < locked_threshold:
                     sl_hit = True
@@ -1734,60 +1851,50 @@ class SimulationState:
                 print(f"🤖 AUTO-TRADE: Closed position (ID {active_trade['id']}). Reason: {exit_reason}")
                 return
             
-            # D. Check for AI recommendation change exit with confirmation delay
+            # F. Check for AI recommendation change exit with confirmation delay
             is_bullish = "CE" in strat or "Bull" in strat
             is_bearish = "PE" in strat or "Bear" in strat
-            is_neutral = "Strangle" in strat or "Condor" in strat
+            is_neutral_setup = "Strangle" in strat or "Condor" in strat or "Straddle" in strat
             
-            rec = self.current_recommendation
             should_close = False
             if rec == "No Trade":
+                if not is_neutral_setup:
+                    should_close = True
+            elif is_neutral_setup and "Strangle" not in rec and "Condor" not in rec and "Straddle" not in rec:
                 should_close = True
-            elif is_neutral and "Strangle" not in rec and "Condor" not in rec:
+            elif is_bullish and ("PE" in rec or "Bear" in rec or "Short Strangle" in rec or "Iron Condor" in rec or "Short Straddle" in rec):
                 should_close = True
-            elif is_bullish and ("PE" in rec or "Bear" in rec or "Short Strangle" in rec or "Iron Condor" in rec):
-                should_close = True
-            elif is_bearish and ("CE" in rec or "Bull" in rec or "Short Strangle" in rec or "Iron Condor" in rec):
+            elif is_bearish and ("CE" in rec or "Bull" in rec or "Short Strangle" in rec or "Iron Condor" in rec or "Short Straddle" in rec):
                 should_close = True
                 
             if should_close:
-                # Volatility Hysteresis Buffer Calculation (v2.1)
-                # Standard Nifty buffer is VIX-scaled, approx 20-35 points.
                 vix_val = getattr(self, "vix", 15.0)
                 buffer = spot * (vix_val / 100.0) / 100.0
-                
-                # Boundary Breach Conditions
                 entry_spot = active_trade.get("entry_spot", spot)
                 instant_exit_triggered = False
                 instant_exit_reason = ""
                 
                 if is_bullish and spot < entry_spot - buffer:
                     instant_exit_triggered = True
-                    instant_exit_reason = f"Hysteresis boundary breached: Bullish trade spot ({spot:.2f}) dropped below entry ({entry_spot:.2f}) minus volatility buffer ({buffer:.2f})"
+                    instant_exit_reason = f"Hysteresis boundary breached (Bullish trade spot {spot:.2f} < entry {entry_spot:.2f} - buffer {buffer:.2f})"
                 elif is_bearish and spot > entry_spot + buffer:
                     instant_exit_triggered = True
-                    instant_exit_reason = f"Hysteresis boundary breached: Bearish trade spot ({spot:.2f}) rose above entry ({entry_spot:.2f}) plus volatility buffer ({buffer:.2f})"
-                elif is_neutral:
-                    # Neutral strategies sell options at strikes around ATM
+                    instant_exit_reason = f"Hysteresis boundary breached (Bearish trade spot {spot:.2f} > entry {entry_spot:.2f} + buffer {buffer:.2f})"
+                elif is_neutral_setup:
                     sell_call_strike = None
                     sell_put_strike = None
                     for leg in active_trade.get("legs", []):
                         if leg.get("action") == "SELL":
-                            if leg.get("option_type") == "CE":
-                                sell_call_strike = leg.get("strike")
-                            elif leg.get("option_type") == "PE":
-                                sell_put_strike = leg.get("strike")
+                            if leg.get("option_type") == "CE": sell_call_strike = leg.get("strike")
+                            elif leg.get("option_type") == "PE": sell_put_strike = leg.get("strike")
                     
-                    preferred_index = self.settings.get("preferred_index", "Nifty")
                     strike_interval = 100 if preferred_index.lower() == "sensex" else 50
-                    if not sell_call_strike:
-                        sell_call_strike = entry_spot + strike_interval
-                    if not sell_put_strike:
-                        sell_put_strike = entry_spot - strike_interval
-                        
+                    if not sell_call_strike: sell_call_strike = entry_spot + strike_interval
+                    if not sell_put_strike: sell_put_strike = entry_spot - strike_interval
+                    
                     if spot >= sell_call_strike or spot <= sell_put_strike:
                         instant_exit_triggered = True
-                        instant_exit_reason = f"Neutral boundary breached: Spot ({spot:.2f}) crossed sell strike boundaries (Put: {sell_put_strike} / Call: {sell_call_strike})"
+                        instant_exit_reason = f"Neutral boundary breached (Spot {spot:.2f} crossed boundaries Put: {sell_put_strike} / Call: {sell_call_strike})"
                 
                 if instant_exit_triggered:
                     journal.close_trade(active_trade["id"], spot)
@@ -1799,17 +1906,15 @@ class SimulationState:
                     print(f"🤖 AUTO-TRADE: Closed position instantly. Reason: {instant_exit_reason}")
                     return
                 else:
-                    # Add confirmation delay: 120 seconds if inside boundaries
                     if not getattr(self, "signal_change_pending", False):
                         self.signal_change_pending = True
                         self.signal_change_pending_since = time.time()
                         self.pending_exit_signal = rec
-                        print(f"⏰ AUTO-TRADE: AI Signal shifted to {rec} (Inside boundaries). Starting 120s confirmation cooldown...")
+                        print(f"⏰ AUTO-TRADE: AI Signal shifted to {rec}. Starting 120s confirmation cooldown...")
                     else:
                         elapsed = time.time() - self.signal_change_pending_since
                         remaining = max(0, int(120.0 - elapsed))
                         if elapsed >= 120.0:
-                            # Cooldown completed, close trade
                             journal.close_trade(active_trade["id"], spot)
                             active_trade["reason"] = f"AI Signal shifted to {rec} (Confirmed after 120s cooldown)"
                             journal.save_journal()
@@ -1821,7 +1926,6 @@ class SimulationState:
                         else:
                             print(f"⏰ AUTO-TRADE: AI Signal shift pending confirmation ({remaining}s remaining)...")
             else:
-                # If signal reversed/restored within cooldown, cancel pending exit
                 if getattr(self, "signal_change_pending", False):
                     self.signal_change_pending = False
                     self.pending_exit_signal = ""
@@ -1836,14 +1940,19 @@ class SimulationState:
                 "Bull Put Spread", "Bear Call Spread", "Short Strangle", "Iron Condor"
             ]
             if conf >= 65.0 and rec in allowed_strategies:
-                self.highest_lowest_spot_since_entry = 0.0 # Starts at 0.0 peak P&L seen
-                self.initial_sl_price = -trade_limit # representing initial SL P&L
-                self.trailed_sl_price = -trade_limit # representing trailed SL P&L
+                # IV Crush Check for Buying / Spread strategies
+                if ("Buy" in rec or "Spread" in rec) and self.check_iv_crush():
+                    print(f"⚠️ AUTO-TRADE BLOCKED: IV Crush detected (Straddle premium dropping). Entry filtered out to protect capital.")
+                    return
+
+                self.highest_lowest_spot_since_entry = 0.0
+                self.initial_sl_price = -trade_limit
+                self.trailed_sl_price = -trade_limit
                 
                 atm_strike = round(spot / 100.0) * 100 if preferred_index.lower() == "sensex" else round(spot / 50.0) * 50
                 strike_interval = 100 if preferred_index.lower() == "sensex" else 50
+                expiry = self.get_active_expiry_date()
                 
-                # Define legs based on strategy
                 legs_to_order = []
                 if rec == "Buy CE":
                     legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "BUY"})
@@ -1862,23 +1971,12 @@ class SimulationState:
                     legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "SELL"})
                     legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "BUY"})
                 elif rec == "Short Strangle" or rec == "Short Straddle":
-                    # Locate deep OTM Buy hedge strikes closest to ₹2 premium (strictly < ₹5 and OTM)
-                    hedge_call_strike = atm_strike + 5 * strike_interval
-                    hedge_put_strike = atm_strike - 5 * strike_interval
-                    if self.option_chain:
-                        calls = [x for x in self.option_chain if x.get("call_price") is not None and x["call_price"] < 5.0 and x["strike"] > atm_strike]
-                        if calls:
-                            hedge_call_item = min(calls, key=lambda x: abs(x["call_price"] - 2.0))
-                            hedge_call_strike = hedge_call_item["strike"]
-                        puts = [x for x in self.option_chain if x.get("put_price") is not None and x["put_price"] < 5.0 and x["strike"] < atm_strike]
-                        if puts:
-                            hedge_put_item = min(puts, key=lambda x: abs(x["put_price"] - 2.0))
-                            hedge_put_strike = hedge_put_item["strike"]
+                    # Strictly enforces premium between ₹2.00 and ₹5.00
+                    hedge_call_strike, hedge_put_strike = self.find_hedge_strikes(atm_strike, strike_interval)
                     
                     sell_call_strike = atm_strike + strike_interval if rec == "Short Strangle" else atm_strike
                     sell_put_strike = atm_strike - strike_interval if rec == "Short Strangle" else atm_strike
                     
-                    # BUY legs must be appended first so they execute first
                     legs_to_order.append({"strike": hedge_call_strike, "option_type": "CE", "action": "BUY"})
                     legs_to_order.append({"strike": hedge_put_strike, "option_type": "PE", "action": "BUY"})
                     legs_to_order.append({"strike": sell_call_strike, "option_type": "CE", "action": "SELL"})
@@ -1888,6 +1986,8 @@ class SimulationState:
                     legs_to_order.append({"strike": atm_strike + 2*strike_interval, "option_type": "CE", "action": "BUY"})
                     legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "SELL"})
                     legs_to_order.append({"strike": atm_strike - 2*strike_interval, "option_type": "PE", "action": "BUY"})
+
+                reason_desc = f"AI {rec} ({conf:.1f}%) | VWAP: {self.get_vwap():.2f} | EMA20: {self.ema_20:.2f} | EMA50: {self.ema_50:.2f} | VIX: {self.vix:.1f}% | PCR: {self.pcr:.2f}"
 
                 if mode == "Live":
                     live_legs = []
@@ -1908,16 +2008,13 @@ class SimulationState:
                             instrument_key=instrument_key,
                             quantity=suggested_lots * lot_size,
                             transaction_type=act,
-                            order_type="MARKET",
-                            price=0.0,
-                            strike=k,
-                            option_type=ot
+                            price=0.0
                         ))
                     
-                    order_req = LiveOrderRequest(strategy=rec, legs=live_legs)
                     try:
-                        res = execute_live_order(order_req)
-                        if res.get("status") in ["SUCCESS", "PARTIAL_SUCCESS"] and "trade" in res:
+                        print(f"🚀 AUTO-TRADE REAL: Placing {rec} orders on Upstox...")
+                        res = upstox_execute_orders(live_legs, rec)
+                        if res["status"] == "SUCCESS":
                             self.auto_trade_active_id = res["trade"]["id"]
                             print(f"⚡ AUTO-TRADE REAL: Placed {rec} position successfully (ID: {self.auto_trade_active_id})")
                     except Exception as e:
@@ -1943,16 +2040,17 @@ class SimulationState:
                             "option_type": ot,
                             "action": act,
                             "entry_price": float(ltp),
-                            "quantity": suggested_lots * lot_size
+                            "quantity": suggested_lots * lot_size,
+                            "expiry": expiry
                         })
-                        strikes_logged.append(f"{act} SIM_{ot.upper()}_{k} x {suggested_lots * lot_size}")
+                        strikes_logged.append(f"{act} {k} {ot} (Exp: {expiry})")
                         
                     trade = journal.add_trade(
                         strategy=rec,
                         entry_price=spot,
                         strikes=strikes_logged,
                         confidence=conf,
-                        reason=f"Live Auto Paper: AI Signal {rec} at {conf:.1f}%",
+                        reason=reason_desc,
                         size=suggested_lots,
                         execution_type="Paper",
                         lot_size=lot_size,
@@ -1997,11 +2095,11 @@ class SimulationState:
         feed_mode = self.settings.get("feed_mode", "Simulation")
         
         # 2. After 15:30 IST: Disable all automation (only for non-Simulation feeds)
-        if feed_mode != "Simulation" and ist_time >= datetime.time(15, 30):
+        if ist_time >= datetime.time(15, 0):
             if self.settings.get("auto_trade_mode", "OFF") != "OFF":
                 self.settings["auto_trade_mode"] = "OFF"
                 self.save_settings()
-                print("🤖 AUTO-TRADE: Session ended. Automation disabled after 15:30 IST.")
+                print("🤖 AUTO-TRADE: Session ended. Automation disabled after 15:00 IST.")
 
     def evaluate_decision_engine(self):
         """Executes the weighted scoring scoring engine and selects strategies."""
@@ -2242,7 +2340,8 @@ class SimulationState:
         is_safety_override = "Sudden" in self.recalculation_trigger or is_momentum_breakout
         is_first_eval = len(self.change_log) == 0
         
-        if should_change and primary_rec != old_rec and not is_first_eval and not is_safety_override:
+        is_high_confidence = confidence_pct > 90.0
+        if should_change and primary_rec != old_rec and not is_first_eval and not is_safety_override and not is_high_confidence:
             if time_since_change < cooldown_period:
                 should_change = False
                 reasoning_list.append(f"AI Setup locked (cooldown active: {int(cooldown_period - time_since_change)}s remaining for trade execution stability).")
@@ -2480,7 +2579,7 @@ class TradeJournal:
                     else:
                         trade["brokerage"] = round(0.005 * (entry_premium + exit_premium), 2)
                     
-                trade["pnl"] = round(pnl, 2)
+                trade["pnl"] = round(pnl + trade.get("booked_pnl", 0.0), 2)
                 trade["outcome"] = "WIN" if pnl > 0 else "LOSS"
                 self.save_journal()
                 return trade
@@ -2704,6 +2803,65 @@ def get_market_data():
     # Determine lot sizing based on max 2% trade limit risk & margins
     suggested_lots, margin_required, risk_amount = state.calculate_suggested_lots_and_margin(state.current_recommendation, spot)
     lot_size = 20 if preferred_index.lower() == "sensex" else 65
+
+    # Compute live timeframe trends (completed + in-progress candles)
+    candles_1m_temp = state.candles_1m + [state.candle_1m]
+    candles_5m_temp = state.candles_5m + [state.candle_5m]
+    candles_15m_temp = state.candles_15m + [state.candle_15m]
+
+    # Calculate dynamic decision components values & descriptions for UI component transparency
+    decision_components = {
+        "opening_range": {
+            "high": round(state.opening_range_high or 0.0, 2),
+            "low": round(state.opening_range_low or 0.0, 2),
+            "status": "Breakout" if spot > (state.opening_range_high or 999999.0) else ("Breakdown" if spot < (state.opening_range_low or 0.0) else "Inside Range"),
+            "value_desc": f"ORH: {state.opening_range_high:.1f} | ORL: {state.opening_range_low:.1f}" if state.opening_range_high else "Not set yet"
+        },
+        "vwap_status": {
+            "vwap": round(state.get_vwap(), 2),
+            "spot": round(spot, 2),
+            "status": "Bullish (Above VWAP)" if spot > state.get_vwap() else "Bearish (Below VWAP)",
+            "value_desc": f"Spot: {spot:.1f} | VWAP: {state.get_vwap():.1f}"
+        },
+        "ema_alignment": {
+            "ema20": round(state.ema_20, 2),
+            "ema50": round(state.ema_50, 2),
+            "status": "Bullish (EMA20 > EMA50)" if state.ema_20 > state.ema_50 else "Bearish (EMA20 < EMA50)",
+            "value_desc": f"EMA20: {state.ema_20:.1f} | EMA50: {state.ema_50:.1f}"
+        },
+        "vix_volatility": {
+            "vix": round(state.vix, 2),
+            "status": "High Volatility (>18.0)" if state.vix > 18.0 else "Stable/Low Volatility (<=18.0)",
+            "value_desc": f"India VIX: {state.vix:.1f}%"
+        },
+        "pcr_sentiment": {
+            "pcr": round(state.pcr, 2),
+            "status": "Bullish (>1.25)" if state.pcr > 1.25 else ("Bearish (<0.75)" if state.pcr < 0.75 else "Neutral"),
+            "value_desc": f"PCR: {state.pcr:.2f}"
+        },
+        "oi_build_up": {
+            "pcr": round(state.pcr, 2),
+            "status": "Heavy Put Writing (Bullish)" if state.pcr > 1.15 else ("Heavy Call Writing (Bearish)" if state.pcr < 0.85 else "Balanced"),
+            "value_desc": f"ATM Put/Call OI Ratio: {state.pcr:.2f}"
+        },
+        "adx_trend": {
+            "adx": round(state.adx, 1),
+            "status": "Strong Trend (>25.0)" if state.adx > 25.0 else "Sideways Consolidation (<20.0)",
+            "value_desc": f"ADX: {state.adx:.1f}"
+        },
+        "straddle_premium": {
+            "current": round(state.get_straddle_premium(), 2),
+            "status": "CRUSHING (Blocked)" if state.check_iv_crush() else "STABLE",
+            "value_desc": f"Straddle LTP: ₹{state.get_straddle_premium():.2f}"
+        },
+        "credit_status": {
+            "available": round(capital, 2),
+            "required": round(margin_required, 2),
+            "status": "INSUFFICIENT" if margin_required > capital else "ADEQUATE",
+            "value_desc": f"Available: ₹{capital:.2f} | Req: ₹{margin_required:.2f}"
+        }
+    }
+
     return {
         "version": VERSION,
         "spot_price": round(spot, 2),
@@ -2726,14 +2884,15 @@ def get_market_data():
         "daily_stop_limit_hit": state.daily_stop_limit_hit,
         "daily_pnl": round(sum(t.get("pnl", 0.0) for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))), 2),
         "daily_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))), 2),
-        "total_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))), 2),
+        "total_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))), 2),
         "today_trades": sum(1 for t in journal.trades if t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))),
         "today_legs": sum(len(t.get("legs") or []) or 1 for t in journal.trades if t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))),
         "timeframe_trends": {
-            "m15": state.analyze_timeframe(state.candles_15m)["trend"],
-            "m5": state.analyze_timeframe(state.candles_5m)["trend"],
-            "m1": state.analyze_timeframe(state.candles_1m)["trend"]
+            "m15": state.analyze_timeframe(candles_15m_temp)["trend"],
+            "m5": state.analyze_timeframe(candles_5m_temp)["trend"],
+            "m1": state.analyze_timeframe(candles_1m_temp)["trend"]
         },
+        "decision_components": decision_components,
         "indicators": {
             "ema_20": round(state.ema_20, 2),
             "ema_50": round(state.ema_50, 2),

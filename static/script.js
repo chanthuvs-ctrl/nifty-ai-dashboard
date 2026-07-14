@@ -72,6 +72,7 @@ let isEngineRunning = true;
 let globalOptionChain = null;
 let liveChart = null;
 let livePnlChart = null;
+let liveStraddleChart = null;
 let chartStrategyChanges = [];
 
 // Global Diagnostics Error Handler
@@ -970,14 +971,15 @@ async function fetchJournal() {
                     
                     const typeBadge = `<span class="badge-pro" style="background: rgba(${typeColor}, 0.12); color: rgb(${typeColor}); border: 1px solid rgb(${typeColor}); font-size: 0.58rem; padding: 2px 5px; margin-left: 6px;">${typeLabel}</span>`;
                     
-                    let stageInfo = "";
-                    if (pos.stage) {
-                        stageInfo = `<div style="font-size:0.65rem; color:var(--text-muted); margin-top:4px; width:100%; display:flex; gap:8px; font-weight:normal; font-family:monospace;">
-                            <span>Stage: <strong style="color:var(--neon-accent);">${pos.stage}</strong></span>
-                            <span>Locked: <strong style="color:var(--neon-bull);">₹${(pos.locked_profit || 0.0).toFixed(2)}</strong></span>
-                            <span>Trailing: <strong style="color:${pos.trail_activated ? 'var(--neon-cyan)' : 'var(--text-dim)'};">${pos.trail_activated ? 'YES' : 'NO'}</strong></span>
-                        </div>`;
-                    }
+                    const capital = parseFloat(localStorage.getItem('capital') || '500000');
+                    const targetVal = pos.half_booked ? "50% Trailed" : `₹${(capital * 0.04).toFixed(2)}`;
+                    const slVal = pos.half_booked ? "₹0.00 (Breakeven)" : `-₹${(capital * 0.02).toFixed(2)}`;
+                    
+                    let stageInfo = `<div style="font-size:0.65rem; color:var(--text-muted); margin-top:4px; width:100%; display:flex; gap:8px; font-weight:normal; font-family:monospace; flex-wrap:wrap;">
+                        <span>Target: <strong style="color:var(--neon-cyan);">${targetVal}</strong></span>
+                        <span>SL: <strong style="color:var(--neon-bear);">${slVal}</strong></span>
+                        ${pos.stage ? `<span>Stage: <strong style="color:var(--neon-accent);">${pos.stage}</strong></span>` : ''}
+                    </div>`;
                     
                     tr.innerHTML = `
                         <td>${pos.time}</td>
@@ -1019,7 +1021,7 @@ async function fetchJournal() {
                             <td></td>
                             <td style="padding-left: 15px; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
                                 <span class="badge-pro" style="background: ${leg.action === 'BUY' ? 'rgba(0, 230, 118, 0.12)' : 'rgba(255, 23, 68, 0.12)'}; color: ${leg.action === 'BUY' ? '#00e676' : '#ff1744'}; padding: 1px 4px; font-size: 0.55rem; border: 1px solid ${leg.action === 'BUY' ? 'rgba(0, 230, 118, 0.3)' : 'rgba(255, 23, 68, 0.3)'}">${leg.action}</span>
-                                <span style="font-weight: 600;">NIFTY ${leg.strike} ${leg.option_type}</span>
+                                <span style="font-weight: 600;">NIFTY ${leg.strike} ${leg.option_type} ${leg.expiry ? `(Exp: ${leg.expiry})` : ''}</span>
                             </td>
                             <td style="color: var(--text-muted); font-size: 0.65rem; font-family: monospace;">${leg.instrument_key.split('|')[1] || leg.instrument_key}</td>
                             <td style="color: var(--text-muted);">Entry: ₹${leg.entry_price.toFixed(2)}</td>
@@ -1046,14 +1048,23 @@ async function fetchJournal() {
                     const tr = document.createElement('tr');
                     const typeBadge = `<span class="badge-pro" style="background: rgba(${typeColor}, 0.12); color: rgb(${typeColor}); border: 1px solid rgb(${typeColor}); font-size: 0.58rem; padding: 2px 5px; margin-left: 6px;">${typeLabel}</span>`;
                     
+                    const capital = parseFloat(localStorage.getItem('capital') || '500000');
+                    const targetVal = `₹${(capital * 0.04).toFixed(2)}`;
+                    const slVal = `-₹${(capital * 0.02).toFixed(2)}`;
+                    const closedInfo = `<div style="font-size:0.6rem; color:var(--text-muted); margin-top:2px; font-family:monospace;">Tgt: ${targetVal} | SL: ${slVal}</div>`;
+                    
+                    const netPnl = pos.pnl - (pos.brokerage || 0.0);
                     tr.innerHTML = `
                         <td>${pos.date} ${pos.time}</td>
-                        <td class="font-bold" style="display: flex; align-items: center; gap: 4px;">${pos.strategy} ${typeBadge}</td>
+                        <td class="font-bold" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+                            <div>${pos.strategy} ${typeBadge}</div>
+                            ${closedInfo}
+                        </td>
                         <td>₹${pos.entry_spot.toFixed(2)}</td>
                         <td>₹${pos.exit_spot.toFixed(2)}</td>
-                        <td class="font-bold ${pos.pnl >= 0 ? 'text-bull' : 'text-bear'}">₹${pos.pnl.toFixed(2)}</td>
+                        <td class="font-bold ${netPnl >= 0 ? 'text-bull' : 'text-bear'}">₹${netPnl.toFixed(2)}</td>
                         <td style="color: var(--text-muted);">₹${(pos.brokerage || 0.0).toFixed(2)}</td>
-                        <td><span class="badge-pro" style="background:${pos.pnl >= 0 ? 'rgba(0,230,118,0.1)' : 'rgba(255,23,68,0.1)'}">${pos.outcome}</span></td>
+                        <td><span class="badge-pro" style="background:${netPnl >= 0 ? 'rgba(0,230,118,0.1)' : 'rgba(255,23,68,0.1)'}">${netPnl >= 0 ? 'WIN' : 'LOSS'}</span></td>
                         <td class="text-secondary">${pos.reason}</td>
                     `;
                     body.appendChild(tr);
@@ -1629,9 +1640,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!panel) return;
             
             if (isMobile) {
-                btn.classList.remove('active');
-                panel.classList.remove('active');
-                panel.classList.add('hidden-panel');
+                if (panelId === 'panel-chart') {
+                    btn.classList.add('active');
+                    panel.classList.add('active');
+                    panel.classList.remove('hidden-panel');
+                } else {
+                    btn.classList.remove('active');
+                    panel.classList.remove('active');
+                    panel.classList.add('hidden-panel');
+                }
             } else {
                 btn.classList.add('active');
                 panel.classList.add('active');
@@ -2284,6 +2301,117 @@ function initLivePnlChart() {
         }
     });
 }
+// ==========================================
+// RENDER AI DECISION COMPONENTS MATRIX (v3.1.8)
+// ==========================================
+function renderDecisionMatrix(components) {
+    const container = document.getElementById('decision-matrix-container');
+    if (!container) return;
+    container.innerHTML = "";
+    
+    const fields = [
+        { key: "opening_range", label: "Opening Range", icon: "📐" },
+        { key: "vwap_status", label: "VWAP Status", icon: "📈" },
+        { key: "ema_alignment", label: "EMA Alignment", icon: "🔗" },
+        { key: "vix_volatility", label: "Volatility (VIX)", icon: "⚡" },
+        { key: "pcr_sentiment", label: "Sentiment (PCR)", icon: "🎯" },
+        { key: "oi_build_up", label: "OI Build-Up", icon: "📊" },
+        { key: "adx_trend", label: "ADX Trend Strength", icon: "🏎️" },
+        { key: "straddle_premium", label: "Straddle Premium", icon: "📉" },
+        { key: "credit_status", label: "Credit & Margin", icon: "💰" }
+    ];
+    
+    fields.forEach(f => {
+        const data = components[f.key];
+        if (!data) return;
+        
+        let statusColor = "var(--text-muted)";
+        if (data.status.includes("Bullish") || data.status.includes("ADEQUATE") || data.status.includes("Breakout")) {
+            statusColor = "var(--neon-bull)";
+        } else if (data.status.includes("Bearish") || data.status.includes("INSUFFICIENT") || data.status.includes("Breakdown") || data.status.includes("Blocked") || data.status.includes("CRUSHING")) {
+            statusColor = "var(--neon-bear)";
+        } else if (data.status.includes("Neutral") || data.status.includes("Inside Range") || data.status.includes("STABLE") || data.status.includes("Balanced")) {
+            statusColor = "var(--neon-neutral)";
+        }
+        
+        const card = document.createElement('div');
+        card.style.background = "rgba(15, 23, 42, 0.4)";
+        card.style.border = "1px solid var(--border-color)";
+        card.style.borderRadius = "4px";
+        card.style.padding = "6px 8px";
+        card.style.display = "flex";
+        card.style.flexDirection = "column";
+        card.style.gap = "2px";
+        card.style.boxSizing = "border-box";
+        
+        card.innerHTML = `
+            <span style="font-size: 0.58rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${f.icon} ${f.label}</span>
+            <span style="font-size: 0.7rem; font-weight: 800; color: ${statusColor};">${data.status}</span>
+            <span style="font-size: 0.6rem; color: rgba(255,255,255,0.5); font-family: var(--font-mono);">${data.value_desc}</span>
+        `;
+        container.appendChild(card);
+    });
+}
+
+// ==========================================
+// LIVE ATM STRADDLE PREMIUM CHART (v3.1.8)
+// ==========================================
+function initLiveStraddleChart() {
+    const ctx = document.getElementById('live-straddle-chart');
+    if (!ctx) return;
+    
+    liveStraddleChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Straddle Premium (INR)',
+                    data: [],
+                    borderColor: '#ffc107',
+                    backgroundColor: 'rgba(255, 193, 7, 0.05)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    fill: true,
+                    tension: 0.2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return '₹' + context.parsed.y.toFixed(2);
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
+                    ticks: { color: '#64748b', font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
+                },
+                y: {
+                    display: true,
+                    position: 'right',
+                    grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
+                    ticks: { color: '#64748b', font: { size: 9 }, callback: function(value) { return '₹' + value; } }
+                }
+            }
+        }
+    });
+}
+
 
 function initLiveChart() {
     const ctx = document.getElementById('live-price-chart');
@@ -2409,6 +2537,117 @@ function initLiveChart() {
         }
     });
 }
+// ==========================================
+// RENDER AI DECISION COMPONENTS MATRIX (v3.1.8)
+// ==========================================
+function renderDecisionMatrix(components) {
+    const container = document.getElementById('decision-matrix-container');
+    if (!container) return;
+    container.innerHTML = "";
+    
+    const fields = [
+        { key: "opening_range", label: "Opening Range", icon: "📐" },
+        { key: "vwap_status", label: "VWAP Status", icon: "📈" },
+        { key: "ema_alignment", label: "EMA Alignment", icon: "🔗" },
+        { key: "vix_volatility", label: "Volatility (VIX)", icon: "⚡" },
+        { key: "pcr_sentiment", label: "Sentiment (PCR)", icon: "🎯" },
+        { key: "oi_build_up", label: "OI Build-Up", icon: "📊" },
+        { key: "adx_trend", label: "ADX Trend Strength", icon: "🏎️" },
+        { key: "straddle_premium", label: "Straddle Premium", icon: "📉" },
+        { key: "credit_status", label: "Credit & Margin", icon: "💰" }
+    ];
+    
+    fields.forEach(f => {
+        const data = components[f.key];
+        if (!data) return;
+        
+        let statusColor = "var(--text-muted)";
+        if (data.status.includes("Bullish") || data.status.includes("ADEQUATE") || data.status.includes("Breakout")) {
+            statusColor = "var(--neon-bull)";
+        } else if (data.status.includes("Bearish") || data.status.includes("INSUFFICIENT") || data.status.includes("Breakdown") || data.status.includes("Blocked") || data.status.includes("CRUSHING")) {
+            statusColor = "var(--neon-bear)";
+        } else if (data.status.includes("Neutral") || data.status.includes("Inside Range") || data.status.includes("STABLE") || data.status.includes("Balanced")) {
+            statusColor = "var(--neon-neutral)";
+        }
+        
+        const card = document.createElement('div');
+        card.style.background = "rgba(15, 23, 42, 0.4)";
+        card.style.border = "1px solid var(--border-color)";
+        card.style.borderRadius = "4px";
+        card.style.padding = "6px 8px";
+        card.style.display = "flex";
+        card.style.flexDirection = "column";
+        card.style.gap = "2px";
+        card.style.boxSizing = "border-box";
+        
+        card.innerHTML = `
+            <span style="font-size: 0.58rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${f.icon} ${f.label}</span>
+            <span style="font-size: 0.7rem; font-weight: 800; color: ${statusColor};">${data.status}</span>
+            <span style="font-size: 0.6rem; color: rgba(255,255,255,0.5); font-family: var(--font-mono);">${data.value_desc}</span>
+        `;
+        container.appendChild(card);
+    });
+}
+
+// ==========================================
+// LIVE ATM STRADDLE PREMIUM CHART (v3.1.8)
+// ==========================================
+function initLiveStraddleChart() {
+    const ctx = document.getElementById('live-straddle-chart');
+    if (!ctx) return;
+    
+    liveStraddleChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Straddle Premium (INR)',
+                    data: [],
+                    borderColor: '#ffc107',
+                    backgroundColor: 'rgba(255, 193, 7, 0.05)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    fill: true,
+                    tension: 0.2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return '₹' + context.parsed.y.toFixed(2);
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
+                    ticks: { color: '#64748b', font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
+                },
+                y: {
+                    display: true,
+                    position: 'right',
+                    grid: { color: 'rgba(255, 255, 255, 0.04)', drawBorder: false },
+                    ticks: { color: '#64748b', font: { size: 9 }, callback: function(value) { return '₹' + value; } }
+                }
+            }
+        }
+    });
+}
+
 
 async function fetchChartData() {
     try {
@@ -2468,6 +2707,16 @@ async function fetchChartData() {
             }
             
             livePnlChart.update('none');
+        }
+        
+        if (!liveStraddleChart) {
+            initLiveStraddleChart();
+        }
+        if (liveStraddleChart) {
+            const straddlePremiums = history.map(p => p.straddle_premium || 0.0);
+            liveStraddleChart.data.labels = labels;
+            liveStraddleChart.data.datasets[0].data = straddlePremiums;
+            liveStraddleChart.update('none');
         }
         
         // Build strategy change annotations
