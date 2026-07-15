@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.12" 
+VERSION = "3.1.13" 
 import time
 import os
 import json
@@ -2881,6 +2881,7 @@ def get_market_data():
     return {
         "version": VERSION,
         "spot_price": round(spot, 2),
+        "capital": round(state.get_available_capital(), 2),
         "change_pct": state.intraday_change_pct,
         "change_val": state.intraday_change_val,
         "price_source": state.price_source,

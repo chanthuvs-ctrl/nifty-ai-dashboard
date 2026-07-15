@@ -777,6 +777,16 @@ async function fetchMarketData() {
         if (tradeEl) tradeEl.textContent = todayTrades;
         if (legEl) legEl.textContent = todayLegs;
         
+        const capitalEl = document.getElementById('stats-broker-capital');
+        const capitalLabelEl = document.getElementById('label-broker-capital');
+        if (capitalEl) {
+            const capitalVal = data.capital !== undefined ? data.capital : 0;
+            capitalEl.textContent = '₹' + capitalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        if (capitalLabelEl) {
+            capitalLabelEl.textContent = currentMode === 'Live' ? 'Live Balance' : 'Paper Capital';
+        }
+
         const dailyBrokerageEl = document.getElementById('stats-daily-brokerage');
         const totalBrokerageEl = document.getElementById('stats-total-brokerage');
         if (dailyBrokerageEl) dailyBrokerageEl.textContent = '₹' + (data.daily_brokerage || 0.0).toFixed(2);
