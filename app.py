@@ -3573,6 +3573,44 @@ def delete_all_journal_trades(request: Request):
         "message": "All trades deleted successfully."
     }
 
+
+# ---------------------------------------------------------------------------
+# UPSTOX PROXY ENDPOINT
+# Allows local laptop instances to route Upstox API calls through Render's
+# whitelisted static IP. The local app sends requests here with the user token;
+# Render forwards to Upstox and returns the response.
+# ---------------------------------------------------------------------------
+class UpstoxProxyRequest(BaseModel):
+    path: str
+    method: str = "GET"
+    token: str
+    body: Optional[dict] = None
+    params: Optional[dict] = None
+
+@app.post("/api/proxy/upstox")
+def upstox_proxy(req: UpstoxProxyRequest):
+    """Secure Upstox API proxy through Render's whitelisted static IP."""
+    if not req.path.startswith("/v2/"):
+        raise HTTPException(status_code=400, detail="Only Upstox /v2/ paths are allowed.")
+    upstox_url = f"https://api.upstox.com{req.path}"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {req.token}",
+        "Content-Type": "application/json"
+    }
+    try:
+        if req.method.upper() == "POST":
+            resp = requests.post(upstox_url, headers=headers, json=req.body or {}, params=req.params, timeout=10)
+        else:
+            resp = requests.get(upstox_url, headers=headers, params=req.params, timeout=10)
+        try:
+            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+        except Exception:
+            return JSONResponse(content={"raw": resp.text}, status_code=resp.status_code)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Proxy error: {str(e)}")
+
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":
