@@ -88,13 +88,56 @@ let livePnlChart = null;
 let liveStraddleChart = null;
 let chartStrategyChanges = [];
 
-// Global Diagnostics Error Handler
+// Global Diagnostics Error Handler (Filtered to prevent Brave Shield and browser extension noise)
 window.addEventListener('error', function(e) {
-    const msg = e.error ? (e.error.stack || e.error.message) : e.message;
-    showDiagnosticError('Runtime Error: ' + msg);
+    const filename = e.filename || "";
+    const msg = e.message || "";
+    
+    // Ignore generic third-party script loading issues
+    if (msg.includes("Script error.") && !filename) {
+        console.warn("Ignored third-party script error:", msg);
+        return;
+    }
+    
+    // Check if error originates from our application files
+    const isAppScript = filename.includes("script.js") || 
+                        filename.includes("academy_data.js") || 
+                        filename.includes("chart.umd.js") || 
+                        filename.includes("chartjs-plugin-annotation.js");
+                        
+    let stack = "";
+    if (e.error && e.error.stack) {
+        stack = e.error.stack;
+    }
+    const stackHasApp = stack.includes("script.js") || 
+                        stack.includes("academy_data.js") || 
+                        stack.includes("chart.umd.js") || 
+                        stack.includes("chartjs-plugin-annotation.js");
+                        
+    // If the error filename matches the page URL itself, it is an injected inline script (Brave Shield spoofing, etc.)
+    const isInlineOrInjected = filename === window.location.href || 
+                               filename === window.location.origin || 
+                               filename === window.location.origin + "/";
+                               
+    if (!isAppScript && !stackHasApp && (filename !== "" || isInlineOrInjected)) {
+        console.warn("Ignored non-app script error:", msg, "at", filename);
+        return;
+    }
+
+    const displayMsg = e.error ? (e.error.stack || e.error.message) : e.message;
+    showDiagnosticError('Runtime Error: ' + displayMsg);
 });
+
 window.addEventListener('unhandledrejection', function(e) {
-    const msg = e.reason ? (e.reason.stack || e.reason.message || e.reason) : 'Unknown promise rejection';
+    const reason = e.reason || "";
+    const msg = reason.stack || reason.message || reason.toString();
+    
+    // Filter out extensions and injected third-party rejections
+    if (msg.includes("extension") || msg.includes("brave") || msg.includes("webkit")) {
+        console.warn("Ignored non-app promise rejection:", msg);
+        return;
+    }
+    
     showDiagnosticError('Promise Rejection: ' + msg);
 });
 
