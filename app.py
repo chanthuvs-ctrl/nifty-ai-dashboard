@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.18" 
+VERSION = "3.1.19" 
 import time
 import os
 import json
@@ -1571,7 +1571,7 @@ class SimulationState:
                 pnl += diff * multiplier
             else:
                 pnl -= diff * multiplier
-        return pnl
+        return pnl + t.get("booked_pnl", 0.0)
 
     def update_option_chain(self):
         spot = self.spot_price
@@ -1665,19 +1665,19 @@ class SimulationState:
         if feed_mode != "Simulation" and ist_time < datetime.time(9, 30):
             return
             
-        # 2. Block new entries after 15:00:00 IST and aggressively close open positions
-        close_time = datetime.time(15, 0)
+        # 2. Block new entries after 15:20:00 IST and aggressively close open positions
+        close_time = datetime.time(15, 20)
         if ist_time >= close_time:
             open_count = 0
             for t in journal.trades:
                 if t.get("status") == "OPEN" and t.get("execution_type") == mode:
                     journal.close_trade(t["id"], self.spot_price)
-                    t["reason"] = f"Force Square-off (15:00 IST Time-in-Force Kill Switch)"
+                    t["reason"] = f"Force Square-off (15:20 IST Time-in-Force Kill Switch)"
                     open_count += 1
             if open_count > 0:
                 journal.save_journal()
                 self.auto_trade_active_id = None
-                print(f"🤖 AUTO-TRADE: Force squared off {open_count} open positions due to 15:00 IST Kill Switch.")
+                print(f"🤖 AUTO-TRADE: Force squared off {open_count} open positions due to 15:20 IST Kill Switch.")
             return
             
         capital = self.get_available_capital()
@@ -1780,15 +1780,33 @@ class SimulationState:
                 half_profit = floating_pnl * 0.5
                 active_trade["half_booked"] = True
                 active_trade["booked_pnl"] = active_trade.get("booked_pnl", 0.0) + half_profit
-                active_trade["size"] = max(0.5, active_trade["size"] * 0.5)
-                for leg in active_trade.get("legs", []):
-                    leg["quantity"] = max(1, int(leg["quantity"] / 2))
                 
-                # Move SL to breakeven
-                active_trade["stage"] = "BREAKEVEN"
-                active_trade["locked_profit"] = 0.0
-                journal.save_journal()
-                print(f"🏆 DYNAMIC TRAILING: Booked 50% profit (₹{half_profit:.2f}) at +4% Capital threshold. SL moved to Breakeven entry price.")
+                # Math ceiling lot division (Odd lot handling!)
+                total_size = active_trade["size"]
+                booked_size = int(math.ceil(total_size * 0.5))
+                remaining_size = total_size - booked_size
+                
+                active_trade["size"] = remaining_size
+                
+                if remaining_size <= 0:
+                    journal.close_trade(active_trade["id"], spot)
+                    active_trade["reason"] = f"Booked 100% profit at +4% Capital threshold (₹{floating_pnl:.2f})"
+                    journal.save_journal()
+                    self.auto_trade_active_id = None
+                    self.signal_change_pending = False
+                    self.trail_activated = False
+                    print(f"🏆 DYNAMIC TRAILING: Booked 100% profit (₹{floating_pnl:.2f}) at +4% Capital threshold.")
+                    return
+                else:
+                    ratio = float(remaining_size) / float(total_size)
+                    for leg in active_trade.get("legs", []):
+                        leg["quantity"] = max(1, int(round(leg["quantity"] * ratio)))
+                    
+                    # Move SL to breakeven
+                    active_trade["stage"] = "BREAKEVEN"
+                    active_trade["locked_profit"] = 0.0
+                    journal.save_journal()
+                    print(f"🏆 DYNAMIC TRAILING: Booked portion ({booked_size} lots) profit (₹{half_profit:.2f}) at +4% Capital threshold. SL moved to Breakeven entry price. Carrying {remaining_size} lots.")
 
             # E. Profit Management & Trailing Stop-Loss stage checks
             is_strangle = "Strangle" in strat

@@ -1044,7 +1044,7 @@ async function fetchJournal() {
                     
                     // Sum up all leg P&Ls for exact option P&L calculation
                     const legs = ensureLegs(pos, globalOptionChain);
-                    let totalPnl = 0.0;
+                    let totalPnl = pos.booked_pnl || 0.0;
                     legs.forEach(leg => {
                         const legLtp = getLegLtp(globalOptionChain, leg.instrument_key, leg.option_type, leg.strike) || leg.entry_price;
                         const legDiff = legLtp - leg.entry_price;
