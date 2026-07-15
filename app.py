@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.11" 
+VERSION = "3.1.12" 
 import time
 import os
 import json
@@ -174,6 +174,8 @@ class SimulationState:
         self.price_source = "Google Finance (NSE India)" if live_price else "Simulation Fallback"
         self.price_date = get_ist_date_str()
         self.price_time = get_ist_time_str()
+        self._cached_capital = None
+        self._capital_cache_time = 0.0
         
         # Historical completed candles for multi-timeframe analysis
         self.candles_1m: List[Dict] = []
@@ -741,6 +743,12 @@ class SimulationState:
         token = self.settings.get("upstox_access_token")
         
         if mode == "Live" and token:
+            # Check 1-minute memory cache
+            now = time.time()
+            if getattr(self, "_cached_capital", None) is not None and getattr(self, "_capital_cache_time", 0.0) > 0:
+                if now - self._capital_cache_time < 60.0:
+                    return self._cached_capital
+                    
             url = "https://api.upstox.com/v2/user/profile/balance"
             headers = {
                 "Accept": "application/json",
@@ -754,10 +762,18 @@ class SimulationState:
                         equity_data = res_json.get("data", {}).get("equity", {})
                         available = equity_data.get("available_margin")
                         if available is not None:
-                            print(f"💰 Upstox Live Capital Query: ₹{available:.2f} available.")
-                            return float(available)
+                            val = float(available)
+                            print(f"💰 Upstox Live Capital Query: ₹{val:.2f} available.")
+                            self._cached_capital = val
+                            self._capital_cache_time = now
+                            return val
             except Exception as e:
                 print(f"⚠️ Failed to query Upstox available capital: {e}")
+            
+            # Stale cache fallback during API failure
+            if getattr(self, "_cached_capital", None) is not None:
+                print("⚠️ Using stale cached available capital due to API failure.")
+                return self._cached_capital
                 
         # Default fallback to manual capital setting
         return float(self.settings.get("capital", 500000.0))
@@ -3312,7 +3328,8 @@ def get_journal():
     return {
         "trades": journal.trades[::-1],
         "analytics": journal.get_analytics("Paper"),
-        "live_analytics": journal.get_analytics("Live")
+        "live_analytics": journal.get_analytics("Live"),
+        "capital": state.get_available_capital()
     }
 
 @app.post("/api/journal/trade")

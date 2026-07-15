@@ -946,6 +946,23 @@ async function fetchJournal() {
         const syncedTrades = await syncJournalWithServer(serverTrades);
         data.trades = syncedTrades;
         
+        let capital = 500000;
+        if (data.capital) {
+            capital = parseFloat(data.capital);
+        } else {
+            try {
+                const localSet = JSON.parse(safeStorage.getItem('nifty_settings'));
+                if (localSet && localSet.capital) {
+                    capital = parseFloat(localSet.capital);
+                } else {
+                    const capInput = document.getElementById('set-capital');
+                    if (capInput) capital = parseFloat(capInput.value) || 500000;
+                }
+            } catch (e) {
+                capital = 500000;
+            }
+        }
+        
         // We fetch the current live Nifty spot from our header
         const currentSpotText = document.getElementById('hdr-nifty-spot').innerText.replace(/,/g, '');
         const currentSpot = parseFloat(currentSpotText) || 24270.85;
@@ -1031,18 +1048,7 @@ async function fetchJournal() {
                     
                     const typeBadge = `<span class="badge-pro" style="background: rgba(${typeColor}, 0.12); color: rgb(${typeColor}); border: 1px solid rgb(${typeColor}); font-size: 0.58rem; padding: 2px 5px; margin-left: 6px;">${typeLabel}</span>`;
                     
-                                        let capital = 500000;
-                    try {
-                        const localSet = JSON.parse(safeStorage.getItem('nifty_settings'));
-                        if (localSet && localSet.capital) {
-                            capital = parseFloat(localSet.capital);
-                        } else {
-                            const capInput = document.getElementById('set-capital');
-                            if (capInput) capital = parseFloat(capInput.value) || 500000;
-                        }
-                    } catch (e) {
-                        capital = 500000;
-                    }
+                    
                     const targetVal = pos.half_booked ? "50% Trailed" : `₹${(capital * 0.04).toFixed(2)}`;
                     const slVal = pos.half_booked ? "₹0.00 (Breakeven)" : `-₹${(capital * 0.02).toFixed(2)}`;
                     
@@ -1119,18 +1125,7 @@ async function fetchJournal() {
                     const tr = document.createElement('tr');
                     const typeBadge = `<span class="badge-pro" style="background: rgba(${typeColor}, 0.12); color: rgb(${typeColor}); border: 1px solid rgb(${typeColor}); font-size: 0.58rem; padding: 2px 5px; margin-left: 6px;">${typeLabel}</span>`;
                     
-                                        let capital = 500000;
-                    try {
-                        const localSet = JSON.parse(safeStorage.getItem('nifty_settings'));
-                        if (localSet && localSet.capital) {
-                            capital = parseFloat(localSet.capital);
-                        } else {
-                            const capInput = document.getElementById('set-capital');
-                            if (capInput) capital = parseFloat(capInput.value) || 500000;
-                        }
-                    } catch (e) {
-                        capital = 500000;
-                    }
+                    
                     const targetVal = `₹${(capital * 0.04).toFixed(2)}`;
                     const slVal = `-₹${(capital * 0.02).toFixed(2)}`;
                     const closedInfo = `<div style="font-size:0.6rem; color:var(--text-muted); margin-top:2px; font-family:monospace;">Tgt: ${targetVal} | SL: ${slVal}</div>`;
