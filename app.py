@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.17" 
+VERSION = "3.1.18" 
 import time
 import os
 import json
@@ -1644,6 +1644,14 @@ class SimulationState:
         mode = self.settings.get("auto_trade_mode", "OFF")
         if mode == "OFF":
             return
+
+        # Self-healing: if auto_trade_active_id is None but there is an open trade in the journal, restore it!
+        if not self.auto_trade_active_id:
+            for t in journal.trades:
+                if t.get("status") == "OPEN" and t.get("execution_type") == mode:
+                    self.auto_trade_active_id = t["id"]
+                    print(f"🤖 AUTO-TRADE: Self-healed active trade ID {t['id']} from journal.")
+                    break
             
         # Ensure fresh option chain is built
         self.update_option_chain()
@@ -1660,18 +1668,16 @@ class SimulationState:
         # 2. Block new entries after 15:00:00 IST and aggressively close open positions
         close_time = datetime.time(15, 0)
         if ist_time >= close_time:
-            if self.auto_trade_active_id:
-                active_trade = None
-                for t in journal.trades:
-                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN":
-                        active_trade = t
-                        break
-                if active_trade:
-                    journal.close_trade(active_trade["id"], self.spot_price)
-                    active_trade["reason"] = f"Force Square-off (15:00 IST Time-in-Force Kill Switch)"
-                    journal.save_journal()
-                    self.auto_trade_active_id = None
-                    print("🤖 AUTO-TRADE: Force squared off open position due to 15:00 IST Kill Switch.")
+            open_count = 0
+            for t in journal.trades:
+                if t.get("status") == "OPEN" and t.get("execution_type") == mode:
+                    journal.close_trade(t["id"], self.spot_price)
+                    t["reason"] = f"Force Square-off (15:00 IST Time-in-Force Kill Switch)"
+                    open_count += 1
+            if open_count > 0:
+                journal.save_journal()
+                self.auto_trade_active_id = None
+                print(f"🤖 AUTO-TRADE: Force squared off {open_count} open positions due to 15:00 IST Kill Switch.")
             return
             
         capital = self.get_available_capital()
@@ -1856,28 +1862,41 @@ class SimulationState:
             
             # Exits Evaluation
             sl_hit = False
+            target_hit = False
             exit_reason = ""
             
-            if current_stage == "RISK":
-                if floating_pnl <= -R:
-                    sl_hit = True
-                    exit_reason = f"Hard SL hit (Limit: -₹{R:.2f}, Current PnL: ₹{floating_pnl:.2f})"
-            elif current_stage == "BREAKEVEN":
+            # 1. Hard SL check
+            sl_threshold = active_trade.get("sl_pnl", R)
+            if floating_pnl <= -sl_threshold:
+                sl_hit = True
+                exit_reason = f"Hard SL hit (Limit: -₹{sl_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
+                
+            # 2. Hard Target check
+            target_threshold = active_trade.get("target_pnl", 2.0 * R)
+            if not sl_hit and floating_pnl >= target_threshold:
+                target_hit = True
+                exit_reason = f"Target Profit Hit (Limit: +₹{target_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
+                
+            # 3. Breakeven stage SL check
+            if not sl_hit and not target_hit and current_stage == "BREAKEVEN":
                 if floating_pnl < total_costs:
                     sl_hit = True
                     exit_reason = f"Breakeven SL hit (Stop: ₹{total_costs:.2f}, Current PnL: ₹{floating_pnl:.2f})"
-            elif current_stage in ["PROFIT PROTECTION", "PROFIT MAXIMIZATION"]:
+                    
+            # 4. Profit Protection stage SL check
+            if not sl_hit and not target_hit and current_stage in ["PROFIT PROTECTION", "PROFIT MAXIMIZATION"]:
                 locked_threshold = active_trade["locked_profit"]
                 if floating_pnl < locked_threshold:
                     sl_hit = True
                     exit_reason = f"Profit Protection SL hit (Stop: ₹{locked_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
                     
-            if sl_hit:
+            if sl_hit or target_hit:
                 journal.close_trade(active_trade["id"], spot)
                 active_trade["reason"] = exit_reason
                 journal.save_journal()
                 self.auto_trade_active_id = None
                 self.signal_change_pending = False
+                self.trail_activated = False
                 print(f"🤖 AUTO-TRADE: Closed position (ID {active_trade['id']}). Reason: {exit_reason}")
                 return
             
@@ -2533,6 +2552,24 @@ class TradeJournal:
             capital = float(state.settings.get("capital", 500000.0)) if 'state' in globals() else 500000.0
             initial_risk = calculate_trade_initial_risk(trade, capital)
         trade["initial_risk"] = initial_risk
+
+        # Calculate sl_pnl and target_pnl based on strategy type
+        capital_val = float(state.settings.get("capital", 500000.0)) if 'state' in globals() else 500000.0
+        if "Buy CE" in strategy or "Buy PE" in strategy:
+            # Option buying: SL is 10% of premium, Target is 20% of premium
+            trade["sl_pnl"] = round(entry_premium * 0.10, 2)
+            trade["target_pnl"] = round(entry_premium * 0.20, 2)
+        elif any(s in strategy for s in ["Strangle", "Straddle", "Spread", "Condor"]):
+            # Option selling: SL is 50% of net credit, Target is 50% of net credit
+            sell_prem = sum(leg["entry_price"] * leg["quantity"] for leg in legs if leg["action"] == "SELL") if legs else 0.0
+            buy_prem = sum(leg["entry_price"] * leg["quantity"] for leg in legs if leg["action"] == "BUY") if legs else 0.0
+            net_credit = abs(sell_prem - buy_prem) if legs else entry_premium
+            trade["sl_pnl"] = round(net_credit * 0.50, 2)
+            trade["target_pnl"] = round(net_credit * 0.50, 2)
+        else:
+            # Fallback: 2% of capital SL, 4% of capital Target
+            trade["sl_pnl"] = round(capital_val * 0.02, 2)
+            trade["target_pnl"] = round(capital_val * 0.04, 2)
         
         self.trades.append(trade)
         self.save_journal()
