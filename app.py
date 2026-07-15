@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.16" 
+VERSION = "3.1.17" 
 import time
 import os
 import json
@@ -3038,6 +3038,10 @@ def update_settings(data: SettingsUpdate):
     
     # Try updating the expiry automatically based on token validity/feed mode
     state.update_default_expiry()
+    
+    # Clear capital query cache to force immediate validation of the new token
+    state._cached_capital = None
+    state._capital_cache_time = 0.0
     
     state.evaluate_decision_engine()
     state.save_settings()
