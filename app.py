@@ -750,7 +750,7 @@ class SimulationState:
             if now - self._capital_cache_time < 60.0:
                 return self._cached_capital
                 
-        url = "https://api.upstox.com/v2/user/profile/balance"
+        url = "https://api.upstox.com/v2/user/get-funds-and-margin"
         headers = {
             "Accept": "application/json",
             "Authorization": f"Bearer {token}"
