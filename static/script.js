@@ -1537,6 +1537,8 @@ async function saveSettings() {
             feed_mode: feedMode,
             upstox_access_token: token,
             upstox_expiry_date: expiry,
+            upstox_api_key: (document.getElementById('set-upstox-api-key') || {}).value || '',
+            upstox_api_secret: (document.getElementById('set-upstox-api-secret') || {}).value || '',
             dashboard_username: dbUser,
             dashboard_password: dbPass,
             auto_trade_mode: autoTradeMode,
@@ -3836,3 +3838,54 @@ function updateTrendBadge(id, trend) {
         badge.style.border = "1px solid rgba(255, 255, 255, 0.1)";
     }
 }
+
+
+// ─── Upstox Token Status Banner ────────────────────────────────
+async function updateTokenStatusBanner() {
+    const dot = document.getElementById('token-status-dot');
+    const label = document.getElementById('token-status-label');
+    const expiry = document.getElementById('token-status-expiry');
+    if (!dot || !label) return;
+    try {
+        const resp = await fetch('/api/token-status');
+        if (!resp.ok) return;
+        const d = await resp.json();
+        if (d.status === 'VALID') {
+            dot.style.background = '#00e676';
+            dot.style.boxShadow = '0 0 6px #00e676';
+            label.style.color = '#00e676';
+            label.textContent = '🟢 Token Valid';
+            if (expiry) expiry.textContent = `Expires: ${d.expires_at} (${d.days_left} days)`;
+        } else if (d.status === 'EXPIRED') {
+            dot.style.background = '#ff1744';
+            dot.style.boxShadow = '0 0 6px #ff1744';
+            label.style.color = '#ff1744';
+            label.textContent = '🔴 Token Expired — Click Login with Upstox';
+            if (expiry) expiry.textContent = `Expired at: ${d.expires_at}`;
+        } else if (d.status === 'MISSING') {
+            dot.style.background = '#ffab40';
+            dot.style.boxShadow = '0 0 6px #ffab40';
+            label.style.color = '#ffab40';
+            label.textContent = '⚠️ No Token — Enter API Key then click Login with Upstox';
+            if (expiry) expiry.textContent = '';
+        }
+        // Show/highlight Login button if token missing or expired
+        const loginBtn = document.getElementById('btn-login-upstox');
+        if (loginBtn) {
+            if (d.status !== 'VALID') {
+                loginBtn.style.background = 'linear-gradient(135deg, #ff174422, #ff572222)';
+                loginBtn.style.borderColor = '#ff1744';
+                loginBtn.style.color = '#ff5252';
+                loginBtn.classList.add('pulse-red');
+            } else {
+                loginBtn.style.background = 'linear-gradient(135deg,#00e5ff22,#7c4dff22)';
+                loginBtn.style.borderColor = '#00e5ff';
+                loginBtn.style.color = '#00e5ff';
+                loginBtn.classList.remove('pulse-red');
+            }
+        }
+    } catch(e) {
+        if (label) { label.textContent = 'Token status unavailable'; }
+    }
+}
+window.updateTokenStatusBanner = updateTokenStatusBanner;

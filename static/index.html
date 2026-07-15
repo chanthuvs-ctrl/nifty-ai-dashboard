@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3.1.19">
+    <link rel="stylesheet" href="style.css?v=3.1.20">
     <script src="chart.umd.js"></script>
     <script src="chartjs-plugin-annotation.js"></script>
 </head>
@@ -20,7 +20,7 @@
         <div class="header-brand">
             <div class="pulse-indicator" id="refresh-indicator"></div>
             <h1>INTRADAY <span class="glow-text">DECISION ENGINE</span></h1>
-            <span class="badge-pro" id="version-badge">PRODUCTION v3.1.19</span>
+            <span class="badge-pro" id="version-badge">PRODUCTION v3.1.20</span>
             <span class="badge-pro" id="api-status-badge" style="font-size: 0.58rem; padding: 2px 5px; margin-left: 6px; background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border-color: var(--border-color);">API Checking...</span>
         </div>
         
@@ -1080,10 +1080,37 @@ Weekly Review: Week ____ (P&L: _________)
                 </div>
 
                 <div id="upstox-config-fields" style="display: none; border-left: 2px solid var(--neon-cyan); padding-left: 10px; margin-bottom: 15px;">
-                    <div class="setting-row">
-                        <label>Upstox Access Token</label>
-                        <input type="password" id="set-upstox-token" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%;" placeholder="Paste Upstox Access Token here...">
+                    
+                    <!-- Token Status Badge -->
+                    <div id="token-status-banner" style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; background:rgba(0,229,255,0.06); border:1px solid rgba(0,229,255,0.2); margin-bottom:12px;">
+                        <span id="token-status-dot" style="width:10px;height:10px;border-radius:50%;background:#aaa;display:inline-block;flex-shrink:0;"></span>
+                        <div>
+                            <div id="token-status-label" style="font-size:0.75rem;font-weight:700;color:var(--text-main);">Checking token...</div>
+                            <div id="token-status-expiry" style="font-size:0.65rem;color:var(--text-muted);margin-top:2px;"></div>
+                        </div>
+                        <a href="/auth/upstox" target="_blank" id="btn-login-upstox" style="margin-left:auto;padding:6px 14px;background:linear-gradient(135deg,#00e5ff22,#7c4dff22);border:1px solid #00e5ff;border-radius:6px;color:#00e5ff;font-size:0.72rem;font-weight:700;text-decoration:none;white-space:nowrap;cursor:pointer;" title="One-click OAuth login to get a fresh token automatically">
+                            🔐 Login with Upstox
+                        </a>
                     </div>
+
+                    <!-- API Key -->
+                    <div class="setting-row" style="margin-bottom:10px;">
+                        <label>Upstox API Key <span style="font-size:0.6rem;color:var(--text-muted)">(from My Apps → nifty dashboard)</span></label>
+                        <input type="text" id="set-upstox-api-key" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; font-family:monospace;" placeholder="e.g. 43517b4b-8295-423c-aa15-...8ef7">
+                    </div>
+
+                    <!-- API Secret -->
+                    <div class="setting-row" style="margin-bottom:10px;">
+                        <label>Upstox API Secret <span style="font-size:0.6rem;color:var(--text-muted)">(from My Apps → nifty dashboard)</span></label>
+                        <input type="password" id="set-upstox-api-secret" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; font-family:monospace;" placeholder="API Secret">
+                    </div>
+
+                    <!-- Manual token paste (fallback) -->
+                    <div class="setting-row" style="margin-bottom:10px;">
+                        <label>Access Token <span style="font-size:0.6rem;color:var(--text-muted)">(auto-filled after OAuth login, or paste manually)</span></label>
+                        <input type="password" id="set-upstox-token" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%;" placeholder="Auto-filled by Login button, or paste manually here">
+                    </div>
+                    
                     <div class="setting-row" style="margin-top: 10px;">
                         <label>Option Expiry Date</label>
                         <select id="set-upstox-expiry" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; cursor: pointer;">
@@ -1157,6 +1184,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=3.1.19"></script>
+    <script src="script.js?v=3.1.20"></script>
 </body>
 </html>

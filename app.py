@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.19" 
+VERSION = "3.1.20" 
 import time
 import os
 import json
@@ -2754,6 +2754,8 @@ class SettingsUpdate(BaseModel):
     feed_mode: Optional[str] = "Simulation"
     upstox_access_token: Optional[str] = ""
     upstox_expiry_date: Optional[str] = ""
+    upstox_api_key: Optional[str] = ""
+    upstox_api_secret: Optional[str] = ""
     dashboard_username: Optional[str] = "admin"
     dashboard_password: Optional[str] = "password123"
     auto_trade_mode: Optional[str] = "OFF"
@@ -3086,6 +3088,10 @@ def update_settings(data: SettingsUpdate):
     state.settings["feed_mode"] = data.feed_mode or "Simulation"
     state.settings["upstox_access_token"] = data.upstox_access_token or ""
     state.settings["upstox_expiry_date"] = data.upstox_expiry_date or ""
+    if data.upstox_api_key:
+        state.settings["upstox_api_key"] = data.upstox_api_key
+    if data.upstox_api_secret:
+        state.settings["upstox_api_secret"] = data.upstox_api_secret
     state.settings["dashboard_username"] = data.dashboard_username or "admin"
     state.settings["dashboard_password"] = data.dashboard_password or "password123"
     state.settings["auto_trade_mode"] = data.auto_trade_mode or "OFF"
@@ -3609,6 +3615,169 @@ def upstox_proxy(req: UpstoxProxyRequest):
             return JSONResponse(content={"raw": resp.text}, status_code=resp.status_code)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Proxy error: {str(e)}")
+
+
+
+# ─────────────────────────────────────────────────────────────────
+# UPSTOX OAUTH 2.0 AUTO-TOKEN REFRESH FLOW
+# ─────────────────────────────────────────────────────────────────
+import webbrowser as _webbrowser
+import base64 as _b64
+import json as _json_mod
+from urllib.parse import urlencode as _urlencode
+
+def _get_token_expiry_info(token: str):
+    """Decode JWT and return (is_expired, expires_at_ist, days_left)."""
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return True, "Unknown", 0
+        payload_raw = parts[1] + "=" * (4 - len(parts[1]) % 4)
+        payload = _json_mod.loads(_b64.urlsafe_b64decode(payload_raw))
+        exp = payload.get("exp", 0)
+        now = datetime.datetime.now().timestamp()
+        is_expired = now > exp
+        exp_dt = datetime.datetime.fromtimestamp(exp + 19800)  # +5:30 IST
+        days_left = max(0, (exp - now) / 86400)
+        return is_expired, exp_dt.strftime("%Y-%m-%d %H:%M IST"), round(days_left, 1)
+    except Exception:
+        return True, "Unknown", 0
+
+@app.get("/api/token-status")
+def token_status():
+    """Returns current token validity, expiry, and which app key is stored."""
+    token = state.settings.get("upstox_access_token", "")
+    api_key = state.settings.get("upstox_api_key", "")
+    if not token:
+        return {"status": "MISSING", "message": "No access token configured.", "api_key_set": bool(api_key)}
+    is_expired, exp_str, days_left = _get_token_expiry_info(token)
+    return {
+        "status": "EXPIRED" if is_expired else "VALID",
+        "expires_at": exp_str,
+        "days_left": days_left,
+        "api_key_set": bool(api_key),
+        "api_key_tail": api_key[-6:] if len(api_key) >= 6 else api_key,
+        "message": "Token is expired. Click Login with Upstox to refresh." if is_expired else f"Token valid for {days_left} more days."
+    }
+
+@app.get("/auth/upstox")
+def auth_upstox_start():
+    """Generate Upstox OAuth URL and redirect the user to login."""
+    api_key = state.settings.get("upstox_api_key", "").strip()
+    if not api_key:
+        return JSONResponse(
+            content={"error": "API Key not configured. Go to Settings and enter your Upstox API Key first."},
+            status_code=400
+        )
+    redirect_uri = "http://localhost:8000/auth/callback"
+    params = {
+        "client_id": api_key,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+    }
+    auth_url = "https://api.upstox.com/v2/login/authorization/dialog?" + _urlencode(params)
+    # Return an HTML auto-redirect page
+    html = f"""<!DOCTYPE html>
+<html>
+<head><title>Upstox Login</title>
+<style>body{{background:#0a0a0f;color:#e0e0e0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}}
+.box{{text-align:center;padding:40px;background:#1a1a2e;border-radius:16px;border:1px solid #00e5ff33;}}
+a{{color:#00e5ff;font-size:1.2rem;text-decoration:none;padding:14px 28px;background:#00e5ff22;border:1px solid #00e5ff;border-radius:8px;display:inline-block;margin-top:20px;}}
+a:hover{{background:#00e5ff44;}}</style>
+</head>
+<body><div class="box">
+<h2>🔐 Upstox OAuth Login</h2>
+<p>Redirecting you to Upstox to authorize access...</p>
+<p>If not redirected automatically, <a href="{auth_url}">Click here to login</a></p>
+<script>setTimeout(function(){{window.location.href="{auth_url}";}}, 1000);</script>
+</div></body></html>"""
+    return HTMLResponse(content=html)
+
+@app.get("/auth/callback")
+def auth_upstox_callback(code: str = None, error: str = None):
+    """
+    Upstox redirects here with ?code=AUTH_CODE after user logs in.
+    We exchange the code for an access token and save it automatically.
+    """
+    if error or not code:
+        html = f"""<!DOCTYPE html>
+<html><head><title>Auth Failed</title>
+<style>body{{background:#0a0a0f;color:#ff5252;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}}
+.box{{text-align:center;padding:40px;background:#1a1a2e;border-radius:16px;}}</style>
+</head><body><div class="box"><h2>❌ Authorization Failed</h2><p>{error or "No authorization code received."}</p>
+<a href="/" style="color:#00e5ff">← Back to Dashboard</a></div></body></html>"""
+        return HTMLResponse(content=html, status_code=400)
+
+    api_key = state.settings.get("upstox_api_key", "").strip()
+    api_secret = state.settings.get("upstox_api_secret", "").strip()
+    redirect_uri = "http://localhost:8000/auth/callback"
+
+    if not api_key or not api_secret:
+        html = """<!DOCTYPE html>
+<html><head><title>Config Error</title>
+<style>body{{background:#0a0a0f;color:#ff5252;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}}
+.box{{text-align:center;padding:40px;background:#1a1a2e;border-radius:16px;}}</style>
+</head><body><div class="box"><h2>⚠️ API Key/Secret Missing</h2>
+<p>Please enter your Upstox API Key and Secret in Settings first.</p>
+<a href="/" style="color:#00e5ff">← Go to Settings</a></div></body></html>"""
+        return HTMLResponse(content=html, status_code=400)
+
+    # Exchange authorization code for access token
+    try:
+        token_resp = requests.post(
+            "https://api.upstox.com/v2/login/authorization/token",
+            data={
+                "code": code,
+                "client_id": api_key,
+                "client_secret": api_secret,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
+            timeout=15
+        )
+        if token_resp.status_code == 200:
+            token_data = token_resp.json()
+            new_token = token_data.get("access_token", "")
+            if new_token:
+                # Save to settings
+                state.settings["upstox_access_token"] = new_token
+                state._cached_capital = None
+                state._capital_cache_time = 0.0
+                state.upstox_token_status = "VALID"
+                state.save_settings()
+                is_expired, exp_str, days_left = _get_token_expiry_info(new_token)
+                print(f"✅ Upstox OAuth: New token saved. Expires: {exp_str}")
+                html = f"""<!DOCTYPE html>
+<html><head><title>Login Successful</title>
+<style>body{{background:#0a0a0f;color:#e0e0e0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}}
+.box{{text-align:center;padding:40px;background:#1a1a2e;border-radius:16px;border:1px solid #00e67633;}}
+.ok{{color:#00e676;font-size:3rem;}}
+a{{color:#00e5ff;padding:12px 24px;background:#00e5ff22;border:1px solid #00e5ff;border-radius:8px;display:inline-block;margin-top:20px;text-decoration:none;}}
+a:hover{{background:#00e5ff44;}}</style>
+</head><body><div class="box">
+<div class="ok">✅</div>
+<h2>Token Refreshed Successfully!</h2>
+<p>New token saved. Expires: <strong>{exp_str}</strong> ({days_left} days)</p>
+<a href="/">← Back to Dashboard</a>
+<script>setTimeout(function(){{window.location.href="/";}}, 3000);</script>
+</div></body></html>"""
+                return HTMLResponse(content=html)
+            else:
+                raise ValueError(f"Empty token in response: {token_resp.text}")
+        else:
+            raise ValueError(f"HTTP {token_resp.status_code}: {token_resp.text[:300]}")
+    except Exception as e:
+        print(f"❌ Upstox OAuth token exchange failed: {e}")
+        html = f"""<!DOCTYPE html>
+<html><head><title>Token Exchange Failed</title>
+<style>body{{background:#0a0a0f;color:#ff5252;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}}
+.box{{text-align:center;padding:40px;background:#1a1a2e;border-radius:16px;}}</style>
+</head><body><div class="box"><h2>❌ Token Exchange Failed</h2>
+<pre style="color:#ffab40;font-size:0.8rem;max-width:400px;word-break:break-all">{str(e)[:400]}</pre>
+<a href="/" style="color:#00e5ff;margin-top:16px;display:block">← Back to Dashboard</a>
+</div></body></html>"""
+        return HTMLResponse(content=html, status_code=500)
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
