@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.14" 
+VERSION = "3.1.15" 
 import time
 import os
 import json
@@ -176,6 +176,7 @@ class SimulationState:
         self.price_time = get_ist_time_str()
         self._cached_capital = None
         self._capital_cache_time = 0.0
+        self.upstox_token_status = "DISCONNECTED"
         
         # Historical completed candles for multi-timeframe analysis
         self.candles_1m: List[Dict] = []
@@ -740,37 +741,48 @@ class SimulationState:
     def get_broker_balance(self) -> float:
         """Returns the actual Upstox broker balance if token exists, fallback to settings capital."""
         token = self.settings.get("upstox_access_token")
-        if token:
-            now = time.time()
-            if getattr(self, "_cached_capital", None) is not None and getattr(self, "_capital_cache_time", 0.0) > 0:
-                if now - self._capital_cache_time < 60.0:
-                    return self._cached_capital
-                    
-            url = "https://api.upstox.com/v2/user/profile/balance"
-            headers = {
-                "Accept": "application/json",
-                "Authorization": f"Bearer {token}"
-            }
-            try:
-                resp = requests.get(url, headers=headers, timeout=5)
-                if resp.status_code == 200:
-                    res_json = resp.json()
-                    if res_json.get("status") == "success":
-                        equity_data = res_json.get("data", {}).get("equity", {})
-                        available = equity_data.get("available_margin")
-                        if available is not None:
-                            val = float(available)
-                            print(f"💰 Upstox Broker Balance Query: ₹{val:.2f} available.")
-                            self._cached_capital = val
-                            self._capital_cache_time = now
-                            return val
-            except Exception as e:
-                print(f"⚠️ Failed to query Upstox broker balance: {e}")
-                
-            if getattr(self, "_cached_capital", None) is not None:
-                print("⚠️ Using stale cached broker balance due to API failure.")
+        if not token or not token.strip():
+            self.upstox_token_status = "DISCONNECTED"
+            return float(self.settings.get("capital", 500000.0))
+            
+        now = time.time()
+        if getattr(self, "_cached_capital", None) is not None and getattr(self, "_capital_cache_time", 0.0) > 0:
+            if now - self._capital_cache_time < 60.0:
                 return self._cached_capital
                 
+        url = "https://api.upstox.com/v2/user/profile/balance"
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}"
+        }
+        try:
+            resp = requests.get(url, headers=headers, timeout=5)
+            if resp.status_code == 200:
+                res_json = resp.json()
+                if res_json.get("status") == "success":
+                    equity_data = res_json.get("data", {}).get("equity", {})
+                    available = equity_data.get("available_margin")
+                    if available is not None:
+                        val = float(available)
+                        print(f"💰 Upstox Broker Balance Query: ₹{val:.2f} available.")
+                        self._cached_capital = val
+                        self._capital_cache_time = now
+                        self.upstox_token_status = "VALID"
+                        return val
+            elif resp.status_code in [401, 403]:
+                print(f"⚠️ Upstox API token is invalid/expired (HTTP {resp.status_code})")
+                self.upstox_token_status = "INVALID"
+            else:
+                print(f"⚠️ Upstox API returned HTTP {resp.status_code}")
+        except Exception as e:
+            print(f"⚠️ Failed to query Upstox broker balance: {e}")
+            if getattr(self, "upstox_token_status", "DISCONNECTED") == "DISCONNECTED":
+                self.upstox_token_status = "INVALID"
+                
+        if getattr(self, "_cached_capital", None) is not None:
+            print("⚠️ Using stale cached broker balance due to API failure.")
+            return self._cached_capital
+            
         return float(self.settings.get("capital", 500000.0))
 
     def get_available_capital(self) -> float:
@@ -2885,6 +2897,7 @@ def get_market_data():
         "spot_price": round(spot, 2),
         "capital": round(state.get_available_capital(), 2),
         "broker_capital": round(state.get_broker_balance(), 2),
+        "upstox_token_status": state.upstox_token_status,
         "change_pct": state.intraday_change_pct,
         "change_val": state.intraday_change_val,
         "price_source": state.price_source,

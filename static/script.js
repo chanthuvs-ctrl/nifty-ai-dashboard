@@ -788,6 +788,30 @@ async function fetchMarketData() {
             capitalLabelEl.textContent = hasToken ? 'Live Balance' : 'Paper Capital';
         }
 
+        const apiEl = document.getElementById('api-status-badge');
+        if (apiEl) {
+            const status = data.upstox_token_status || "DISCONNECTED";
+            if (status === "VALID") {
+                apiEl.textContent = "Upstox API: Active";
+                apiEl.style.background = "rgba(0, 229, 153, 0.12)";
+                apiEl.style.color = "var(--neon-bull)";
+                apiEl.style.borderColor = "var(--neon-bull)";
+                apiEl.classList.remove("pulse-red");
+            } else if (status === "INVALID") {
+                apiEl.textContent = "Upstox API: Token Expired";
+                apiEl.style.background = "rgba(255, 23, 68, 0.12)";
+                apiEl.style.color = "#ff1744";
+                apiEl.style.borderColor = "#ff1744";
+                apiEl.classList.add("pulse-red");
+            } else {
+                apiEl.textContent = "Upstox API: Token Missing";
+                apiEl.style.background = "rgba(255, 255, 255, 0.05)";
+                apiEl.style.color = "var(--text-muted)";
+                apiEl.style.borderColor = "var(--border-color)";
+                apiEl.classList.remove("pulse-red");
+            }
+        }
+
         const dailyBrokerageEl = document.getElementById('stats-daily-brokerage');
         const totalBrokerageEl = document.getElementById('stats-total-brokerage');
         if (dailyBrokerageEl) dailyBrokerageEl.textContent = '₹' + (data.daily_brokerage || 0.0).toFixed(2);
