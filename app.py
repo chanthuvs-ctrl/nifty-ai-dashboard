@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.13" 
+VERSION = "3.1.14" 
 import time
 import os
 import json
@@ -737,13 +737,10 @@ class SimulationState:
             return 0.0
         return ((self.spot_price - prev_price) / prev_price) * 100.0
 
-    def get_available_capital(self) -> float:
-        """Returns the capital to be used for lot sizing calculations."""
-        mode = self.settings.get("auto_trade_mode", "OFF")
+    def get_broker_balance(self) -> float:
+        """Returns the actual Upstox broker balance if token exists, fallback to settings capital."""
         token = self.settings.get("upstox_access_token")
-        
-        if mode == "Live" and token:
-            # Check 1-minute memory cache
+        if token:
             now = time.time()
             if getattr(self, "_cached_capital", None) is not None and getattr(self, "_capital_cache_time", 0.0) > 0:
                 if now - self._capital_cache_time < 60.0:
@@ -763,19 +760,24 @@ class SimulationState:
                         available = equity_data.get("available_margin")
                         if available is not None:
                             val = float(available)
-                            print(f"💰 Upstox Live Capital Query: ₹{val:.2f} available.")
+                            print(f"💰 Upstox Broker Balance Query: ₹{val:.2f} available.")
                             self._cached_capital = val
                             self._capital_cache_time = now
                             return val
             except Exception as e:
-                print(f"⚠️ Failed to query Upstox available capital: {e}")
-            
-            # Stale cache fallback during API failure
+                print(f"⚠️ Failed to query Upstox broker balance: {e}")
+                
             if getattr(self, "_cached_capital", None) is not None:
-                print("⚠️ Using stale cached available capital due to API failure.")
+                print("⚠️ Using stale cached broker balance due to API failure.")
                 return self._cached_capital
                 
-        # Default fallback to manual capital setting
+        return float(self.settings.get("capital", 500000.0))
+
+    def get_available_capital(self) -> float:
+        """Returns the capital to be used for lot sizing calculations."""
+        mode = self.settings.get("auto_trade_mode", "OFF")
+        if mode == "Live":
+            return self.get_broker_balance()
         return float(self.settings.get("capital", 500000.0))
 
     def query_upstox_basket_margin(self, strategy: str, spot: float) -> Optional[float]:
@@ -2882,6 +2884,7 @@ def get_market_data():
         "version": VERSION,
         "spot_price": round(spot, 2),
         "capital": round(state.get_available_capital(), 2),
+        "broker_capital": round(state.get_broker_balance(), 2),
         "change_pct": state.intraday_change_pct,
         "change_val": state.intraday_change_val,
         "price_source": state.price_source,

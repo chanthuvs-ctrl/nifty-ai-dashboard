@@ -780,11 +780,12 @@ async function fetchMarketData() {
         const capitalEl = document.getElementById('stats-broker-capital');
         const capitalLabelEl = document.getElementById('label-broker-capital');
         if (capitalEl) {
-            const capitalVal = data.capital !== undefined ? data.capital : 0;
+            const capitalVal = data.broker_capital !== undefined ? data.broker_capital : 0;
             capitalEl.textContent = '₹' + capitalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
         if (capitalLabelEl) {
-            capitalLabelEl.textContent = currentMode === 'Live' ? 'Live Balance' : 'Paper Capital';
+            const hasToken = settings && settings.upstox_access_token && settings.upstox_access_token.trim() !== "";
+            capitalLabelEl.textContent = hasToken ? 'Live Balance' : 'Paper Capital';
         }
 
         const dailyBrokerageEl = document.getElementById('stats-daily-brokerage');
