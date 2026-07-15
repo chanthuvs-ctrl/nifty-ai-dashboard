@@ -784,7 +784,7 @@ async function fetchMarketData() {
             capitalEl.textContent = '₹' + capitalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
         if (capitalLabelEl) {
-            const hasToken = settings && settings.upstox_access_token && settings.upstox_access_token.trim() !== "";
+            const hasToken = data && data.upstox_token_status && data.upstox_token_status !== "DISCONNECTED";
             capitalLabelEl.textContent = hasToken ? 'Live Balance' : 'Paper Capital';
         }
 
