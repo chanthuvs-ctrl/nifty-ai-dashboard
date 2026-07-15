@@ -1,3 +1,16 @@
+// Safe localStorage helper to prevent exceptions in private/WebView mode
+const safeStorage = {
+    getItem(key) {
+        try { return safeStorage.getItem(key); } catch (e) { return null; }
+    },
+    setItem(key, value) {
+        try { safeStorage.setItem(key, value); } catch (e) {}
+    },
+    removeItem(key) {
+        try { safeStorage.removeItem(key); } catch (e) {}
+    }
+};
+
 // Globals
 let previousStrategy = null;
 // Helper to sync three-state auto-trade buttons styling dynamically
@@ -227,8 +240,12 @@ function drawGauge(canvasId, value, minVal, maxVal, unit, isVix = false) {
 
 // Trigger browser push notification
 function showNotification(title, message) {
-    if (typeof Notification !== 'undefined' && Notification.permission === "granted") {
-        new Notification(title, { body: message });
+    try {
+        if (typeof Notification !== 'undefined' && Notification.permission === "granted") {
+            new Notification(title, { body: message });
+        }
+    } catch (e) {
+        console.warn("Notification error:", e);
     }
 }
 
@@ -781,18 +798,18 @@ function renderOptionChain(chain, spot, maxPain) {
 
 // Synchronize client journal trades with server (backup & restore)
 async function syncJournalWithServer(serverTrades) {
-    if (localStorage.getItem('prevent_restore') === 'true') {
-        localStorage.removeItem('nifty_journal_trades');
-        localStorage.removeItem('prevent_restore');
+    if (safeStorage.getItem('prevent_restore') === 'true') {
+        safeStorage.removeItem('nifty_journal_trades');
+        safeStorage.removeItem('prevent_restore');
         return serverTrades;
     }
     if (serverTrades.length === 0) {
-        localStorage.removeItem('nifty_journal_trades');
+        safeStorage.removeItem('nifty_journal_trades');
         return serverTrades;
     }
     let localTrades = [];
     try {
-        localTrades = JSON.parse(localStorage.getItem('nifty_journal_trades')) || [];
+        localTrades = JSON.parse(safeStorage.getItem('nifty_journal_trades')) || [];
     } catch (e) {
         console.error("Failed to parse local trades:", e);
     }
@@ -825,7 +842,7 @@ async function syncJournalWithServer(serverTrades) {
         }
     } else {
         // Save current server trades to local storage as backup
-        localStorage.setItem('nifty_journal_trades', JSON.stringify(serverTrades));
+        safeStorage.setItem('nifty_journal_trades', JSON.stringify(serverTrades));
     }
     return serverTrades;
 }
@@ -834,7 +851,7 @@ async function syncJournalWithServer(serverTrades) {
 async function syncSettingsWithServer(serverSettings) {
     let localSettings = null;
     try {
-        localSettings = JSON.parse(localStorage.getItem('nifty_settings'));
+        localSettings = JSON.parse(safeStorage.getItem('nifty_settings'));
     } catch (e) {}
     
     // Check if server settings have empty token, but local storage has a token
@@ -866,7 +883,7 @@ async function syncSettingsWithServer(serverSettings) {
         // Save current server settings to local storage as backup
         const cleanSettings = { ...serverSettings };
         delete cleanSettings.upcoming_expiry_dates; // Keep clean
-        localStorage.setItem('nifty_settings', JSON.stringify(cleanSettings));
+        safeStorage.setItem('nifty_settings', JSON.stringify(cleanSettings));
     }
     return serverSettings;
 }
@@ -973,7 +990,7 @@ async function fetchJournal() {
                     
                                         let capital = 500000;
                     try {
-                        const localSet = JSON.parse(localStorage.getItem('nifty_settings'));
+                        const localSet = JSON.parse(safeStorage.getItem('nifty_settings'));
                         if (localSet && localSet.capital) {
                             capital = parseFloat(localSet.capital);
                         } else {
@@ -1061,7 +1078,7 @@ async function fetchJournal() {
                     
                                         let capital = 500000;
                     try {
-                        const localSet = JSON.parse(localStorage.getItem('nifty_settings'));
+                        const localSet = JSON.parse(safeStorage.getItem('nifty_settings'));
                         if (localSet && localSet.capital) {
                             capital = parseFloat(localSet.capital);
                         } else {
@@ -1462,7 +1479,7 @@ async function saveSettings() {
         if (res.status === "SUCCESS") {
             // Save settings copy in localStorage as dynamic backup
             const cleanSettings = { ...req };
-            localStorage.setItem('nifty_settings', JSON.stringify(cleanSettings));
+            safeStorage.setItem('nifty_settings', JSON.stringify(cleanSettings));
             
             // Align dashboard view to the newly saved mode (v2.6)
             alignDashboardViewToMode(autoTradeMode);
@@ -1639,9 +1656,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Check if reset query parameter is present (v2.7.1)
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('reset') === 'true') {
-        localStorage.removeItem('nifty_journal_trades');
-        localStorage.removeItem('nifty_settings');
-        localStorage.removeItem('prevent_restore');
+        safeStorage.removeItem('nifty_journal_trades');
+        safeStorage.removeItem('nifty_settings');
+        safeStorage.removeItem('prevent_restore');
         console.log("Cleared client local storage via reset parameter.");
         window.location.href = window.location.pathname;
         return;
@@ -1661,7 +1678,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const panel = document.getElementById(panelId);
             if (!panel) return;
             
-            if (isMobile) {
+            if (isMobile || panelId === 'panel-chart') {
                 btn.classList.remove('active');
                 panel.classList.remove('active');
                 panel.classList.add('hidden-panel');
@@ -1700,6 +1717,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Sync settings with local storage backup
         settings = await syncSettingsWithServer(settings);
+        
+        // Populate settings modal input values immediately on load
+        if (document.getElementById('set-capital')) document.getElementById('set-capital').value = settings.capital;
+        if (document.getElementById('set-risk')) document.getElementById('set-risk').value = settings.risk_pct;
+        if (document.getElementById('set-broker')) document.getElementById('set-broker').value = settings.preferred_broker;
+        if (document.getElementById('set-strategy')) document.getElementById('set-strategy').value = settings.preferred_strategy;
+        if (document.getElementById('set-regime')) document.getElementById('set-regime').value = settings.regime_override;
+        if (document.getElementById('set-feed-mode')) document.getElementById('set-feed-mode').value = settings.feed_mode || 'Simulation';
+        if (document.getElementById('set-upstox-token')) document.getElementById('set-upstox-token').value = settings.upstox_access_token || '';
+        if (document.getElementById('set-auth-user')) document.getElementById('set-auth-user').value = settings.dashboard_username || 'admin';
+        if (document.getElementById('set-auth-pass')) document.getElementById('set-auth-pass').value = settings.dashboard_password || 'password123';
+        if (document.getElementById('set-trailing-sl')) document.getElementById('set-trailing-sl').value = settings.trailing_sl_pts || 30.0;
+        syncAutoTradeButtonVisuals('modal-auto-trade-group', settings.auto_trade_mode || 'OFF');
         
         const indexSelector = document.getElementById('select-active-index');
         if (indexSelector) {
@@ -1793,8 +1823,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnResetHalt.addEventListener('click', async () => {
             try {
                 // Set prevent restore flag to break any race condition restore loops
-                localStorage.setItem('prevent_restore', 'true');
-                localStorage.removeItem('nifty_journal_trades');
+                safeStorage.setItem('prevent_restore', 'true');
+                safeStorage.removeItem('nifty_journal_trades');
                 
                 const r = await fetch('/api/reset-daily-halt', { method: 'POST' });
                 const res = await r.json();
@@ -1833,8 +1863,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnWipeDatabase.addEventListener('click', async () => {
                 if (confirm("Are you absolutely sure you want to WIPE all trade journals, history, and reset P&L to zero? This action cannot be undone.")) {
                     try {
-                        localStorage.setItem('prevent_restore', 'true');
-                        localStorage.removeItem('nifty_journal_trades');
+                        safeStorage.setItem('prevent_restore', 'true');
+                        safeStorage.removeItem('nifty_journal_trades');
                         
                         const resp = await fetch('/api/journal/wipe-all-trades', { method: 'POST' });
                         const res = await resp.json();
@@ -2236,8 +2266,13 @@ function ensureLegs(pos, optionChain) {
 // ==========================================
 
 function initLivePnlChart() {
+    if (livePnlChart) return;
     const ctx = document.getElementById('live-pnl-chart');
     if (!ctx) return;
+    try {
+        const existing = Chart.getChart(ctx);
+        if (existing) existing.destroy();
+    } catch(e) {}
     
     livePnlChart = new Chart(ctx, {
         type: 'line',
@@ -2373,8 +2408,13 @@ function renderDecisionMatrix(components) {
 // LIVE ATM STRADDLE PREMIUM CHART (v3.1.8)
 // ==========================================
 function initLiveStraddleChart() {
+    if (liveStraddleChart) return;
     const ctx = document.getElementById('live-straddle-chart');
     if (!ctx) return;
+    try {
+        const existing = Chart.getChart(ctx);
+        if (existing) existing.destroy();
+    } catch(e) {}
     
     liveStraddleChart = new Chart(ctx, {
         type: 'line',
@@ -2430,8 +2470,13 @@ function initLiveStraddleChart() {
 
 
 function initLiveChart() {
+    if (liveChart) return;
     const ctx = document.getElementById('live-price-chart');
     if (!ctx) return;
+    try {
+        const existing = Chart.getChart(ctx);
+        if (existing) existing.destroy();
+    } catch(e) {}
     
     liveChart = new Chart(ctx, {
         type: 'line',
@@ -2830,7 +2875,7 @@ function initAcademy() {
     console.log("Initializing Trading Academy Module...");
     
     // Load state from localStorage
-    const savedState = localStorage.getItem('agy_academy_state');
+    const savedState = safeStorage.getItem('agy_academy_state');
     if (savedState) {
         try {
             academyState = { ...academyState, ...JSON.parse(savedState) };
@@ -2840,7 +2885,7 @@ function initAcademy() {
     }
     
     // Load checklist states
-    const savedChecklist = localStorage.getItem('agy_checklist_state');
+    const savedChecklist = safeStorage.getItem('agy_checklist_state');
     if (savedChecklist) {
         try {
             academyState.checklistStates = JSON.parse(savedChecklist);
@@ -2947,7 +2992,7 @@ function initAcademy() {
         row.addEventListener('click', () => {
             row.classList.toggle('checked');
             academyState.checklistStates[itemId] = row.classList.contains('checked');
-            localStorage.setItem('agy_checklist_state', JSON.stringify(academyState.checklistStates));
+            safeStorage.setItem('agy_checklist_state', JSON.stringify(academyState.checklistStates));
         });
     });
     
@@ -3680,7 +3725,7 @@ function renderSVGChart(index) {
 
 // Save Academy state to localStorage
 function saveAcademyState() {
-    localStorage.setItem('agy_academy_state', JSON.stringify(academyState));
+    safeStorage.setItem('agy_academy_state', JSON.stringify(academyState));
 }
 
 // Expose functions globally for dynamic integrations
