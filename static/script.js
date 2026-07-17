@@ -2060,6 +2060,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
+    // Scalper Mode toggle button
+    const btnScalper = document.getElementById('btn-scalper-toggle');
+    if (btnScalper) {
+        btnScalper.addEventListener('click', toggleScalperMode);
+        console.log("⚡ Scalper Mode listener bound successfully.");
+    }
+
     // Tab buttons event listeners
     const tabPaper = document.getElementById('tab-paper');
     const tabLive = document.getElementById('tab-live');
