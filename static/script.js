@@ -761,6 +761,10 @@ async function fetchMarketData() {
         // Sync auto-trade header button group state
         const currentMode = data.auto_trade_mode || 'OFF';
         syncAutoTradeButtonVisuals('hdr-auto-trade-group', currentMode);
+        
+        // Sync Scalper visual state from server
+        const scalperEnabled = data.scalper_mode || false;
+        syncScalperButtonVisuals(scalperEnabled);
 
         // Update booked P&L + trade stats bar
         const bookedPnl = data.daily_pnl !== undefined ? data.daily_pnl : 0;
@@ -1542,7 +1546,8 @@ async function saveSettings() {
             dashboard_username: dbUser,
             dashboard_password: dbPass,
             auto_trade_mode: autoTradeMode,
-            trailing_sl_pts: trailingSl
+            trailing_sl_pts: trailingSl,
+            scalper_mode: document.getElementById('set-scalper-mode') ? document.getElementById('set-scalper-mode').checked : false
         };
         
         const resp = await fetch('/api/settings', {
@@ -1804,6 +1809,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (document.getElementById('set-auth-user')) document.getElementById('set-auth-user').value = settings.dashboard_username || 'admin';
         if (document.getElementById('set-auth-pass')) document.getElementById('set-auth-pass').value = settings.dashboard_password || 'password123';
         if (document.getElementById('set-trailing-sl')) document.getElementById('set-trailing-sl').value = settings.trailing_sl_pts || 30.0;
+        if (document.getElementById('set-scalper-mode')) document.getElementById('set-scalper-mode').checked = settings.scalper_mode || false;
+        syncScalperButtonVisuals(settings.scalper_mode || false);
         syncAutoTradeButtonVisuals('modal-auto-trade-group', settings.auto_trade_mode || 'OFF');
         
         const indexSelector = document.getElementById('select-active-index');

@@ -266,7 +266,8 @@ class SimulationState:
             "dashboard_password": "password123",
             "session_token": "",
             "auto_trade_mode": "OFF",
-            "trailing_sl_pts": 30.0
+            "trailing_sl_pts": 30.0,
+            "scalper_mode": False
         }
         
         # Load settings from disk if exists
@@ -967,6 +968,15 @@ class SimulationState:
                         atm_premium = item.get("put_price", 100.0)
                     break
             
+            # SCALPER MODE OVERRIDE: deploy exactly 10% of capital, SL = 0.5% of capital
+            is_scalper = self.settings.get("scalper_mode", False)
+            if is_scalper:
+                target_margin = capital * 0.10
+                suggested_lots = max(1, int(target_margin / (atm_premium * lot_size)))
+                margin_required = suggested_lots * atm_premium * lot_size
+                risk_amount = capital * 0.005  # -0.5% of capital stop-loss
+                return suggested_lots, margin_required, risk_amount
+
             # SL = 10% premium. Risk per lot = premium * lot_size * 0.10
             risk_per_lot = atm_premium * lot_size * 0.10
             suggested_lots = max(1, int(max_risk / risk_per_lot))
@@ -1756,11 +1766,12 @@ class SimulationState:
 
         # 2. Manage Active Position (if exists)
         if active_trade:
-            # A. Check 2% capital Stop Loss limit (Hard Capital SL hit)
-            capital_sl_limit = capital * 0.02
+            # A. Check Stop Loss limit (Hard Capital SL hit: 0.5% for scalper, 2% otherwise)
+            is_scalper = self.settings.get("scalper_mode", False)
+            capital_sl_limit = capital * 0.005 if is_scalper else capital * 0.02
             if floating_pnl <= -capital_sl_limit:
                 journal.close_trade(active_trade["id"], spot)
-                active_trade["reason"] = f"Capital SL limit (-2%) hit at ₹{floating_pnl:.2f}"
+                active_trade["reason"] = f"Capital SL limit (-{'0.5' if is_scalper else '2'}%) hit at ₹{floating_pnl:.2f}"
                 journal.save_journal()
                 self.auto_trade_active_id = None
                 self.signal_change_pending = False
@@ -1800,7 +1811,8 @@ class SimulationState:
                 return
 
             # D. Dynamic Profit Trailing (+4% of Capital)
-            if floating_pnl >= 0.04 * capital and not active_trade.get("half_booked", False):
+            is_scalper = self.settings.get("scalper_mode", False)
+            if not is_scalper and floating_pnl >= 0.04 * capital and not active_trade.get("half_booked", False):
                 half_profit = floating_pnl * 0.5
                 active_trade["half_booked"] = True
                 active_trade["booked_pnl"] = active_trade.get("booked_pnl", 0.0) + half_profit
@@ -1834,7 +1846,10 @@ class SimulationState:
 
             # E. Profit Management & Trailing Stop-Loss stage checks
             is_strangle = "Strangle" in strat
-            if is_option_buy:
+            is_scalper = self.settings.get("scalper_mode", False)
+            if is_scalper:
+                activation_threshold = capital * 0.01
+            elif is_option_buy:
                 activation_threshold = capital * 0.04
             elif is_strangle:
                 activation_threshold = self.settings.get("strangle_trail_activation", capital * 0.01)
@@ -1867,10 +1882,17 @@ class SimulationState:
                 current_stage = "RISK"
                 print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): OPEN -> RISK")
             
-            if current_stage == "RISK" and floating_pnl >= R:
-                current_stage = "BREAKEVEN"
-                active_trade["locked_profit"] = total_costs
-                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): RISK -> BREAKEVEN")
+            if is_scalper:
+                if current_stage == "RISK" and floating_pnl >= capital * 0.01:
+                    current_stage = "PROFIT PROTECTION"
+                    active_trade["locked_profit"] = capital * 0.01
+                    active_trade["trail_activated"] = True
+                    print(f"🔄 SCALPER STAGE (ID {active_trade['id']}): Locked profit floor ₹{capital*0.01:.2f}. Commenced trailing.")
+            else:
+                if current_stage == "RISK" and floating_pnl >= R:
+                    current_stage = "BREAKEVEN"
+                    active_trade["locked_profit"] = total_costs
+                    print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): RISK -> BREAKEVEN")
                 
             if current_stage == "BREAKEVEN" and floating_pnl >= 2.0 * R and floating_pnl >= activation_threshold:
                 current_stage = "PROFIT PROTECTION"
@@ -1896,6 +1918,8 @@ class SimulationState:
                 elif multiple >= 3.0: lock_pct = 0.40
                 
                 calculated_lock = peak_pnl * lock_pct
+                if is_scalper:
+                    calculated_lock = max(calculated_lock, capital * 0.01)
                 if calculated_lock > active_trade["locked_profit"]:
                     print(f"🔒 PROFIT LOCK UPDATE (ID {active_trade['id']}): ₹{active_trade['locked_profit']:.2f} -> ₹{calculated_lock:.2f}")
                     active_trade["locked_profit"] = round(calculated_lock, 2)
@@ -1909,6 +1933,8 @@ class SimulationState:
             
             # 1. Hard SL check
             sl_threshold = active_trade.get("sl_pnl", R)
+            if is_scalper:
+                sl_threshold = capital * 0.005
             if floating_pnl <= -sl_threshold:
                 sl_hit = True
                 exit_reason = f"Hard SL hit (Limit: -₹{sl_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
@@ -2037,8 +2063,9 @@ class SimulationState:
                 return
             
             # COOLDOWN: 2-min after last trade exit (skip if strategy shifted)
+            cooldown_secs = 30 if self.settings.get("scalper_mode", False) else 120
             time_since_last = time.time() - getattr(self, 'last_trade_close_time', 0)
-            if time_since_last < 120:
+            if time_since_last < cooldown_secs:
                 last_closed_strat = ""
                 for t in reversed(journal.trades):
                     if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str():
@@ -2458,7 +2485,7 @@ class SimulationState:
                 reasoning_list.append(f"AI Setup locked (cooldown active: {int(cooldown_period - time_since_change)}s remaining for trade execution stability).")
             
         # Strict strategy class filtering based on User Preferences
-        pref = self.settings.get("preferred_strategy", "All")
+        pref = "Option Buying Only" if self.settings.get("scalper_mode", False) else self.settings.get("preferred_strategy", "All")
         if pref == "Option Buying Only":
             if primary_rec not in ["Buy CE", "Buy PE", "No Trade"]:
                 reasoning_list.append(f"🔒 Strategy '{primary_rec}' blocked by preference: Option Buying Only. Falling back to No Trade.")
@@ -2822,6 +2849,7 @@ class SettingsUpdate(BaseModel):
     dashboard_password: Optional[str] = "password123"
     auto_trade_mode: Optional[str] = "OFF"
     trailing_sl_pts: float = 30.0
+    scalper_mode: Optional[bool] = False
 
 class LoginRequest(BaseModel):
     username: str
@@ -3159,6 +3187,7 @@ def update_settings(data: SettingsUpdate):
     state.settings["dashboard_password"] = data.dashboard_password or "password123"
     state.settings["auto_trade_mode"] = data.auto_trade_mode or "OFF"
     state.settings["trailing_sl_pts"] = data.trailing_sl_pts
+    state.settings["scalper_mode"] = data.scalper_mode if data.scalper_mode is not None else False
     
     # Try updating the expiry automatically based on token validity/feed mode
     state.update_default_expiry()
