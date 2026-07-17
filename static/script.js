@@ -3889,3 +3889,60 @@ async function updateTokenStatusBanner() {
     }
 }
 window.updateTokenStatusBanner = updateTokenStatusBanner;
+
+// ─── Session Timer: Shows IST clock + countdown to trade close ───
+function updateSessionTimer() {
+    const clockEl = document.getElementById('session-clock');
+    const countdownEl = document.getElementById('session-countdown');
+    const timerBox = document.getElementById('session-timer-box');
+    if (!clockEl || !countdownEl) return;
+    
+    // IST = UTC + 5:30
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + istOffset);
+    
+    const h = ist.getHours();
+    const m = ist.getMinutes();
+    const s = ist.getSeconds();
+    const timeStr = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+    clockEl.textContent = timeStr;
+    
+    const currentMins = h * 60 + m;
+    const tradeStart = 9 * 60 + 20;    // 09:20
+    const entryCutoff = 15 * 60 + 10;  // 15:10
+    const posClose = 15 * 60 + 15;     // 15:15
+    
+    if (currentMins < tradeStart) {
+        const minsLeft = tradeStart - currentMins;
+        const hLeft = Math.floor(minsLeft / 60);
+        const mLeft = minsLeft % 60;
+        countdownEl.textContent = `Market opens in ${hLeft}h ${mLeft}m`;
+        countdownEl.style.color = '#ffab40';
+        if (timerBox) timerBox.style.borderColor = 'rgba(255,171,64,0.3)';
+    } else if (currentMins < entryCutoff) {
+        const minsLeft = entryCutoff - currentMins;
+        const hLeft = Math.floor(minsLeft / 60);
+        const mLeft = minsLeft % 60;
+        countdownEl.textContent = `Entry closes in ${hLeft}h ${mLeft}m`;
+        countdownEl.style.color = '#00e676';
+        clockEl.style.color = '#00e676';
+        if (timerBox) timerBox.style.borderColor = 'rgba(0,230,118,0.3)';
+    } else if (currentMins < posClose) {
+        const minsLeft = posClose - currentMins;
+        countdownEl.textContent = `⚠️ Positions close in ${minsLeft}m!`;
+        countdownEl.style.color = '#ff1744';
+        clockEl.style.color = '#ff1744';
+        if (timerBox) { timerBox.style.borderColor = 'rgba(255,23,68,0.5)'; timerBox.style.background = 'rgba(255,23,68,0.08)'; }
+    } else if (currentMins < 15 * 60 + 30) {
+        countdownEl.textContent = '🔴 Positions closed. No trading.';
+        countdownEl.style.color = '#ff5252';
+        clockEl.style.color = '#ff5252';
+    } else {
+        countdownEl.textContent = 'Market closed';
+        countdownEl.style.color = 'var(--text-muted)';
+        clockEl.style.color = 'var(--text-muted)';
+    }
+}
+setInterval(updateSessionTimer, 1000);
+updateSessionTimer();
