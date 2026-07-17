@@ -1661,23 +1661,26 @@ class SimulationState:
         
         feed_mode = self.settings.get("feed_mode", "Simulation")
         
-        # 1. Trading start check (09:30 IST)
-        if feed_mode != "Simulation" and ist_time < datetime.time(9, 30):
+        # 1. Trading start check (09:20 IST)
+        if feed_mode != "Simulation" and ist_time < datetime.time(9, 20):
             return
             
-        # 2. Block new entries after 15:20:00 IST and aggressively close open positions
-        close_time = datetime.time(15, 20)
+        # 2a. Block NEW entries after 15:10 IST (no new trades)
+        entry_cutoff = datetime.time(15, 10)
+        
+        # 2b. Force close ALL open positions at 15:15 IST
+        close_time = datetime.time(15, 15)
         if ist_time >= close_time:
             open_count = 0
             for t in journal.trades:
                 if t.get("status") == "OPEN" and t.get("execution_type") == mode:
                     journal.close_trade(t["id"], self.spot_price)
-                    t["reason"] = f"Force Square-off (15:20 IST Time-in-Force Kill Switch)"
+                    t["reason"] = f"Force Square-off (15:15 IST Time-in-Force Kill Switch)"
                     open_count += 1
             if open_count > 0:
                 journal.save_journal()
                 self.auto_trade_active_id = None
-                print(f"🤖 AUTO-TRADE: Force squared off {open_count} open positions due to 15:20 IST Kill Switch.")
+                print(f"🤖 AUTO-TRADE: Force squared off {open_count} open positions due to 15:15 IST Kill Switch.")
             return
             
         capital = self.get_available_capital()
@@ -2139,11 +2142,7 @@ class SimulationState:
                 self.daily_stop_limit_hit = False
                 self.auto_trade_active_id = None
                 
-                # Clear today's trades from journal to reset today_trades and today_legs counters
-                journal.trades = [t for t in journal.trades if t.get("date") != today_date]
-                journal.save_journal()
-                
-                # Reset price and P&L history to start curve from 0 at 9:00 AM (v2.5)
+                # Reset price history for new day chart (do NOT wipe journal trades — PnL stays visible until midnight)
                 self.price_history = []
                 
                 self.last_daily_reset_date = today_date
@@ -2161,12 +2160,13 @@ class SimulationState:
                 
         feed_mode = self.settings.get("feed_mode", "Simulation")
         
-        # 2. After 15:30 IST: Disable all automation (only for non-Simulation feeds)
-        if ist_time >= datetime.time(15, 0):
-            if self.settings.get("auto_trade_mode", "OFF") != "OFF":
-                self.settings["auto_trade_mode"] = "OFF"
-                self.save_settings()
-                print("🤖 AUTO-TRADE: Session ended. Automation disabled after 15:00 IST.")
+        # 2. After 23:59 IST: Reset daily PnL for next trading day (positions already closed at 15:15)
+        if ist_time >= datetime.time(23, 59):
+            yesterday = (ist_now - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+            # Archive yesterday's trades (they've been visible all evening for review)
+            journal.trades = [t for t in journal.trades if t.get("date") != yesterday]
+            journal.save_journal()
+            print("🌙 Midnight cleanup: archived previous day trades.")
 
     def evaluate_decision_engine(self):
         """Executes the weighted scoring scoring engine and selects strategies."""
