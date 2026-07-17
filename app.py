@@ -2084,8 +2084,9 @@ class SimulationState:
                     print(f"🔄 COOLDOWN SKIP: Strategy shifted {last_closed_strat} → {rec}, entering immediately.")
             
             if conf >= 65.0 and rec in allowed_strategies:
-                # IV Crush Check for Buying / Spread strategies
-                if ("Buy" in rec or "Spread" in rec) and self.check_iv_crush():
+                # IV Crush Check for Buying / Spread strategies - BYPASSED for Paper & Scalper modes
+                is_scalper = self.settings.get("scalper_mode", False)
+                if not is_scalper and mode != "Paper" and ("Buy" in rec or "Spread" in rec) and self.check_iv_crush():
                     print(f"⚠️ AUTO-TRADE BLOCKED: IV Crush detected (Straddle premium dropping). Entry filtered out to protect capital.")
                     return
 

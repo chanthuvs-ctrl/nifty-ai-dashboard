@@ -4022,3 +4022,60 @@ function updateSessionTimer() {
 
 setInterval(updateSessionTimer, 1000);
 updateSessionTimer();
+
+// ─── Scalper Mode UI Logic ───
+function syncScalperButtonVisuals(enabled) {
+    const btn = document.getElementById('btn-scalper-toggle');
+    const chk = document.getElementById('set-scalper-mode');
+    if (chk) chk.checked = enabled;
+    if (!btn) return;
+    
+    btn.setAttribute('data-enabled', enabled.toString());
+    if (enabled) {
+        btn.textContent = '⚡ Scalper ON';
+        btn.style.background = 'rgba(0, 229, 255, 0.15)';
+        btn.style.borderColor = '#00e5ff';
+        btn.style.color = '#00e5ff';
+        btn.style.boxShadow = '0 0 10px rgba(0, 229, 255, 0.4)';
+    } else {
+        btn.textContent = '⚡ Scalper OFF';
+        btn.style.background = 'rgba(10, 18, 30, 0.6)';
+        btn.style.borderColor = 'var(--border-color)';
+        btn.style.color = 'var(--text-color)';
+        btn.style.boxShadow = 'none';
+    }
+}
+
+async function toggleScalperMode() {
+    const btn = document.getElementById('btn-scalper-toggle');
+    if (!btn) return;
+    
+    const currentlyEnabled = btn.getAttribute('data-enabled') === 'true';
+    const targetState = !currentlyEnabled;
+    
+    // First, show toast
+    showToast(targetState ? "ENABLED" : "DISABLED", 150, targetState ? "success" : "neutral", "⚡ SCALPER MODE");
+    
+    try {
+        // Fetch current settings, modify scalper_mode, and post back
+        const settingsResp = await fetch('/api/settings');
+        const settings = await settingsResp.json();
+        
+        settings.scalper_mode = targetState;
+        
+        // Post update
+        const resp = await fetch('/api/settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(settings)
+        });
+        const res = await resp.json();
+        if (res.status === "SUCCESS") {
+            // Store backup
+            safeStorage.setItem('nifty_settings', JSON.stringify(settings));
+            syncScalperButtonVisuals(targetState);
+        }
+    } catch(e) {
+        console.error("Failed toggling scalper mode:", e);
+    }
+}
