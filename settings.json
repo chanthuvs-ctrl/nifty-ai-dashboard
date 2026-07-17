@@ -16,5 +16,6 @@
   "session_token": "98138a8bd5994bd9b92b843485b5a78e",
   "auto_trade_mode": "OFF",
   "trailing_sl_pts": 20.0,
-  "upstox_api_key": "82e905c4-6f67-46c4-aa8b-3a86d0798ef7"
+  "upstox_api_key": "82e905c4-6f67-46c4-aa8b-3a86d0798ef7",
+  "upstox_api_secret": "ec6r0ue7si"
 }
