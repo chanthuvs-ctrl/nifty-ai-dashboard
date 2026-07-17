@@ -2457,6 +2457,24 @@ class SimulationState:
                 should_change = False
                 reasoning_list.append(f"AI Setup locked (cooldown active: {int(cooldown_period - time_since_change)}s remaining for trade execution stability).")
             
+        # Strict strategy class filtering based on User Preferences
+        pref = self.settings.get("preferred_strategy", "All")
+        if pref == "Option Buying Only":
+            if primary_rec not in ["Buy CE", "Buy PE", "No Trade"]:
+                reasoning_list.append(f"🔒 Strategy '{primary_rec}' blocked by preference: Option Buying Only. Falling back to No Trade.")
+                primary_rec = "No Trade"
+                confidence_pct = 50.0
+        elif pref == "Option Selling Only":
+            if primary_rec not in ["Short Strangle", "Iron Condor", "Short Straddle", "No Trade"]:
+                reasoning_list.append(f"🔒 Strategy '{primary_rec}' blocked by preference: Option Selling Only. Falling back to No Trade.")
+                primary_rec = "No Trade"
+                confidence_pct = 50.0
+        elif pref == "Spreads Only":
+            if primary_rec not in ["Bull Call Spread", "Bear Put Spread", "Bull Put Spread", "Bear Call Spread", "Iron Condor", "No Trade"]:
+                reasoning_list.append(f"🔒 Strategy '{primary_rec}' blocked by preference: Spreads Only. Falling back to No Trade.")
+                primary_rec = "No Trade"
+                confidence_pct = 50.0
+
         # Always update confidence, reasoning, and negation in real-time
         self.confidence = confidence_pct
         self.rec_reasoning = reasoning_list
