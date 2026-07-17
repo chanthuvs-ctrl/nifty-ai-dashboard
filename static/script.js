@@ -934,6 +934,11 @@ async function syncSettingsWithServer(serverSettings) {
     let localSettings = null;
     try {
         localSettings = JSON.parse(safeStorage.getItem('nifty_settings'));
+        if (localSettings && localSettings.scalper_mode === undefined) {
+            console.log("🧹 Outdated settings backup detected (missing scalper_mode). Clearing local cache...");
+            safeStorage.removeItem('nifty_settings');
+            localSettings = null;
+        }
     } catch (e) {}
     
     // Check if server settings have empty token, but local storage has a token

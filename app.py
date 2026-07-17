@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.25" 
+VERSION = "3.1.28" 
 import time
 import os
 import json
@@ -2857,7 +2857,7 @@ class SettingsUpdate(BaseModel):
     dashboard_password: Optional[str] = "password123"
     auto_trade_mode: Optional[str] = "OFF"
     trailing_sl_pts: float = 30.0
-    scalper_mode: Optional[bool] = False
+    scalper_mode: Optional[bool] = None
 
 class LoginRequest(BaseModel):
     username: str
