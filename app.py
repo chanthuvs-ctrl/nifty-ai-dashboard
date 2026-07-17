@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.28" 
+VERSION = "3.1.29" 
 import time
 import os
 import json
@@ -3068,6 +3068,7 @@ def get_market_data():
         "reasoning": state.rec_reasoning,
         "negation": state.rec_negation,
         "auto_trade_mode": state.settings.get("auto_trade_mode", "OFF"),
+        "scalper_mode": state.settings.get("scalper_mode", False),
         "live_trade_errors": getattr(state, 'live_trade_errors', [])[-5:],
         "trailing_sl_pts": state.settings.get("trailing_sl_pts", 30.0),
         "daily_stop_limit_hit": state.daily_stop_limit_hit,
