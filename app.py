@@ -3195,7 +3195,7 @@ def update_settings(data: SettingsUpdate):
     state.settings["dashboard_password"] = data.dashboard_password or "password123"
     state.settings["auto_trade_mode"] = data.auto_trade_mode or "OFF"
     state.settings["trailing_sl_pts"] = data.trailing_sl_pts
-    state.settings["scalper_mode"] = data.scalper_mode if data.scalper_mode is not None else False
+    state.settings["scalper_mode"] = data.scalper_mode if data.scalper_mode is not None else state.settings.get("scalper_mode", False)
     
     # Try updating the expiry automatically based on token validity/feed mode
     state.update_default_expiry()
