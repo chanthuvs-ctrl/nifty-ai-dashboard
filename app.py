@@ -306,6 +306,8 @@ class SimulationState:
         # AI Signal Change Cooldown State (v1.1)
         self.signal_change_pending = False
         self.signal_change_pending_since = 0.0
+        self.last_trade_close_time = 0.0  # Unix timestamp of last trade exit
+        self.live_trade_errors = []  # Recent Live Real errors for dashboard display
         self.pending_exit_signal = "" 
         
         # Trailing Stop Activation State (v1.1)
@@ -1645,6 +1647,23 @@ class SimulationState:
         if mode == "OFF":
             return
 
+        feed_mode = self.settings.get("feed_mode", "Simulation")
+        
+        # GUARD: Never auto-trade on simulated/random data — results are meaningless
+        if feed_mode == "Simulation":
+            return
+
+        # GUARD: Live Real requires Upstox feed for real prices
+        if mode == "Live" and feed_mode != "Upstox":
+            if not getattr(self, '_live_feed_warned', False):
+                err = "⚠️ Live Real requires Feed Mode = Upstox. Currently using Google Finance — switch to Upstox in Settings."
+                self.live_trade_errors = getattr(self, 'live_trade_errors', [])
+                self.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
+                self.live_trade_errors = self.live_trade_errors[-10:]
+                print(err)
+                self._live_feed_warned = True
+            return
+
         # Self-healing: if auto_trade_active_id is None but there is an open trade in the journal, restore it!
         if not self.auto_trade_active_id:
             for t in journal.trades:
@@ -1659,10 +1678,8 @@ class SimulationState:
         ist_now = get_ist_datetime()
         ist_time = ist_now.time()
         
-        feed_mode = self.settings.get("feed_mode", "Simulation")
-        
         # 1. Trading start check (09:20 IST)
-        if feed_mode != "Simulation" and ist_time < datetime.time(9, 20):
+        if ist_time < datetime.time(9, 20):
             return
             
         # 2a. Block NEW entries after 15:10 IST (no new trades)
@@ -1703,6 +1720,7 @@ class SimulationState:
             else:
                 self.auto_trade_active_id = None
                 self.trail_activated = False
+                self.last_trade_close_time = time.time()
                 self.peak_pnl_since_activation = -999999.0
         else:
             self.trail_activated = False
@@ -1747,6 +1765,7 @@ class SimulationState:
                 self.auto_trade_active_id = None
                 self.signal_change_pending = False
                 self.trail_activated = False
+                self.last_trade_close_time = time.time()
                 print(f"🤖 AUTO-TRADE: Closed position due to 2% Capital SL limit (₹{floating_pnl:.2f})")
                 return
 
@@ -1762,6 +1781,7 @@ class SimulationState:
                 self.auto_trade_active_id = None
                 self.signal_change_pending = False
                 self.trail_activated = False
+                self.last_trade_close_time = time.time()
                 print(f"🤖 AUTO-TRADE: Closed Option Buy position immediately due to confidence drop (<70%)")
                 return
 
@@ -1775,6 +1795,7 @@ class SimulationState:
                 self.auto_trade_active_id = None
                 self.signal_change_pending = False
                 self.trail_activated = False
+                self.last_trade_close_time = time.time()
                 print(f"🤖 AUTO-TRADE: Closed {strat} immediately for position exclusivity to switch to {rec}.")
                 return
 
@@ -1918,6 +1939,7 @@ class SimulationState:
                 self.auto_trade_active_id = None
                 self.signal_change_pending = False
                 self.trail_activated = False
+                self.last_trade_close_time = time.time()
                 print(f"🤖 AUTO-TRADE: Closed position (ID {active_trade['id']}). Reason: {exit_reason}")
                 return
             
@@ -2009,6 +2031,24 @@ class SimulationState:
                 "Buy CE", "Buy PE", "Bull Call Spread", "Bear Put Spread", 
                 "Bull Put Spread", "Bear Call Spread", "Short Strangle", "Iron Condor"
             ]
+            
+            # Block new entries after 15:10 IST
+            if ist_time >= entry_cutoff:
+                return
+            
+            # COOLDOWN: 2-min after last trade exit (skip if strategy shifted)
+            time_since_last = time.time() - getattr(self, 'last_trade_close_time', 0)
+            if time_since_last < 120:
+                last_closed_strat = ""
+                for t in reversed(journal.trades):
+                    if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str():
+                        last_closed_strat = t.get("strategy", "")
+                        break
+                if rec == last_closed_strat:
+                    return  # Same strategy — wait 2 min cooldown
+                else:
+                    print(f"🔄 COOLDOWN SKIP: Strategy shifted {last_closed_strat} → {rec}, entering immediately.")
+            
             if conf >= 65.0 and rec in allowed_strategies:
                 # IV Crush Check for Buying / Spread strategies
                 if ("Buy" in rec or "Spread" in rec) and self.check_iv_crush():
@@ -2088,7 +2128,11 @@ class SimulationState:
                             self.auto_trade_active_id = res["trade"]["id"]
                             print(f"⚡ AUTO-TRADE REAL: Placed {rec} position successfully (ID: {self.auto_trade_active_id})")
                     except Exception as e:
-                        print(f"❌ AUTO-TRADE REAL: Failed placing order: {e}")
+                        err_msg = f"❌ Live Real order failed: {str(e)[:200]}"
+                        print(err_msg)
+                        self.live_trade_errors = getattr(self, 'live_trade_errors', [])
+                        self.live_trade_errors.append({"time": get_ist_time_str(), "error": err_msg})
+                        self.live_trade_errors = self.live_trade_errors[-10:]
                 else:
                     # Paper mode
                     legs_logged = []
@@ -2970,6 +3014,7 @@ def get_market_data():
         "reasoning": state.rec_reasoning,
         "negation": state.rec_negation,
         "auto_trade_mode": state.settings.get("auto_trade_mode", "OFF"),
+        "live_trade_errors": getattr(state, 'live_trade_errors', [])[-5:],
         "trailing_sl_pts": state.settings.get("trailing_sl_pts", 30.0),
         "daily_stop_limit_hit": state.daily_stop_limit_hit,
         "daily_pnl": round(sum(t.get("pnl", 0.0) for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))), 2),
@@ -3779,6 +3824,55 @@ a:hover{{background:#00e5ff44;}}</style>
 </div></body></html>"""
         return HTMLResponse(content=html, status_code=500)
 
+
+
+@app.get("/api/live-preflight")
+def live_preflight_check():
+    """Pre-flight checks before enabling Live Real trading."""
+    checks = []
+    
+    # 1. Token validity
+    token = state.settings.get("upstox_access_token", "")
+    if not token:
+        checks.append({"check": "Access Token", "status": "FAIL", "detail": "No token configured"})
+    else:
+        is_expired, exp_str, days_left = _get_token_expiry_info(token)
+        if is_expired:
+            checks.append({"check": "Access Token", "status": "FAIL", "detail": f"Token expired at {exp_str}"})
+        else:
+            checks.append({"check": "Access Token", "status": "PASS", "detail": f"Valid until {exp_str}"})
+    
+    # 2. Feed mode
+    feed = state.settings.get("feed_mode", "Simulation")
+    if feed != "Upstox":
+        checks.append({"check": "Feed Mode", "status": "FAIL", "detail": f"Currently '{feed}' — must be 'Upstox' for real prices"})
+    else:
+        checks.append({"check": "Feed Mode", "status": "PASS", "detail": "Upstox live feed active"})
+    
+    # 3. API connectivity
+    if token and not _get_token_expiry_info(token)[0]:
+        try:
+            resp = upstox_request("/v2/user/get-funds-and-margin", token)
+            if resp.status_code == 200:
+                data = resp.json()
+                margin = data.get("data", {}).get("equity", {}).get("available_margin", 0)
+                checks.append({"check": "API Connection", "status": "PASS", "detail": f"Connected. Available margin: ₹{margin:,.2f}"})
+            else:
+                checks.append({"check": "API Connection", "status": "FAIL", "detail": f"HTTP {resp.status_code}: {resp.text[:100]}"})
+        except Exception as e:
+            checks.append({"check": "API Connection", "status": "FAIL", "detail": str(e)[:100]})
+    else:
+        checks.append({"check": "API Connection", "status": "SKIP", "detail": "Token invalid/missing"})
+    
+    # 4. Capital configured
+    capital = state.settings.get("capital", 0)
+    if capital < 10000:
+        checks.append({"check": "Capital", "status": "FAIL", "detail": f"₹{capital:,.0f} — too low for trading"})
+    else:
+        checks.append({"check": "Capital", "status": "PASS", "detail": f"₹{capital:,.0f}"})
+    
+    all_pass = all(c["status"] == "PASS" for c in checks)
+    return {"ready": all_pass, "checks": checks}
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
