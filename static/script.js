@@ -3890,6 +3890,7 @@ async function updateTokenStatusBanner() {
 }
 window.updateTokenStatusBanner = updateTokenStatusBanner;
 
+
 // ─── Session Timer: Shows IST clock + countdown to trade close ───
 function updateSessionTimer() {
     const clockEl = document.getElementById('session-clock');
@@ -3905,8 +3906,51 @@ function updateSessionTimer() {
     const h = ist.getHours();
     const m = ist.getMinutes();
     const s = ist.getSeconds();
+    const dayOfWeek = ist.getDay(); // 0 = Sunday, 6 = Saturday
+    
+    // Format date string for holiday check: YYYY-MM-DD
+    const yyyy = ist.getFullYear();
+    const mm = (ist.getMonth() + 1).toString().padStart(2, '0');
+    const dd = ist.getDate().toString().padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    
+    // Standard NSE Trading Holidays for 2026
+    const nseHolidays2026 = {
+        "2026-01-26": "Republic Day",
+        "2026-03-06": "Holi",
+        "2026-03-27": "Ramzan Id",
+        "2026-04-02": "Mahavir Jayanti",
+        "2026-04-03": "Good Friday",
+        "2026-04-14": "Ambedkar Jayanti",
+        "2026-05-01": "Maharashtra Day",
+        "2026-10-02": "Gandhi Jayanti",
+        "2026-10-20": "Dussehra",
+        "2026-11-09": "Diwali Laxmi Puja",
+        "2026-11-10": "Diwali Balipratipada",
+        "2026-11-24": "Gurunanak Jayanti",
+        "2026-12-25": "Christmas Day"
+    };
+
     const timeStr = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
     clockEl.textContent = timeStr;
+    
+    // 1. Weekend Check
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+        countdownEl.textContent = `☕ Weekend (Market Closed)`;
+        countdownEl.style.color = '#ffab40';
+        clockEl.style.color = 'var(--text-muted)';
+        if (timerBox) timerBox.style.borderColor = 'rgba(255,171,64,0.15)';
+        return;
+    }
+    
+    // 2. Holiday Check
+    if (nseHolidays2026[dateStr]) {
+        countdownEl.textContent = `🏖️ Holiday: ${nseHolidays2026[dateStr]}`;
+        countdownEl.style.color = '#ffab40';
+        clockEl.style.color = 'var(--text-muted)';
+        if (timerBox) timerBox.style.borderColor = 'rgba(255,171,64,0.15)';
+        return;
+    }
     
     const currentMins = h * 60 + m;
     const tradeStart = 9 * 60 + 20;    // 09:20
@@ -3919,7 +3963,10 @@ function updateSessionTimer() {
         const mLeft = minsLeft % 60;
         countdownEl.textContent = `Market opens in ${hLeft}h ${mLeft}m`;
         countdownEl.style.color = '#ffab40';
-        if (timerBox) timerBox.style.borderColor = 'rgba(255,171,64,0.3)';
+        if (timerBox) {
+            timerBox.style.borderColor = 'rgba(255,171,64,0.3)';
+            timerBox.style.background = 'none';
+        }
     } else if (currentMins < entryCutoff) {
         const minsLeft = entryCutoff - currentMins;
         const hLeft = Math.floor(minsLeft / 60);
@@ -3927,22 +3974,37 @@ function updateSessionTimer() {
         countdownEl.textContent = `Entry closes in ${hLeft}h ${mLeft}m`;
         countdownEl.style.color = '#00e676';
         clockEl.style.color = '#00e676';
-        if (timerBox) timerBox.style.borderColor = 'rgba(0,230,118,0.3)';
+        if (timerBox) {
+            timerBox.style.borderColor = 'rgba(0,230,118,0.3)';
+            timerBox.style.background = 'none';
+        }
     } else if (currentMins < posClose) {
         const minsLeft = posClose - currentMins;
         countdownEl.textContent = `⚠️ Positions close in ${minsLeft}m!`;
         countdownEl.style.color = '#ff1744';
         clockEl.style.color = '#ff1744';
-        if (timerBox) { timerBox.style.borderColor = 'rgba(255,23,68,0.5)'; timerBox.style.background = 'rgba(255,23,68,0.08)'; }
+        if (timerBox) { 
+            timerBox.style.borderColor = 'rgba(255,23,68,0.5)'; 
+            timerBox.style.background = 'rgba(255,23,68,0.08)'; 
+        }
     } else if (currentMins < 15 * 60 + 30) {
         countdownEl.textContent = '🔴 Positions closed. No trading.';
         countdownEl.style.color = '#ff5252';
         clockEl.style.color = '#ff5252';
+        if (timerBox) {
+            timerBox.style.borderColor = 'rgba(255,82,82,0.3)';
+            timerBox.style.background = 'none';
+        }
     } else {
         countdownEl.textContent = 'Market closed';
         countdownEl.style.color = 'var(--text-muted)';
         clockEl.style.color = 'var(--text-muted)';
+        if (timerBox) {
+            timerBox.style.borderColor = 'var(--border-color)';
+            timerBox.style.background = 'none';
+        }
     }
 }
+
 setInterval(updateSessionTimer, 1000);
 updateSessionTimer();
