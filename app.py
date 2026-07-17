@@ -3669,7 +3669,7 @@ def auth_upstox_start():
             content={"error": "API Key not configured. Go to Settings and enter your Upstox API Key first."},
             status_code=400
         )
-    redirect_uri = "http://localhost:8000/auth/callback"
+    redirect_uri = "https://nifty-ai-dashboard.onrender.com/auth/callback"
     params = {
         "client_id": api_key,
         "redirect_uri": redirect_uri,
@@ -3710,7 +3710,7 @@ def auth_upstox_callback(code: str = None, error: str = None):
 
     api_key = state.settings.get("upstox_api_key", "").strip()
     api_secret = state.settings.get("upstox_api_secret", "").strip()
-    redirect_uri = "http://localhost:8000/auth/callback"
+    redirect_uri = "https://nifty-ai-dashboard.onrender.com/auth/callback"
 
     if not api_key or not api_secret:
         html = """<!DOCTYPE html>
