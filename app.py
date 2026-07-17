@@ -1659,8 +1659,15 @@ class SimulationState:
 
         feed_mode = self.settings.get("feed_mode", "Simulation")
         
-        # GUARD: Never auto-trade on simulated/random data — results are meaningless
-        if feed_mode == "Simulation":
+        # GUARD: Live Real trading requires Upstox feed (no simulated data allowed)
+        if mode == "Live" and feed_mode == "Simulation":
+            if not getattr(self, '_live_feed_warned', False):
+                err = "⚠️ Live Real trading is blocked in Simulation mode. Switch Feed Mode to Upstox."
+                self.live_trade_errors = getattr(self, 'live_trade_errors', [])
+                self.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
+                self.live_trade_errors = self.live_trade_errors[-10:]
+                print(err)
+                self._live_feed_warned = True
             return
 
         # GUARD: Live Real requires Upstox feed for real prices
@@ -1688,16 +1695,16 @@ class SimulationState:
         ist_now = get_ist_datetime()
         ist_time = ist_now.time()
         
-        # 1. Trading start check (09:20 IST)
-        if ist_time < datetime.time(9, 20):
+        # 1. Trading start check (09:20 IST) - BYPASSED for Paper trading
+        if mode != "Paper" and ist_time < datetime.time(9, 20):
             return
             
         # 2a. Block NEW entries after 15:10 IST (no new trades)
         entry_cutoff = datetime.time(15, 10)
         
-        # 2b. Force close ALL open positions at 15:15 IST
+        # 2b. Force close ALL open positions at 15:15 IST - BYPASSED for Paper trading
         close_time = datetime.time(15, 15)
-        if ist_time >= close_time:
+        if mode != "Paper" and ist_time >= close_time:
             open_count = 0
             for t in journal.trades:
                 if t.get("status") == "OPEN" and t.get("execution_type") == mode:
@@ -2058,8 +2065,8 @@ class SimulationState:
                 "Bull Put Spread", "Bear Call Spread", "Short Strangle", "Iron Condor"
             ]
             
-            # Block new entries after 15:10 IST
-            if ist_time >= entry_cutoff:
+            # Block new entries after 15:10 IST - BYPASSED for Paper trading
+            if mode != "Paper" and ist_time >= entry_cutoff:
                 return
             
             # COOLDOWN: 2-min after last trade exit (skip if strategy shifted)
