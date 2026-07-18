@@ -1927,8 +1927,18 @@ class SimulationState:
                 elif multiple >= 3.0: lock_pct = 0.40
                 
                 if is_scalper:
-                    # 50% Lock: For every 1% rise in profit (as % of capital), increase lock by 0.5% of capital
-                    calculated_lock = peak_pnl * 0.5
+                    # Gap-reducing profit lock: lock higher percentage of peak profit as profit rises
+                    peak_pct = peak_pnl / capital
+                    if peak_pct >= 0.04:
+                        lock_pct = 0.90    # Lock 90% (10% gap)
+                    elif peak_pct >= 0.03:
+                        lock_pct = 0.80    # Lock 80% (20% gap)
+                    elif peak_pct >= 0.02:
+                        lock_pct = 0.70    # Lock 70% (30% gap)
+                    else:
+                        lock_pct = 0.50    # Lock 50% (50% gap)
+                    
+                    calculated_lock = peak_pnl * lock_pct
                     calculated_lock = max(calculated_lock, capital * 0.005)
                 else:
                     calculated_lock = peak_pnl * lock_pct
