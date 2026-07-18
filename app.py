@@ -1894,9 +1894,9 @@ class SimulationState:
             if is_scalper:
                 if current_stage == "RISK" and floating_pnl >= capital * 0.01:
                     current_stage = "PROFIT PROTECTION"
-                    active_trade["locked_profit"] = capital * 0.01
+                    active_trade["locked_profit"] = capital * 0.005 # Lock starts at 0.5% of capital
                     active_trade["trail_activated"] = True
-                    print(f"🔄 SCALPER STAGE (ID {active_trade['id']}): Locked profit floor ₹{capital*0.01:.2f}. Commenced trailing.")
+                    print(f"🔄 SCALPER STAGE (ID {active_trade['id']}): Locked profit floor ₹{capital*0.005:.2f} (0.5% of capital) on reaching 1% target. Commenced trailing.")
             else:
                 if current_stage == "RISK" and floating_pnl >= R:
                     current_stage = "BREAKEVEN"
@@ -1926,9 +1926,12 @@ class SimulationState:
                 elif multiple >= 4.0: lock_pct = 0.50
                 elif multiple >= 3.0: lock_pct = 0.40
                 
-                calculated_lock = peak_pnl * lock_pct
                 if is_scalper:
-                    calculated_lock = max(calculated_lock, capital * 0.01)
+                    # 50% Lock: For every 1% rise in profit (as % of capital), increase lock by 0.5% of capital
+                    calculated_lock = peak_pnl * 0.5
+                    calculated_lock = max(calculated_lock, capital * 0.005)
+                else:
+                    calculated_lock = peak_pnl * lock_pct
                 if calculated_lock > active_trade["locked_profit"]:
                     print(f"🔒 PROFIT LOCK UPDATE (ID {active_trade['id']}): ₹{active_trade['locked_profit']:.2f} -> ₹{calculated_lock:.2f}")
                     active_trade["locked_profit"] = round(calculated_lock, 2)
@@ -1948,9 +1951,9 @@ class SimulationState:
                 sl_hit = True
                 exit_reason = f"Hard SL hit (Limit: -₹{sl_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
                 
-            # 2. Hard Target check
+            # 2. Hard Target check - BYPASSED in Scalper Mode to maximize trailing profit run
             target_threshold = active_trade.get("target_pnl", 2.0 * R)
-            if not sl_hit and floating_pnl >= target_threshold:
+            if not is_scalper and not sl_hit and floating_pnl >= target_threshold:
                 target_hit = True
                 exit_reason = f"Target Profit Hit (Limit: +₹{target_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
                 
