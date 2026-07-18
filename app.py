@@ -1967,16 +1967,20 @@ class SimulationState:
                 target_hit = True
                 exit_reason = f"Target Profit Hit (Limit: +₹{target_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
                 
-            # 3. Breakeven stage SL check
+            # 3. Breakeven stage SL check (Bypassed if AI confidence >= 90.0)
             if not sl_hit and not target_hit and current_stage == "BREAKEVEN":
-                if floating_pnl < total_costs:
+                if self.confidence >= 90.0:
+                    pass # Keep holding because conviction is extremely high
+                elif floating_pnl < total_costs:
                     sl_hit = True
                     exit_reason = f"Breakeven SL hit (Stop: ₹{total_costs:.2f}, Current PnL: ₹{floating_pnl:.2f})"
                     
-            # 4. Profit Protection stage SL check
+            # 4. Profit Protection stage SL check (Bypassed if AI confidence >= 90.0)
             if not sl_hit and not target_hit and current_stage in ["PROFIT PROTECTION", "PROFIT MAXIMIZATION"]:
                 locked_threshold = active_trade["locked_profit"]
-                if floating_pnl < locked_threshold:
+                if self.confidence >= 90.0:
+                    pass # Keep holding because conviction is extremely high
+                elif floating_pnl < locked_threshold:
                     sl_hit = True
                     exit_reason = f"Profit Protection SL hit (Stop: ₹{locked_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
                     
@@ -1997,7 +2001,9 @@ class SimulationState:
             is_neutral_setup = "Strangle" in strat or "Condor" in strat or "Straddle" in strat
             
             should_close = False
-            if rec == "No Trade":
+            if self.confidence >= 90.0:
+                should_close = False # Conviction is high, ignore strategy shifts
+            elif rec == "No Trade":
                 if not is_neutral_setup:
                     should_close = True
             elif is_neutral_setup and "Strangle" not in rec and "Condor" not in rec and "Straddle" not in rec:
