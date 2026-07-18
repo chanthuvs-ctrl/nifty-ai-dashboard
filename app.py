@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.29" 
+VERSION = "3.1.30" 
 import time
 import os
 import json
@@ -708,12 +708,14 @@ class SimulationState:
 
     def recompute_indicators(self):
         """Calculates indicators based on completed candle history."""
-        analysis_5m = self.analyze_timeframe(self.candles_5m)
+        is_scalper = self.settings.get("scalper_mode", False)
+        target_candles = self.candles_1m if is_scalper else self.candles_5m
+        analysis = self.analyze_timeframe(target_candles)
         
-        # Update self properties using the 5m timeframe
-        self.ema_20 = analysis_5m["ema20"]
-        self.ema_50 = analysis_5m["ema50"]
-        self.rsi = analysis_5m["rsi"]
+        # Update self properties using the target timeframe (1m for scalper, 5m normal)
+        self.ema_20 = analysis["ema20"]
+        self.ema_50 = analysis["ema50"]
+        self.rsi = analysis["rsi"]
         
         # ADX (Directional Index approximation)
         self.adx = max(10.0, min(60.0, self.adx + random.uniform(-1.0, 1.0)))
@@ -2433,15 +2435,20 @@ class SimulationState:
             trend_5m = analysis_5m["trend"]
             trend_1m = analysis_1m["trend"]
             
-            is_bullish_confirmed = (trend_15m in ["Bullish", "Neutral-Bullish"]) and \
-                                   (trend_5m in ["Bullish", "Neutral-Bullish"]) and \
-                                   (trend_1m == "Bullish")
-                                   
-            is_bearish_confirmed = (trend_15m in ["Bearish", "Neutral-Bearish"]) and \
-                                   (trend_5m in ["Bearish", "Neutral-Bearish"]) and \
-                                   (trend_1m == "Bearish")
-                                   
-            reasoning_list.append(f"MTF Trend Check: 15m (Macro) = {trend_15m}, 5m (Setup) = {trend_5m}, 1m (Confirm) = {trend_1m}")
+            is_scalper = self.settings.get("scalper_mode", False)
+            if is_scalper:
+                is_bullish_confirmed = (trend_1m == "Bullish")
+                is_bearish_confirmed = (trend_1m == "Bearish")
+                reasoning_list.append(f"⚡ SCALPER TREND CHECK: 1m Trend = {trend_1m} (15m/5m checks bypassed)")
+            else:
+                is_bullish_confirmed = (trend_15m in ["Bullish", "Neutral-Bullish"]) and \
+                                       (trend_5m in ["Bullish", "Neutral-Bullish"]) and \
+                                       (trend_1m == "Bullish")
+                                       
+                is_bearish_confirmed = (trend_15m in ["Bearish", "Neutral-Bearish"]) and \
+                                       (trend_5m in ["Bearish", "Neutral-Bearish"]) and \
+                                       (trend_1m == "Bearish")
+                reasoning_list.append(f"MTF Trend Check: 15m (Macro) = {trend_15m}, 5m (Setup) = {trend_5m}, 1m (Confirm) = {trend_1m}")
             
             # Filter directional strategies through Multi-Timeframe Confirmation
             if primary_rec in ["Buy CE", "Bull Call Spread", "Bull Put Spread"]:
