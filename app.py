@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.34" 
+VERSION = "3.1.35" 
 import time
 import os
 import json
@@ -2090,19 +2090,22 @@ class SimulationState:
             if mode != "Paper" and ist_time >= entry_cutoff:
                 return
             
-            # COOLDOWN: 2-min after last trade exit (skip if strategy shifted)
+            # COOLDOWN: 2-min after last trade exit (skip if strategy shifted OR confidence >= 90%)
             cooldown_secs = 30 if self.settings.get("scalper_mode", False) else 120
             time_since_last = time.time() - getattr(self, 'last_trade_close_time', 0)
             if time_since_last < cooldown_secs:
-                last_closed_strat = ""
-                for t in reversed(journal.trades):
-                    if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str():
-                        last_closed_strat = t.get("strategy", "")
-                        break
-                if rec == last_closed_strat:
-                    return  # Same strategy — wait 2 min cooldown
+                if conf >= 90.0:
+                    print(f"🔄 COOLDOWN BYPASS: High conviction signal ({conf}%) — entering trade immediately.")
                 else:
-                    print(f"🔄 COOLDOWN SKIP: Strategy shifted {last_closed_strat} → {rec}, entering immediately.")
+                    last_closed_strat = ""
+                    for t in reversed(journal.trades):
+                        if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str():
+                            last_closed_strat = t.get("strategy", "")
+                            break
+                    if rec == last_closed_strat:
+                        return  # Same strategy — wait 2 min cooldown
+                    else:
+                        print(f"🔄 COOLDOWN SKIP: Strategy shifted {last_closed_strat} → {rec}, entering immediately.")
             
             if conf >= 65.0 and rec in allowed_strategies:
                 # IV Crush Check for Buying / Spread strategies - BYPASSED for Paper & Scalper modes
