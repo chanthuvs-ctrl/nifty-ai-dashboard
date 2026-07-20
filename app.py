@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.42" 
+VERSION = "3.1.43" 
 import time
 import os
 import json
@@ -3866,7 +3866,7 @@ def token_status():
     }
 
 @app.get("/auth/upstox")
-def auth_upstox_start():
+def auth_upstox_start(request: Request):
     """Generate Upstox OAuth URL and redirect the user to login."""
     api_key = state.settings.get("upstox_api_key", "").strip()
     if not api_key:
@@ -3874,7 +3874,9 @@ def auth_upstox_start():
             content={"error": "API Key not configured. Go to Settings and enter your Upstox API Key first."},
             status_code=400
         )
-    redirect_uri = "https://nifty-ai-dashboard.onrender.com/auth/callback"
+    # Dynamic redirect URI based on client host (v3.1.43)
+    base_url = str(request.base_url).rstrip('/')
+    redirect_uri = f"{base_url}/auth/callback"
     params = {
         "client_id": api_key,
         "redirect_uri": redirect_uri,
@@ -3899,7 +3901,7 @@ a:hover{{background:#00e5ff44;}}</style>
     return HTMLResponse(content=html)
 
 @app.get("/auth/callback")
-def auth_upstox_callback(code: str = None, error: str = None):
+def auth_upstox_callback(request: Request, code: str = None, error: str = None):
     """
     Upstox redirects here with ?code=AUTH_CODE after user logs in.
     We exchange the code for an access token and save it automatically.
@@ -3915,7 +3917,9 @@ def auth_upstox_callback(code: str = None, error: str = None):
 
     api_key = state.settings.get("upstox_api_key", "").strip()
     api_secret = state.settings.get("upstox_api_secret", "").strip()
-    redirect_uri = "https://nifty-ai-dashboard.onrender.com/auth/callback"
+    # Dynamic redirect URI based on client host (v3.1.43)
+    base_url = str(request.base_url).rstrip('/')
+    redirect_uri = f"{base_url}/auth/callback"
 
     if not api_key or not api_secret:
         html = """<!DOCTYPE html>
