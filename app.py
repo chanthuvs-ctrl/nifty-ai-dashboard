@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.36" 
+VERSION = "3.1.37" 
 import time
 import os
 import json
@@ -1664,7 +1664,7 @@ class SimulationState:
         # Guard/Self-Healing: Live Real requires Upstox feed for real prices
         if mode == "Live" and feed_mode != "Upstox":
             # Force validation of the token
-            self.get_effective_capital()
+            self.get_broker_balance()
             if self.upstox_token_status == "VALID":
                 self.settings["feed_mode"] = "Upstox"
                 self.save_settings()
@@ -3223,7 +3223,7 @@ def update_settings(data: SettingsUpdate):
     
     # Verify and enforce Live Real rules
     if target_mode == "Live":
-        state.get_effective_capital() # This queries Upstox API and sets self.upstox_token_status
+        state.get_broker_balance() # This queries Upstox API and sets self.upstox_token_status
         if state.upstox_token_status == "VALID":
             state.settings["feed_mode"] = "Upstox"
             state.settings["auto_trade_mode"] = "Live"
