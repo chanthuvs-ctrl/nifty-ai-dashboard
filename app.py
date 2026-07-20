@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.49"
+VERSION = "3.1.50"
 
 # When running locally, route all Upstox API calls through Render's
 # whitelisted static IP proxy so IP restrictions don't block us.
@@ -2968,6 +2968,14 @@ def get_market_data():
                     state.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
                     state.live_trade_errors = state.live_trade_errors[-10:]
                 print(err)
+                # Calculate dynamic fallback expiry
+                pref_index = state.settings.get("preferred_index", "Nifty")
+                target_weekday = 4 if pref_index.lower() == "sensex" else 3
+                today = datetime.date.today()
+                days_ahead = (target_weekday - today.weekday()) % 7
+                next_expiry = today + datetime.timedelta(days=days_ahead)
+                fallback_expiry = next_expiry.strftime("%Y-%m-%d")
+
                 return {
                     "version": VERSION,
                     "spot_price": round(state.spot_price, 2),
@@ -2987,9 +2995,61 @@ def get_market_data():
                     "secondary_recommendation": "No Trade",
                     "tertiary_recommendation": "No Trade",
                     "reasoning": ["⚠️ Upstox Live API connection error. Live trading paused."],
+                    "negation": [],
                     "auto_trade_mode": mode,
                     "scalper_mode": state.settings.get("scalper_mode", False),
-                    "live_trade_errors": state.live_trade_errors[-5:]
+                    "live_trade_errors": state.live_trade_errors[-5:],
+                    "trailing_sl_pts": state.settings.get("trailing_sl_pts", 30.0),
+                    "daily_stop_limit_hit": state.daily_stop_limit_hit,
+                    "daily_pnl": 0.0,
+                    "daily_brokerage": 0.0,
+                    "total_brokerage": 0.0,
+                    "today_trades": 0,
+                    "today_legs": 0,
+                    "timeframe_trends": {
+                        "m15": "Neutral",
+                        "m5": "Neutral",
+                        "m1": "Neutral"
+                    },
+                    "decision_components": {},
+                    "indicators": {
+                        "ema_20": round(state.ema_20, 2),
+                        "ema_50": round(state.ema_50, 2),
+                        "rsi": round(state.rsi, 1),
+                        "adx": round(state.adx, 1),
+                        "macd": round(state.macd, 2),
+                        "macd_signal": round(state.macd_signal, 2),
+                        "supertrend": state.supertrend,
+                        "supertrend_val": round(state.supertrend_val, 2),
+                        "vwap": round(state.get_vwap(), 2),
+                        "atr": 35.0,
+                        "advance_decline": round(state.advance_decline, 2),
+                        "max_pain": "N/A",
+                        "expected_move": 0.0
+                    },
+                    "session": {
+                        "opening_range_high": state.opening_range_high,
+                        "opening_range_low": state.opening_range_low,
+                        "prev_day_high": state.prev_day_high,
+                        "prev_day_low": state.prev_day_low,
+                        "today_high": state.today_high,
+                        "today_low": state.today_low,
+                        "gap_pct": state.gap_pct
+                    },
+                    "trade_card": {
+                        "strategy": "No Trade",
+                        "direction": "Neutral",
+                        "entry_zone": "N/A",
+                        "stop_loss": "N/A",
+                        "target": "N/A",
+                        "risk_reward": "N/A",
+                        "max_risk": "₹0.00",
+                        "margin_required": 0.0,
+                        "suggested_lots": 0,
+                        "lot_size": 20 if pref_index.lower() == "sensex" else 65,
+                        "theta_decay": "N/A"
+                    },
+                    "recommended_legs": []
                 }
             else:
                 # For non-live settings (e.g. Paper mode with Upstox feed selected), fall back to Simulation
