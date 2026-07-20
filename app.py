@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.37" 
+VERSION = "3.1.38" 
 import time
 import os
 import json
@@ -2647,7 +2647,13 @@ class TradeJournal:
         if os.path.exists("journal.json"):
             try:
                 with open("journal.json", "r") as f:
-                    self.trades = json.load(f)
+                    data = json.load(f)
+                    if isinstance(data, dict) and "trades" in data:
+                        self.trades = data["trades"]
+                    elif isinstance(data, list):
+                        self.trades = data
+                    else:
+                        self.trades = []
             except Exception as e:
                 print(f"Failed to load journal from disk: {e}")
                 
