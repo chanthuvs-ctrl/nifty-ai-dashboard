@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.38" 
+VERSION = "3.1.39" 
 import time
 import os
 import json
@@ -441,7 +441,18 @@ class SimulationState:
                 if res_data.get("status") == "success":
                     contracts = res_data.get("data", [])
                     today_str = datetime.date.today().strftime("%Y-%m-%d")
-                    expiries = sorted(list(set(c.get("expiry") for c in contracts if c.get("expiry") >= today_str)))
+                    # Filter contracts to match the selected index to avoid Tuesday/FinNifty bleed
+                    if preferred_index.lower() == "sensex":
+                        filter_fn = lambda c: "SENSEX" in (c.get("underlying_symbol") or c.get("name") or "").upper()
+                    else:
+                        filter_fn = lambda c: "NIFTY" in (c.get("underlying_symbol") or c.get("name") or "").upper() and \
+                                              "FIN" not in (c.get("underlying_symbol") or c.get("name") or "").upper() and \
+                                              "BANK" not in (c.get("underlying_symbol") or c.get("name") or "").upper()
+                                              
+                    expiries = sorted(list(set(
+                        c.get("expiry") for c in contracts 
+                        if c.get("expiry") >= today_str and filter_fn(c)
+                    )))
                     if not hasattr(self, "_expiry_cache"):
                         self._expiry_cache = {}
                     self._expiry_cache[cache_key] = (now, expiries[:6])
