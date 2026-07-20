@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.41" 
+VERSION = "3.1.42" 
 import time
 import os
 import json

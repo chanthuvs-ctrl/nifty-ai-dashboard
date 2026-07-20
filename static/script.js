@@ -1403,7 +1403,7 @@ async function executeLiveTrade() {
         });
         
         // Confirm from user before live execution
-        const legText = legs.map(l => `${l.transaction_type} ${l.quantity} Qty NIFTY ${l.instrument_key.split('|')[1] || l.instrument_key}`).join('\n');
+        const legText = legs.map(l => `${l.transaction_type} ${l.quantity} Qty NIFTY ${l.strike || ''} ${l.option_type || ''} (Key: ${l.instrument_key.split('|')[1] || l.instrument_key})`).join('\n');
         const proceed = confirm(`⚠️ WARNING: CONFIRM LIVE TRADE EXECUTION?\n\nThis will place market orders for the following legs:\n\n${legText}\n\nDo you want to proceed?`);
         if (!proceed) return;
         
