@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.35" 
+VERSION = "3.1.36" 
 import time
 import os
 import json
@@ -1661,27 +1661,25 @@ class SimulationState:
 
         feed_mode = self.settings.get("feed_mode", "Simulation")
         
-        # GUARD: Live Real trading requires Upstox feed (no simulated data allowed)
-        if mode == "Live" and feed_mode == "Simulation":
-            if not getattr(self, '_live_feed_warned', False):
-                err = "⚠️ Live Real trading is blocked in Simulation mode. Switch Feed Mode to Upstox."
-                self.live_trade_errors = getattr(self, 'live_trade_errors', [])
-                self.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
-                self.live_trade_errors = self.live_trade_errors[-10:]
-                print(err)
-                self._live_feed_warned = True
-            return
-
-        # GUARD: Live Real requires Upstox feed for real prices
+        # Guard/Self-Healing: Live Real requires Upstox feed for real prices
         if mode == "Live" and feed_mode != "Upstox":
-            if not getattr(self, '_live_feed_warned', False):
-                err = "⚠️ Live Real requires Feed Mode = Upstox. Currently using Google Finance — switch to Upstox in Settings."
-                self.live_trade_errors = getattr(self, 'live_trade_errors', [])
-                self.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
-                self.live_trade_errors = self.live_trade_errors[-10:]
-                print(err)
-                self._live_feed_warned = True
-            return
+            # Force validation of the token
+            self.get_effective_capital()
+            if self.upstox_token_status == "VALID":
+                self.settings["feed_mode"] = "Upstox"
+                self.save_settings()
+                feed_mode = "Upstox"
+                self._live_feed_warned = False
+                print("🔄 SELF-HEALING: Forced Feed Mode to Upstox for Live real trading because Upstox API is active.")
+            else:
+                if not getattr(self, '_live_feed_warned', False):
+                    err = "⚠️ Live Real trading is blocked: Upstox API is inactive/invalid. Please authenticate first."
+                    self.live_trade_errors = getattr(self, 'live_trade_errors', [])
+                    self.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
+                    self.live_trade_errors = self.live_trade_errors[-10:]
+                    print(err)
+                    self._live_feed_warned = True
+                return
 
         # Self-healing: if auto_trade_active_id is None but there is an open trade in the journal, restore it!
         if not self.auto_trade_active_id:
@@ -3209,21 +3207,45 @@ def get_settings():
 
 @app.post("/api/settings")
 def update_settings(data: SettingsUpdate):
-    state.settings["capital"] = data.capital
-    state.settings["risk_pct"] = data.risk_pct
-    state.settings["preferred_broker"] = data.preferred_broker or "Upstox"
-    state.settings["preferred_strategy"] = data.preferred_strategy or "All"
-    state.settings["regime_override"] = data.regime_override or "Auto"
-    state.settings["feed_mode"] = data.feed_mode or "Simulation"
+    target_mode = data.auto_trade_mode or "OFF"
+    
+    # Store settings temporary to run verification
     state.settings["upstox_access_token"] = data.upstox_access_token or ""
     state.settings["upstox_expiry_date"] = data.upstox_expiry_date or ""
     if data.upstox_api_key:
         state.settings["upstox_api_key"] = data.upstox_api_key
     if data.upstox_api_secret:
         state.settings["upstox_api_secret"] = data.upstox_api_secret
+
+    # Clear capital cache to force immediate validation of the token
+    state._cached_capital = None
+    state._capital_cache_time = 0.0
+    
+    # Verify and enforce Live Real rules
+    if target_mode == "Live":
+        state.get_effective_capital() # This queries Upstox API and sets self.upstox_token_status
+        if state.upstox_token_status == "VALID":
+            state.settings["feed_mode"] = "Upstox"
+            state.settings["auto_trade_mode"] = "Live"
+        else:
+            state.settings["auto_trade_mode"] = "OFF"
+            state.settings["feed_mode"] = "Simulation"
+            state.save_settings()
+            return {
+                "status": "ERROR", 
+                "message": "❌ Upstox API token is inactive/invalid. Please authenticate with Upstox first."
+            }
+    else:
+        state.settings["auto_trade_mode"] = target_mode
+        state.settings["feed_mode"] = data.feed_mode or "Simulation"
+
+    state.settings["capital"] = data.capital
+    state.settings["risk_pct"] = data.risk_pct
+    state.settings["preferred_broker"] = data.preferred_broker or "Upstox"
+    state.settings["preferred_strategy"] = data.preferred_strategy or "All"
+    state.settings["regime_override"] = data.regime_override or "Auto"
     state.settings["dashboard_username"] = data.dashboard_username or "admin"
     state.settings["dashboard_password"] = data.dashboard_password or "password123"
-    state.settings["auto_trade_mode"] = data.auto_trade_mode or "OFF"
     state.settings["trailing_sl_pts"] = data.trailing_sl_pts
     state.settings["scalper_mode"] = data.scalper_mode if data.scalper_mode is not None else state.settings.get("scalper_mode", False)
     

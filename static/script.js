@@ -1575,6 +1575,9 @@ async function saveSettings() {
             const newSettings = await settingsResp.json();
             await reloadExpiries(newSettings);
             await fetchMarketData();
+        } else {
+            showToast(res.message || "Failed to update settings", 300, "danger", "ERROR");
+            await fetchMarketData();
         }
     } catch (e) {
         console.error("Failed saving configuration:", e);
@@ -1888,6 +1891,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     showToast(`AUTO-TRADE: ${mode.toUpperCase()}`, 100, "neutral", "SETTINGS UPDATED");
                     // Align dashboard view to the clicked mode (v2.6)
                     alignDashboardViewToMode(mode);
+                    await fetchMarketData();
+                } else {
+                    showToast(saveRes.message || "Failed to update settings", 300, "danger", "ERROR");
                     await fetchMarketData();
                 }
             } catch (err) {
