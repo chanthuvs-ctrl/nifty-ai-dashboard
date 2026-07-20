@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.46" 
+VERSION = "3.1.47" 
 import time
 import os
 import json
@@ -3876,8 +3876,13 @@ def auth_upstox_start(request: Request):
             content={"error": "API Key not configured. Go to Settings and enter your Upstox API Key first."},
             status_code=400
         )
-    # Dynamic redirect URI based on client host (v3.1.43)
-    base_url = str(request.base_url).rstrip('/')
+    # Reconstruct public redirect URI from reverse proxy headers if present (v3.1.47)
+    x_forwarded_proto = request.headers.get("x-forwarded-proto", "http")
+    x_forwarded_host = request.headers.get("x-forwarded-host")
+    if x_forwarded_host:
+        base_url = f"{x_forwarded_proto}://{x_forwarded_host}"
+    else:
+        base_url = str(request.base_url).rstrip('/')
     redirect_uri = f"{base_url}/auth/callback"
     params = {
         "client_id": api_key,
@@ -3919,8 +3924,13 @@ def auth_upstox_callback(request: Request, code: str = None, error: str = None):
 
     api_key = state.settings.get("upstox_api_key", "").strip()
     api_secret = state.settings.get("upstox_api_secret", "").strip()
-    # Dynamic redirect URI based on client host (v3.1.43)
-    base_url = str(request.base_url).rstrip('/')
+    # Reconstruct public redirect URI from reverse proxy headers if present (v3.1.47)
+    x_forwarded_proto = request.headers.get("x-forwarded-proto", "http")
+    x_forwarded_host = request.headers.get("x-forwarded-host")
+    if x_forwarded_host:
+        base_url = f"{x_forwarded_proto}://{x_forwarded_host}"
+    else:
+        base_url = str(request.base_url).rstrip('/')
     redirect_uri = f"{base_url}/auth/callback"
 
     if not api_key or not api_secret:
