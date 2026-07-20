@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.40" 
+VERSION = "3.1.41" 
 import time
 import os
 import json
@@ -2938,13 +2938,49 @@ class SyncRequest(BaseModel):
 def get_market_data():
     state.check_daily_reset()
     fallback_active = False
-    if state.settings.get("feed_mode") == "Upstox":
+    mode = state.settings.get("auto_trade_mode", "OFF")
+    feed_mode = state.settings.get("feed_mode", "Simulation")
+
+    if mode == "Live" or feed_mode == "Upstox":
+        # Force Upstox fetch. No simulation fallback allowed for Live Auto Real!
         success = state.fetch_upstox_data()
         if not success:
-            state.tick_5s()
-            fallback_active = True
+            if mode == "Live":
+                # Halt/Raise error, do not tick simulation!
+                err = "❌ Upstox Feed Error: Failed to fetch live contract data from Upstox. Google Finance simulation fallback blocked in Auto Real mode."
+                state.live_trade_errors = getattr(state, 'live_trade_errors', [])
+                if not state.live_trade_errors or state.live_trade_errors[-1]["error"] != err:
+                    state.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
+                    state.live_trade_errors = state.live_trade_errors[-10:]
+                print(err)
+                return {
+                    "version": VERSION,
+                    "spot_price": round(state.spot_price, 2),
+                    "capital": round(state.get_available_capital(), 2),
+                    "broker_capital": round(state.get_broker_balance(), 2),
+                    "upstox_token_status": state.upstox_token_status,
+                    "change_pct": state.intraday_change_pct,
+                    "change_val": state.intraday_change_val,
+                    "price_source": "Upstox API Feed (ERROR/STALE)",
+                    "price_date": state.price_date,
+                    "price_time": state.price_time,
+                    "vix": round(state.vix, 2),
+                    "pcr": round(state.pcr, 2),
+                    "regime": state.market_regime,
+                    "recommendation": "No Trade",
+                    "confidence": 0.0,
+                    "secondary_recommendation": "No Trade",
+                    "tertiary_recommendation": "No Trade",
+                    "reasoning": ["⚠️ Upstox Live API connection error. Live trading paused."],
+                    "auto_trade_mode": mode,
+                    "scalper_mode": state.settings.get("scalper_mode", False),
+                    "live_trade_errors": state.live_trade_errors[-5:]
+                }
+            else:
+                # For non-live settings (e.g. Paper mode with Upstox feed selected), fall back to Simulation
+                state.tick_5s()
+                fallback_active = True
         else:
-            # Still run decision engine + auto-trade tick even on successful Upstox feed
             state.evaluate_decision_engine()
             if not state.daily_stop_limit_hit:
                 state._auto_trade_tick()
