@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3.1.39">
+    <link rel="stylesheet" href="style.css?v=3.1.40">
     <script src="chart.umd.js"></script>
     <script src="chartjs-plugin-annotation.js"></script>
 </head>
@@ -20,7 +20,7 @@
         <div class="header-brand">
             <div class="pulse-indicator" id="refresh-indicator"></div>
             <h1>INTRADAY <span class="glow-text">DECISION ENGINE</span></h1>
-            <span class="badge-pro" id="version-badge">PRODUCTION v3.1.39</span>
+            <span class="badge-pro" id="version-badge">PRODUCTION v3.1.40</span>
             <span class="badge-pro" id="api-status-badge" style="font-size: 0.58rem; padding: 2px 5px; margin-left: 6px; background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border-color: var(--border-color);">API Checking...</span>
         </div>
         
@@ -1087,10 +1087,8 @@ Weekly Review: Week ____ (P&L: _________)
                     </select>
                 </div>
 
-                <div id="upstox-config-fields" style="display: none; border-left: 2px solid var(--neon-cyan); padding-left: 10px; margin-bottom: 15px;">
-                    
-                    <!-- Token Status Badge -->
-                    <div id="token-status-banner" style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; background:rgba(0,229,255,0.06); border:1px solid rgba(0,229,255,0.2); margin-bottom:12px;">
+                    <!-- Token Status Badge (Always Visible for user convenience) -->
+                    <div id="token-status-banner" style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; background:rgba(0,229,255,0.06); border:1px solid rgba(0,229,255,0.2); margin-bottom:15px; margin-top:10px;">
                         <span id="token-status-dot" style="width:10px;height:10px;border-radius:50%;background:#aaa;display:inline-block;flex-shrink:0;"></span>
                         <div>
                             <div id="token-status-label" style="font-size:0.75rem;font-weight:700;color:var(--text-main);">Checking token...</div>
@@ -1101,6 +1099,8 @@ Weekly Review: Week ____ (P&L: _________)
                         </a>
                     </div>
 
+                <div id="upstox-config-fields" style="display: none; border-left: 2px solid var(--neon-cyan); padding-left: 10px; margin-bottom: 15px;">
+                    
                     <!-- API Key -->
                     <div class="setting-row" style="margin-bottom:10px;">
                         <label>Upstox API Key <span style="font-size:0.6rem;color:var(--text-muted)">(from My Apps → nifty dashboard)</span></label>
@@ -1197,6 +1197,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=3.1.39"></script>
+    <script src="script.js?v=3.1.40"></script>
 </body>
 </html>

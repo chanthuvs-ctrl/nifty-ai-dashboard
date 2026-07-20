@@ -1986,6 +1986,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('set-regime').value = settings.regime_override;
             document.getElementById('set-feed-mode').value = settings.feed_mode || 'Simulation';
             document.getElementById('set-upstox-token').value = settings.upstox_access_token || '';
+            document.getElementById('set-upstox-api-key').value = settings.upstox_api_key || '';
+            document.getElementById('set-upstox-api-secret').value = settings.upstox_api_secret || '';
             document.getElementById('set-auth-user').value = settings.dashboard_username || 'admin';
             document.getElementById('set-auth-pass').value = settings.dashboard_password || 'password123';
 
