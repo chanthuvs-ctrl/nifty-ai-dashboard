@@ -1,7 +1,31 @@
 import math
 import random
 
-VERSION = "3.1.47" 
+VERSION = "3.1.48"
+
+# When running locally, route all Upstox API calls through Render's
+# whitelisted static IP proxy so IP restrictions don't block us.
+RENDER_PROXY_URL = "https://nifty-ai-dashboard.onrender.com/api/proxy/upstox"
+
+def upstox_request(path: str, token: str, method: str = "GET", body: dict = None, params: dict = None):
+    """
+    Upstox API caller (v3.1.48). Direct connection to Upstox.
+    Supports optional custom outbound proxy if configured in Settings.
+    """
+    url = f"https://api.upstox.com{path}"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    proxy_url = state.settings.get("outbound_proxy", "").strip()
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+    
+    if method.upper() == "POST":
+        return requests.post(url, headers=headers, json=body or {}, params=params, proxies=proxies, timeout=10)
+    else:
+        return requests.get(url, headers=headers, params=params, proxies=proxies, timeout=10)
+ 
 import time
 import os
 import json
@@ -429,13 +453,8 @@ class SimulationState:
                 return cached_dates
                 
         try:
-            url = "https://api.upstox.com/v2/option/contract"
-            headers = {
-                "Accept": "application/json",
-                "Authorization": f"Bearer {token}"
-            }
             instrument_key = "BSE_INDEX|SENSEX" if preferred_index.lower() == "sensex" else "NSE_INDEX|Nifty 50"
-            resp = requests.get(url, headers=headers, params={"instrument_key": instrument_key}, timeout=5)
+            resp = upstox_request("/v2/option/contract", token, params={"instrument_key": instrument_key})
             if resp.status_code == 200:
                 res_data = resp.json()
                 if res_data.get("status") == "success":
@@ -766,13 +785,8 @@ class SimulationState:
             if now - self._capital_cache_time < 60.0:
                 return self._cached_capital
                 
-        url = "https://api.upstox.com/v2/user/get-funds-and-margin"
-        headers = {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {token}"
-        }
         try:
-            resp = requests.get(url, headers=headers, timeout=5)
+            resp = upstox_request("/v2/user/get-funds-and-margin", token)
             if resp.status_code == 200:
                 res_json = resp.json()
                 if res_json.get("status") == "success":
@@ -877,14 +891,14 @@ class SimulationState:
         if not instruments:
             return None
             
-        url = "https://api.upstox.com/v2/charges/margin"
+        margin_path = "/v2/charges/margin"
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Authorization": f"Bearer {token}"
         }
         try:
-            resp = requests.post(url, json={"instruments": instruments}, headers=headers, timeout=5)
+            resp = upstox_request(margin_path, token, method="POST", body={"instruments": instruments})
             if resp.status_code == 200:
                 res_json = resp.json()
                 if res_json.get("status") == "success":
@@ -1342,7 +1356,7 @@ class SimulationState:
         if not token or not expiry:
             return False
             
-        url = "https://api.upstox.com/v2/option/chain"
+        option_chain_path = "/v2/option/chain"
         headers = {
             "Accept": "application/json",
             "Authorization": f"Bearer {token}"
@@ -1355,7 +1369,7 @@ class SimulationState:
         }
         
         try:
-            resp = requests.get(url, headers=headers, params=params, timeout=5)
+            resp = upstox_request(option_chain_path, token, params=params)
             if resp.status_code != 200:
                 print(f"Upstox API returned error {resp.status_code}: {resp.text}")
                 return False
@@ -1478,12 +1492,12 @@ class SimulationState:
                 
             # Query actual live India VIX spot price from Upstox market quotes!
             try:
-                vix_url = "https://api.upstox.com/v2/market-quote/quotes"
+                vix_path = "/v2/market-quote/quotes"
                 vix_headers = {
                     "Accept": "application/json",
                     "Authorization": f"Bearer {token}"
                 }
-                vix_resp = requests.get(vix_url, headers=vix_headers, params={"symbol": "NSE_INDEX|India VIX"}, timeout=3)
+                vix_resp = upstox_request(vix_path, token, params={"symbol": "NSE_INDEX|India VIX"})
                 if vix_resp.status_code == 200:
                     vix_data = vix_resp.json()
                     if vix_data.get("status") == "success":
@@ -3372,14 +3386,14 @@ class LiveOrderRequest(BaseModel):
     legs: List[LiveLegOrder]
 
 def wait_for_order_fill(order_id: str, token: str) -> bool:
-    url = f"https://api.upstox.com/v2/order/history?order_id={order_id}"
+    order_history_path = f"/v2/order/history"
     headers = {
         "Accept": "application/json",
         "Authorization": f"Bearer {token}"
     }
     for _ in range(10): # retry for 10 times (approx 5 seconds)
         try:
-            resp = requests.get(url, headers=headers, timeout=3)
+            resp = upstox_request(order_history_path, token, params={"order_id": order_id})
             if resp.status_code == 200:
                 res_json = resp.json()
                 if res_json.get("status") == "success":
@@ -3449,7 +3463,7 @@ def execute_live_order(data: LiveOrderRequest):
             "trade": trade
         }
         
-    url = "https://api.upstox.com/v2/order/place"
+    order_place_path = "/v2/order/place"
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -3482,7 +3496,7 @@ def execute_live_order(data: LiveOrderRequest):
                 "is_amo": False
             }
             try:
-                resp = requests.post(url, json=payload, headers=headers, timeout=5)
+                resp = upstox_request(order_place_path, token, method="POST", body=payload)
                 res_json = resp.json()
                 if resp.status_code == 200 and res_json.get("status") == "success":
                     order_id = res_json.get("data", {}).get("order_id")
@@ -3517,7 +3531,7 @@ def execute_live_order(data: LiveOrderRequest):
                 "is_amo": False
             }
             try:
-                resp = requests.post(url, json=payload, headers=headers, timeout=5)
+                resp = upstox_request(order_place_path, token, method="POST", body=payload)
                 res_json = resp.json()
                 if resp.status_code == 200 and res_json.get("status") == "success":
                     placed_orders.append({
@@ -3547,7 +3561,7 @@ def execute_live_order(data: LiveOrderRequest):
                 "is_amo": False
             }
             try:
-                resp = requests.post(url, json=payload, headers=headers, timeout=5)
+                resp = upstox_request(order_place_path, token, method="POST", body=payload)
                 res_json = resp.json()
                 if resp.status_code == 200 and res_json.get("status") == "success":
                     placed_orders.append({
@@ -3785,44 +3799,6 @@ def delete_all_journal_trades(request: Request):
         "removed": original_count, 
         "message": "All trades deleted successfully."
     }
-
-
-# ---------------------------------------------------------------------------
-# UPSTOX PROXY ENDPOINT
-# Allows local laptop instances to route Upstox API calls through Render's
-# whitelisted static IP. The local app sends requests here with the user token;
-# Render forwards to Upstox and returns the response.
-# ---------------------------------------------------------------------------
-class UpstoxProxyRequest(BaseModel):
-    path: str
-    method: str = "GET"
-    token: str
-    body: Optional[dict] = None
-    params: Optional[dict] = None
-
-@app.post("/api/proxy/upstox")
-def upstox_proxy(req: UpstoxProxyRequest):
-    """Secure Upstox API proxy through Render's whitelisted static IP."""
-    if not req.path.startswith("/v2/"):
-        raise HTTPException(status_code=400, detail="Only Upstox /v2/ paths are allowed.")
-    upstox_url = f"https://api.upstox.com{req.path}"
-    headers = {
-        "Accept": "application/json",
-        "Authorization": f"Bearer {req.token}",
-        "Content-Type": "application/json"
-    }
-    try:
-        if req.method.upper() == "POST":
-            resp = requests.post(upstox_url, headers=headers, json=req.body or {}, params=req.params, timeout=10)
-        else:
-            resp = requests.get(upstox_url, headers=headers, params=req.params, timeout=10)
-        try:
-            return JSONResponse(content=resp.json(), status_code=resp.status_code)
-        except Exception:
-            return JSONResponse(content={"raw": resp.text}, status_code=resp.status_code)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Proxy error: {str(e)}")
-
 
 
 # ─────────────────────────────────────────────────────────────────
