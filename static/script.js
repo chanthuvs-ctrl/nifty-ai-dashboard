@@ -2031,6 +2031,72 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnSaveSettings = document.getElementById('btn-save-settings');
     if (btnSaveSettings) btnSaveSettings.addEventListener('click', saveSettings);
     
+    // Automatically save credentials and proxy before initiating Upstox OAuth login (v3.1.46)
+    const upstoxLoginBtn = document.getElementById('btn-login-upstox');
+    if (upstoxLoginBtn) {
+        upstoxLoginBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            
+            // Read all fields from settings inputs
+            const capital = parseFloat(document.getElementById('set-capital').value) || 500000;
+            const risk = parseFloat(document.getElementById('set-risk').value) || 2.0;
+            const broker = document.getElementById('set-broker').value;
+            const strategy = document.getElementById('set-strategy').value;
+            const regime = document.getElementById('set-regime').value;
+            const feedMode = document.getElementById('set-feed-mode').value;
+            const token = document.getElementById('set-upstox-token').value;
+            const expiry = document.getElementById('set-upstox-expiry') ? document.getElementById('set-upstox-expiry').value : '';
+            const dbUser = document.getElementById('set-auth-user').value;
+            const dbPass = document.getElementById('set-auth-pass').value;
+            const trailingSl = parseFloat(document.getElementById('set-trailing-sl').value) || 30.0;
+            const apiKey = (document.getElementById('set-upstox-api-key') || {}).value || '';
+            const apiSecret = (document.getElementById('set-upstox-api-secret') || {}).value || '';
+            const proxy = (document.getElementById('set-outbound-proxy') || {}).value || '';
+            const activeModalBtn = document.querySelector('#modal-auto-trade-group button.active');
+            const autoTradeMode = activeModalBtn ? activeModalBtn.getAttribute('data-mode') : 'OFF';
+            
+            const req = {
+                capital: capital,
+                risk_pct: risk,
+                preferred_broker: broker,
+                preferred_strategy: strategy,
+                regime_override: regime,
+                feed_mode: feedMode,
+                upstox_access_token: token,
+                upstox_expiry_date: expiry,
+                upstox_api_key: apiKey,
+                upstox_api_secret: apiSecret,
+                outbound_proxy: proxy,
+                dashboard_username: dbUser,
+                dashboard_password: dbPass,
+                auto_trade_mode: autoTradeMode,
+                trailing_sl_pts: trailingSl,
+                scalper_mode: document.getElementById('set-scalper-mode') ? document.getElementById('set-scalper-mode').checked : false
+            };
+            
+            try {
+                showToast("SAVING CREDENTIALS...", 100, "info", "SAVING");
+                const resp = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(req)
+                });
+                const res = await resp.json();
+                if (res.status === "SUCCESS") {
+                    showToast("SETTINGS SAVED. REDIRECTING...", 100, "info", "REDIRECTING");
+                    setTimeout(() => {
+                        window.location.href = '/auth/upstox';
+                    }, 500);
+                } else {
+                    showToast(res.message || "Failed to save configuration", 300, "danger", "ERROR");
+                }
+            } catch (err) {
+                console.error("Save before OAuth failed:", err);
+                showToast("Failed to save credentials before login", 300, "danger", "ERROR");
+            }
+        });
+    }
+    
     // Manual Execute paper trade
     const btnExecutePaper = document.getElementById('btn-execute-paper');
     if (btnExecutePaper) btnExecutePaper.addEventListener('click', executePaperTrade);
