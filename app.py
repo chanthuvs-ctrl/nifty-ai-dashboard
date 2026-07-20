@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.48"
+VERSION = "3.1.49"
 
 # When running locally, route all Upstox API calls through Render's
 # whitelisted static IP proxy so IP restrictions don't block us.
@@ -3277,7 +3277,7 @@ def get_settings():
 def update_settings(data: SettingsUpdate):
     target_mode = data.auto_trade_mode or "OFF"
     
-    # Store settings temporary to run verification
+    # Save settings parameters immediately so they persist even if validation fails (v3.1.49)
     state.settings["upstox_access_token"] = data.upstox_access_token or ""
     state.settings["upstox_expiry_date"] = data.upstox_expiry_date or ""
     if data.upstox_api_key:
@@ -3285,6 +3285,16 @@ def update_settings(data: SettingsUpdate):
     if data.upstox_api_secret:
         state.settings["upstox_api_secret"] = data.upstox_api_secret
     state.settings["outbound_proxy"] = data.outbound_proxy or ""
+
+    state.settings["capital"] = data.capital
+    state.settings["risk_pct"] = data.risk_pct
+    state.settings["preferred_broker"] = data.preferred_broker or "Upstox"
+    state.settings["preferred_strategy"] = data.preferred_strategy or "All"
+    state.settings["regime_override"] = data.regime_override or "Auto"
+    state.settings["dashboard_username"] = data.dashboard_username or "admin"
+    state.settings["dashboard_password"] = data.dashboard_password or "password123"
+    state.settings["trailing_sl_pts"] = data.trailing_sl_pts
+    state.settings["scalper_mode"] = data.scalper_mode if data.scalper_mode is not None else state.settings.get("scalper_mode", False)
 
     # Clear capital cache to force immediate validation of the token
     state._cached_capital = None
@@ -3306,17 +3316,7 @@ def update_settings(data: SettingsUpdate):
             }
     else:
         state.settings["auto_trade_mode"] = target_mode
-        state.settings["feed_mode"] = data.feed_mode or "Simulation"
-
-    state.settings["capital"] = data.capital
-    state.settings["risk_pct"] = data.risk_pct
-    state.settings["preferred_broker"] = data.preferred_broker or "Upstox"
-    state.settings["preferred_strategy"] = data.preferred_strategy or "All"
-    state.settings["regime_override"] = data.regime_override or "Auto"
-    state.settings["dashboard_username"] = data.dashboard_username or "admin"
-    state.settings["dashboard_password"] = data.dashboard_password or "password123"
-    state.settings["trailing_sl_pts"] = data.trailing_sl_pts
-    state.settings["scalper_mode"] = data.scalper_mode if data.scalper_mode is not None else state.settings.get("scalper_mode", False)
+        state.settings["feed_mode"] = data.feed_mode or "Simulation" 
     
     # Try updating the expiry automatically based on token validity/feed mode
     state.update_default_expiry()
