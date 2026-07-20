@@ -1429,7 +1429,11 @@ async function executeLiveTrade() {
             await fetchJournal();
         } else {
             showToast("LIVE ORDER FAILED", 0, "bear", "LIVE TRADE FAILED");
-            alert(`Live Trade execution failed/completed partially:\n\n${res.message}\n\nCheck logs for details.`);
+            let details = "";
+            if (res.failed && res.failed.length > 0) {
+                details = "\n\nDetails:\n" + res.failed.map(f => `- ${f.leg}: ${f.error}`).join('\n');
+            }
+            alert(`Live Trade execution failed/completed partially:\n\n${res.message}${details}`);
             await fetchJournal();
         }
     } catch (e) {
