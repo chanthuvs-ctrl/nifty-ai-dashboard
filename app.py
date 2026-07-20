@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.44" 
+VERSION = "3.1.45" 
 import time
 import os
 import json
@@ -2897,6 +2897,7 @@ class SettingsUpdate(BaseModel):
     upstox_expiry_date: Optional[str] = ""
     upstox_api_key: Optional[str] = ""
     upstox_api_secret: Optional[str] = ""
+    outbound_proxy: Optional[str] = ""
     dashboard_username: Optional[str] = "admin"
     dashboard_password: Optional[str] = "password123"
     auto_trade_mode: Optional[str] = "OFF"
@@ -3269,6 +3270,7 @@ def update_settings(data: SettingsUpdate):
         state.settings["upstox_api_key"] = data.upstox_api_key
     if data.upstox_api_secret:
         state.settings["upstox_api_secret"] = data.upstox_api_secret
+    state.settings["outbound_proxy"] = data.outbound_proxy or ""
 
     # Clear capital cache to force immediate validation of the token
     state._cached_capital = None

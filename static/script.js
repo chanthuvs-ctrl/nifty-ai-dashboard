@@ -1552,6 +1552,7 @@ async function saveSettings() {
             upstox_expiry_date: expiry,
             upstox_api_key: (document.getElementById('set-upstox-api-key') || {}).value || '',
             upstox_api_secret: (document.getElementById('set-upstox-api-secret') || {}).value || '',
+            outbound_proxy: (document.getElementById('set-outbound-proxy') || {}).value || '',
             dashboard_username: dbUser,
             dashboard_password: dbPass,
             auto_trade_mode: autoTradeMode,
@@ -1992,6 +1993,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('set-upstox-token').value = settings.upstox_access_token || '';
             document.getElementById('set-upstox-api-key').value = settings.upstox_api_key || '';
             document.getElementById('set-upstox-api-secret').value = settings.upstox_api_secret || '';
+            document.getElementById('set-outbound-proxy').value = settings.outbound_proxy || '';
             document.getElementById('set-auth-user').value = settings.dashboard_username || 'admin';
             document.getElementById('set-auth-pass').value = settings.dashboard_password || 'password123';
 

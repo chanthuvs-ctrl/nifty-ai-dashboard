@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3.1.44">
+    <link rel="stylesheet" href="style.css?v=3.1.45">
     <script src="chart.umd.js"></script>
     <script src="chartjs-plugin-annotation.js"></script>
 </head>
@@ -20,7 +20,7 @@
         <div class="header-brand">
             <div class="pulse-indicator" id="refresh-indicator"></div>
             <h1>INTRADAY <span class="glow-text">DECISION ENGINE</span></h1>
-            <span class="badge-pro" id="version-badge">PRODUCTION v3.1.44</span>
+            <span class="badge-pro" id="version-badge">PRODUCTION v3.1.45</span>
             <span class="badge-pro" id="api-status-badge" style="font-size: 0.58rem; padding: 2px 5px; margin-left: 6px; background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border-color: var(--border-color);">API Checking...</span>
         </div>
         
@@ -1119,6 +1119,12 @@ Weekly Review: Week ____ (P&L: _________)
                         <input type="password" id="set-upstox-token" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%;" placeholder="Auto-filled by Login button, or paste manually here">
                     </div>
                     
+                    <!-- Outbound Proxy URL -->
+                    <div class="setting-row" style="margin-bottom:10px;">
+                        <label>Outbound Proxy URL <span style="font-size:0.6rem;color:var(--text-muted)">(Optional static IP proxy e.g. http://user:pass@host:port)</span></label>
+                        <input type="text" id="set-outbound-proxy" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; font-family:monospace;" placeholder="http://username:password@proxyhost:port">
+                    </div>
+                    
                     <div class="setting-row" style="margin-top: 10px;">
                         <label>Option Expiry Date</label>
                         <select id="set-upstox-expiry" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; cursor: pointer;">
@@ -1197,6 +1203,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=3.1.44"></script>
+    <script src="script.js?v=3.1.45"></script>
 </body>
 </html>
