@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.50"
+VERSION = "3.1.51"
 
 # When running locally, route all Upstox API calls through Render's
 # whitelisted static IP proxy so IP restrictions don't block us.
