@@ -27,13 +27,13 @@ else
     exit 1
 fi
 
-# Expose via localtunnel-py
+# Expose via py-localtunnel
 echo ""
 echo "----------------------------------------------------------"
 echo "Creating public tunnel via localtunnel..."
 echo "COPY AND OPEN THE HTTPS LINK SHOWN BELOW ON YOUR MOBILE:"
 echo "----------------------------------------------------------"
-python3 localtunnel_run.py
+pylt port 8000
 
 # Cleanup on exit
 kill $SERVER_PID
