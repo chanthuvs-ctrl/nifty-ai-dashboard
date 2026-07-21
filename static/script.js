@@ -1555,6 +1555,8 @@ async function saveSettings() {
             outbound_proxy: (document.getElementById('set-outbound-proxy') || {}).value || '',
             dashboard_username: dbUser,
             dashboard_password: dbPass,
+            telegram_bot_token: (document.getElementById('set-telegram-token') || {}).value || '',
+            telegram_chat_id: (document.getElementById('set-telegram-chat-id') || {}).value || '',
             auto_trade_mode: autoTradeMode,
             trailing_sl_pts: trailingSl,
             scalper_mode: document.getElementById('set-scalper-mode') ? document.getElementById('set-scalper-mode').checked : false
@@ -1821,6 +1823,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (document.getElementById('set-upstox-token')) document.getElementById('set-upstox-token').value = settings.upstox_access_token || '';
         if (document.getElementById('set-auth-user')) document.getElementById('set-auth-user').value = settings.dashboard_username || 'admin';
         if (document.getElementById('set-auth-pass')) document.getElementById('set-auth-pass').value = settings.dashboard_password || 'password123';
+        if (document.getElementById('set-telegram-token')) document.getElementById('set-telegram-token').value = settings.telegram_bot_token || '';
+        if (document.getElementById('set-telegram-chat-id')) document.getElementById('set-telegram-chat-id').value = settings.telegram_chat_id || '';
         if (document.getElementById('set-trailing-sl')) document.getElementById('set-trailing-sl').value = settings.trailing_sl_pts || 30.0;
         if (document.getElementById('set-scalper-mode')) document.getElementById('set-scalper-mode').checked = settings.scalper_mode || false;
         syncScalperButtonVisuals(settings.scalper_mode || false);
@@ -1996,6 +2000,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('set-outbound-proxy').value = settings.outbound_proxy || '';
             document.getElementById('set-auth-user').value = settings.dashboard_username || 'admin';
             document.getElementById('set-auth-pass').value = settings.dashboard_password || 'password123';
+            document.getElementById('set-telegram-token').value = settings.telegram_bot_token || '';
+            document.getElementById('set-telegram-chat-id').value = settings.telegram_chat_id || '';
 
             // Sync modal auto-trade fields
             syncAutoTradeButtonVisuals('modal-auto-trade-group', settings.auto_trade_mode || 'OFF');
@@ -2048,6 +2054,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const expiry = document.getElementById('set-upstox-expiry') ? document.getElementById('set-upstox-expiry').value : '';
             const dbUser = document.getElementById('set-auth-user').value;
             const dbPass = document.getElementById('set-auth-pass').value;
+            const telegramToken = (document.getElementById('set-telegram-token') || {}).value || '';
+            const telegramChatId = (document.getElementById('set-telegram-chat-id') || {}).value || '';
             const trailingSl = parseFloat(document.getElementById('set-trailing-sl').value) || 30.0;
             const apiKey = (document.getElementById('set-upstox-api-key') || {}).value || '';
             const apiSecret = (document.getElementById('set-upstox-api-secret') || {}).value || '';
@@ -2069,6 +2077,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 outbound_proxy: proxy,
                 dashboard_username: dbUser,
                 dashboard_password: dbPass,
+                telegram_bot_token: telegramToken,
+                telegram_chat_id: telegramChatId,
                 auto_trade_mode: autoTradeMode,
                 trailing_sl_pts: trailingSl,
                 scalper_mode: document.getElementById('set-scalper-mode') ? document.getElementById('set-scalper-mode').checked : false

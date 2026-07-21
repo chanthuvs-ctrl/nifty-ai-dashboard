@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.51"
+VERSION = "3.1.52"
 
 # When running locally, route all Upstox API calls through Render's
 # whitelisted static IP proxy so IP restrictions don't block us.
@@ -291,7 +291,9 @@ class SimulationState:
             "session_token": "",
             "auto_trade_mode": "OFF",
             "trailing_sl_pts": 30.0,
-            "scalper_mode": False
+            "scalper_mode": False,
+            "telegram_bot_token": "",
+            "telegram_chat_id": ""
         }
         
         # Load settings from disk if exists
@@ -2583,11 +2585,45 @@ class SimulationState:
                     "reason": self.recalculation_trigger,
                     "indicators_changed": ", ".join(reasoning_list[:3])
                 })
+                # Trigger strategy shift alert
+                if prev_strat != primary_rec:
+                    msg = f"🔄 <b>AI Strategy Shift Alert</b>\n\n" \
+                          f"• <b>Index:</b> {self.settings.get('preferred_index', 'Nifty')}\n" \
+                          f"• <b>Prev Strategy:</b> {prev_strat}\n" \
+                          f"• <b>New Strategy:</b> {primary_rec}\n" \
+                          f"• <b>Confidence:</b> {confidence_pct:.1f}%\n" \
+                          f"• <b>Trigger:</b> {self.recalculation_trigger}\n" \
+                          f"• <b>Spot Price:</b> \u20b9{self.spot_price:.2f}"
+                    send_telegram_alert(msg)
         
         # Reset trigger
         self.recalculation_trigger = "Schedule"
         self.last_rec_time = time.time()
 
+
+def send_telegram_alert(message: str):
+    token = state.settings.get("telegram_bot_token", "").strip()
+    chat_id = state.settings.get("telegram_chat_id", "").strip()
+    if not token or not chat_id:
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "HTML"
+    }
+    try:
+        import threading
+        def _post():
+            try:
+                proxy_url = state.settings.get("outbound_proxy", "").strip()
+                proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+                requests.post(url, json=payload, proxies=proxies, timeout=5)
+            except Exception as e:
+                print(f"Failed to send Telegram alert: {e}")
+        threading.Thread(target=_post, daemon=True).start()
+    except Exception as e:
+        print(f"Failed to start Telegram alert thread: {e}")
 
 # Singleton simulation state instance
 state = SimulationState()
@@ -2746,6 +2782,12 @@ class TradeJournal:
         
         self.trades.append(trade)
         self.save_journal()
+        # Trigger entry alert
+        msg = f"📈 <b>Trade Entry Alert [{execution_type.upper()}]</b>\n\n" \
+              f"• <b>Strategy:</b> {strategy}\n" \
+              f"• <b>Strikes:</b> {', '.join(strikes)}\n"               f"• <b>Confidence:</b> {confidence:.1f}%\n" \
+              f"• <b>Entry Spot:</b> \u20b9{entry_price:.2f}"
+        send_telegram_alert(msg)
         return trade
         
     def close_trade(self, trade_id: str, exit_spot: float):
@@ -2822,6 +2864,13 @@ class TradeJournal:
                 trade["pnl"] = round(pnl + trade.get("booked_pnl", 0.0), 2)
                 trade["outcome"] = "WIN" if pnl > 0 else "LOSS"
                 self.save_journal()
+                # Trigger exit alert
+                msg = f"📉 <b>Trade Exit Alert [{trade.get('execution_type', 'Paper').upper()}]</b>\n\n" \
+                      f"• <b>Strategy:</b> {trade.get('strategy')}\n" \
+                      f"• <b>Exit Spot:</b> \u20b9{exit_spot:.2f}\n" \
+                      f"• <b>Trade P&L:</b> \u20b9{trade.get('pnl', 0.0):.2f}\n" \
+                      f"• <b>Outcome:</b> {trade['outcome']}"
+                send_telegram_alert(msg)
                 return trade
         return None
 
@@ -2917,6 +2966,8 @@ class SettingsUpdate(BaseModel):
     auto_trade_mode: Optional[str] = "OFF"
     trailing_sl_pts: float = 30.0
     scalper_mode: Optional[bool] = None
+    telegram_bot_token: Optional[str] = ""
+    telegram_chat_id: Optional[str] = "" 
 
 class LoginRequest(BaseModel):
     username: str
@@ -3345,6 +3396,8 @@ def update_settings(data: SettingsUpdate):
     if data.upstox_api_secret:
         state.settings["upstox_api_secret"] = data.upstox_api_secret
     state.settings["outbound_proxy"] = data.outbound_proxy or ""
+    state.settings["telegram_bot_token"] = data.telegram_bot_token or ""
+    state.settings["telegram_chat_id"] = data.telegram_chat_id or ""
 
     state.settings["capital"] = data.capital
     state.settings["risk_pct"] = data.risk_pct
