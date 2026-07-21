@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.44" 
+VERSION = "3.1.44a" 
 import time
 import os
 import json
@@ -258,7 +258,7 @@ class SimulationState:
             "vix_threshold": 10.0, # % change
             "regime_override": "Auto", # "Auto" or specific name
             "vix_baseline": 14.5,
-            "feed_mode": "Simulation", # "Simulation" or "Upstox"
+            "feed_mode": "Upstox", # "Simulation" or "Upstox"
             "upstox_access_token": "",
             "upstox_expiry_date": (datetime.date.today() + datetime.timedelta(days=(3 - datetime.date.today().weekday()) % 7)).strftime("%Y-%m-%d"),
             "preferred_index": "Nifty",
@@ -1224,45 +1224,49 @@ class SimulationState:
             else:
                 self.premarket_open_price = None
                 
-                # Periodically fetch live price from Google Finance
-                if now - self.last_live_fetch >= 30:
-                    price_data = fetch_live_index_price(preferred_index)
-                    if price_data[0] is not None:
-                        live_price = price_data[0]
-                        self.spot_price = live_price
-                        self.intraday_change_pct = price_data[1]
-                        self.intraday_change_val = price_data[2]
-                        self.prev_close_baseline = price_data[0] - price_data[2]
-                        self.last_live_fetch = now
-                
-                if not live_price:
-                    # Normal drift simulation
-                    drift = 0.0
-                    regime = self.market_regime
-                    if "Strong Bull" in regime:
-                        drift = 0.5
-                    elif "Strong Bear" in regime:
-                        drift = -0.5
+                feed_mode = self.settings.get("feed_mode", "Simulation")
+                if feed_mode == "Upstox":
+                    self.fetch_upstox_data()
+                else:
+                    # Periodically fetch live price from Google Finance
+                    if now - self.last_live_fetch >= 30:
+                        price_data = fetch_live_index_price(preferred_index)
+                        if price_data[0] is not None:
+                            live_price = price_data[0]
+                            self.spot_price = live_price
+                            self.intraday_change_pct = price_data[1]
+                            self.intraday_change_val = price_data[2]
+                            self.prev_close_baseline = price_data[0] - price_data[2]
+                            self.last_live_fetch = now
                     
-                    # Ensure baseline exists
-                    if not getattr(self, "prev_close_baseline", None):
-                        self.prev_close_baseline = self.spot_price - self.intraday_change_val
-                    
-                    # Drift spot price
-                    self.spot_price += drift + random.uniform(-2.0, 2.0)
-                    
-                    # Update change metrics to stay in sync
-                    if self.prev_close_baseline != 0.0:
-                        self.intraday_change_val = self.spot_price - self.prev_close_baseline
-                        self.intraday_change_pct = (self.intraday_change_val / self.prev_close_baseline) * 100.0
-                    
-                    # Bound random spikes relative to starting spot price area
-                    if preferred_index.lower() == "sensex":
-                        if self.spot_price > 110000: self.spot_price -= 100.0
-                        if self.spot_price < 50000: self.spot_price += 100.0
-                    else:
-                        if self.spot_price > 35000: self.spot_price -= 25.0
-                        if self.spot_price < 15000: self.spot_price += 25.0
+                    if not live_price:
+                        # Normal drift simulation
+                        drift = 0.0
+                        regime = self.market_regime
+                        if "Strong Bull" in regime:
+                            drift = 0.5
+                        elif "Strong Bear" in regime:
+                            drift = -0.5
+                        
+                        # Ensure baseline exists
+                        if not getattr(self, "prev_close_baseline", None):
+                            self.prev_close_baseline = self.spot_price - self.intraday_change_val
+                        
+                        # Drift spot price
+                        self.spot_price += drift + random.uniform(-2.0, 2.0)
+                        
+                        # Update change metrics to stay in sync
+                        if self.prev_close_baseline != 0.0:
+                            self.intraday_change_val = self.spot_price - self.prev_close_baseline
+                            self.intraday_change_pct = (self.intraday_change_val / self.prev_close_baseline) * 100.0
+                        
+                        # Bound random spikes relative to starting spot price area
+                        if preferred_index.lower() == "sensex":
+                            if self.spot_price > 110000: self.spot_price -= 100.0
+                            if self.spot_price < 50000: self.spot_price += 100.0
+                        else:
+                            if self.spot_price > 35000: self.spot_price -= 25.0
+                            if self.spot_price < 15000: self.spot_price += 25.0
 
         # Update source and timestamps
         if override_type:
@@ -2892,7 +2896,7 @@ class SettingsUpdate(BaseModel):
     preferred_broker: Optional[str] = "Upstox"
     preferred_strategy: Optional[str] = "All"
     regime_override: Optional[str] = "Auto"
-    feed_mode: Optional[str] = "Simulation"
+    feed_mode: Optional[str] = "Upstox"
     upstox_access_token: Optional[str] = ""
     upstox_expiry_date: Optional[str] = ""
     upstox_api_key: Optional[str] = ""
