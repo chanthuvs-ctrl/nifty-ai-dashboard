@@ -745,7 +745,8 @@ class SimulationState:
 
     def get_rolling_momentum(self) -> float:
         """Returns the rolling price change percentage over the last 2 minutes."""
-        if not self.price_history:
+        # Require at least 12 ticks (1 minute) of price history to prevent false breakouts on startup
+        if len(self.price_history) < 12:
             return 0.0
         # Ticks are appended every 5 seconds. 2 minutes = 24 ticks back.
         lookback = min(24, len(self.price_history) - 1)
