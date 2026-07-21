@@ -993,6 +993,8 @@ class SimulationState:
 
             # SL = 10% premium. Risk per lot = premium * lot_size * 0.10
             risk_per_lot = atm_premium * lot_size * 0.10
+            if risk_per_lot <= 0:
+                risk_per_lot = 1.0
             suggested_lots = max(1, int(max_risk / risk_per_lot))
             margin_per_lot = atm_premium * lot_size
             
@@ -1048,6 +1050,8 @@ class SimulationState:
             risk_per_lot = net_premium * 0.50 * lot_size
             
             # Respect both margin (80% capital allocation limit) and 2% risk
+            if risk_per_lot <= 0:
+                risk_per_lot = 1.0
             max_lots_by_risk = max(1, int(max_risk / risk_per_lot))
             
             # Query dynamic broker margin first
@@ -1089,6 +1093,8 @@ class SimulationState:
                 
         # SL = 10% premium. Risk per lot = premium * lot_size * 0.10
         risk_per_lot = atm_premium * lot_size * 0.10
+        if risk_per_lot <= 0:
+            risk_per_lot = 1.0
         suggested_lots = max(1, int(max_risk / risk_per_lot))
         
         # Momentum strategy status
