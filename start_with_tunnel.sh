@@ -27,13 +27,13 @@ else
     exit 1
 fi
 
-# Expose via localhost.run tunnel
+# Expose via localtunnel-py
 echo ""
 echo "----------------------------------------------------------"
-echo "Creating public tunnel via localhost.run..."
+echo "Creating public tunnel via localtunnel..."
 echo "COPY AND OPEN THE HTTPS LINK SHOWN BELOW ON YOUR MOBILE:"
 echo "----------------------------------------------------------"
-ssh -R 80:127.0.0.1:8000 nokey@localhost.run
+python3 localtunnel_run.py
 
 # Cleanup on exit
 kill $SERVER_PID
