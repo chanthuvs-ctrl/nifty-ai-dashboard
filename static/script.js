@@ -1465,8 +1465,126 @@ async function closePaperPosition(tradeId, exitSpot) {
 
 // Upstox fields are always visible — this function is kept for compatibility but does nothing
 function toggleUpstoxFields(mode) {
-    // Fields are permanently visible to allow account switching at any time
+    // Fields are permanently visible; feed mode handled by select
 }
+
+// ── Step Wizard Helpers ──────────────────────────────────────────
+// Toggle step body visibility (accordion)
+function toggleStep(bodyId) {
+    const body = document.getElementById(bodyId);
+    if (!body) return;
+    body.style.display = body.style.display === 'none' ? 'block' : 'none';
+}
+
+// Mark Step 2 as done (manual confirmation)
+function markStep2Done() {
+    try { localStorage.setItem('upstox_step2_done', '1'); } catch(e) {}
+    setStepComplete(2);
+    const btn = document.getElementById('btn-step2-done');
+    if (btn) { btn.textContent = '✅ Redirect URL Registered'; btn.disabled = true; btn.style.opacity = '0.7'; }
+    const body = document.getElementById('step2-body');
+    if (body) body.style.display = 'none';
+}
+
+// Set a step's visual to COMPLETE (green) / ACTIVE (cyan) / PENDING (gray)
+function setStepState(num, state) {
+    const badge = document.getElementById(`step-badge-${num}`);
+    const status = document.getElementById(`step-status-${num}`);
+    const card = document.getElementById(`account-step-${num}`);
+    if (!badge || !status) return;
+    if (state === 'complete') {
+        badge.textContent = '✓';
+        badge.style.background = 'rgba(0,230,118,0.2)';
+        badge.style.borderColor = '#00e676';
+        badge.style.color = '#00e676';
+        status.textContent = '✅ DONE';
+        status.style.color = '#00e676';
+        if (card) card.style.borderColor = 'rgba(0,230,118,0.25)';
+    } else if (state === 'active') {
+        badge.textContent = num;
+        badge.style.background = 'rgba(0,229,255,0.15)';
+        badge.style.borderColor = 'var(--neon-cyan)';
+        badge.style.color = 'var(--neon-cyan)';
+        status.textContent = '▶ ACTION';
+        status.style.color = 'var(--neon-cyan)';
+        if (card) card.style.borderColor = 'rgba(0,229,255,0.3)';
+    } else {
+        badge.textContent = num;
+        badge.style.background = 'rgba(255,255,255,0.04)';
+        badge.style.borderColor = 'rgba(255,255,255,0.2)';
+        badge.style.color = 'var(--text-muted)';
+        status.textContent = num === 2 ? 'MANUAL' : 'PENDING';
+        status.style.color = 'var(--text-muted)';
+        if (card) card.style.borderColor = 'rgba(255,255,255,0.08)';
+    }
+}
+
+function setStepComplete(num) { setStepState(num, 'complete'); }
+function setStepActive(num) { setStepState(num, 'active'); }
+function setStepPending(num) { setStepState(num, 'pending'); }
+
+// Evaluate and update all step visuals based on current settings
+function updateAccountStepVisuals(settings, tokenStatus) {
+    const hasApiKey = !!(settings && settings.upstox_api_key && settings.upstox_api_key.trim());
+    const hasToken = !!(settings && settings.upstox_access_token && settings.upstox_access_token.trim());
+    const tokenValid = tokenStatus && tokenStatus.status === 'VALID';
+    let step2Done = false;
+    try { step2Done = !!localStorage.getItem('upstox_step2_done'); } catch(e) {}
+
+    // Step 1: API credentials saved
+    if (hasApiKey) {
+        setStepComplete(1);
+        const body = document.getElementById('step1-body');
+        if (body) body.style.display = 'none'; // collapse when complete
+    } else {
+        setStepActive(1);
+        const body = document.getElementById('step1-body');
+        if (body) body.style.display = 'block';
+    }
+
+    // Step 2: manual - check localStorage
+    if (step2Done) {
+        setStepComplete(2);
+        const btn = document.getElementById('btn-step2-done');
+        if (btn) { btn.textContent = '✅ Redirect URL Registered'; btn.disabled = true; btn.style.opacity = '0.7'; }
+        const body = document.getElementById('step2-body');
+        if (body) body.style.display = 'none';
+    } else {
+        setStepActive(2);
+        const body = document.getElementById('step2-body');
+        if (body) body.style.display = hasApiKey ? 'block' : 'none';
+    }
+
+    // Step 3: token valid
+    if (tokenValid) {
+        setStepComplete(3);
+        const body = document.getElementById('step3-body');
+        if (body) body.style.display = 'none';
+    } else if (hasApiKey && step2Done) {
+        setStepActive(3);
+        const body = document.getElementById('step3-body');
+        if (body) body.style.display = 'block';
+    } else {
+        setStepPending(3);
+    }
+
+    // Step 4: IP registered this session (sessionStorage flag)
+    let ipDone = false;
+    try { ipDone = !!sessionStorage.getItem('upstox_ip_registered'); } catch(e) {}
+    if (ipDone && tokenValid) {
+        setStepComplete(4);
+        const body = document.getElementById('step4-body');
+        if (body) body.style.display = 'none';
+    } else if (tokenValid) {
+        setStepActive(4);
+        const body = document.getElementById('step4-body');
+        if (body) body.style.display = 'block';
+    } else {
+        setStepPending(4);
+    }
+}
+
+
 
 // Stop live feed polling
 function stopEngineFeed() {
@@ -2019,6 +2137,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Auto-detect & populate the server IP field
             detectServerIp();
 
+            // Update step wizard visuals
+            try {
+                const tsResp = await fetch('/api/token-status');
+                const tsData = await tsResp.json();
+                updateAccountStepVisuals(settings, tsData);
+            } catch(e) {
+                updateAccountStepVisuals(settings, null);
+            }
+
             document.getElementById('settings-modal').style.display = 'flex';
         });
     }
@@ -2118,13 +2245,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                     resultEl.style.display = 'block';
                     if (res.status === 'SUCCESS') {
                         resultEl.style.color = '#00e676';
+                        resultEl.style.background = 'rgba(0,230,118,0.06)';
+                        resultEl.style.border = '1px solid rgba(0,230,118,0.2)';
                         resultEl.textContent = res.message;
                         // Clear token display since it's now invalidated
                         const tokenEl = document.getElementById('set-upstox-token');
                         if (tokenEl) tokenEl.value = '';
-                        showToast('IP registered! Please login with Upstox to get a new token.', 200, 'neutral', 'IP REGISTERED');
+                        // Set sessionStorage flag and show re-login prompt
+                        try { sessionStorage.setItem('upstox_ip_registered', '1'); } catch(e) {}
+                        const reloginEl = document.getElementById('step4-relogin');
+                        if (reloginEl) reloginEl.style.display = 'block';
+                        // Update step states: step 4 waiting for re-login, step 3 now needs action
+                        setStepState(4, 'active');
+                        const s4status = document.getElementById('step-status-4');
+                        if (s4status) { s4status.textContent = '🔐 RE-LOGIN'; s4status.style.color = '#ffab40'; }
+                        setStepState(3, 'active');
+                        showToast('IP registered! Please login with Upstox again to get a new token.', 200, 'neutral', 'IP REGISTERED');
                     } else {
                         resultEl.style.color = '#ff5252';
+                        resultEl.style.background = 'rgba(255,23,68,0.06)';
+                        resultEl.style.border = '1px solid rgba(255,23,68,0.2)';
                         resultEl.textContent = '❌ ' + (res.message || 'Failed to register IP');
                     }
                 }

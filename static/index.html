@@ -1079,86 +1079,159 @@ Weekly Review: Week ____ (P&L: _________)
 
                 <div class="horizontal-divider"></div>
 
-                <div class="setting-row">
-                    <label>Data Feed Source Mode</label>
-                    <select id="set-feed-mode">
-                        <option value="Simulation">Simulation Mode (Google Finance)</option>
-                        <option value="Upstox">Upstox API Live Feed</option>
-                    </select>
-                </div>
+                <!-- ═══ UPSTOX ACCOUNT SETUP WIZARD ═══ -->
+                <div id="upstox-config-fields" style="margin-bottom:15px;">
 
-                    <!-- Token Status Badge (Always Visible for user convenience) -->
-                    <div id="token-status-banner" style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; background:rgba(0,229,255,0.06); border:1px solid rgba(0,229,255,0.2); margin-bottom:15px; margin-top:10px;">
-                        <span id="token-status-dot" style="width:10px;height:10px;border-radius:50%;background:#aaa;display:inline-block;flex-shrink:0;"></span>
+                    <!-- Data Feed + Section header -->
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                         <div>
-                            <div id="token-status-label" style="font-size:0.75rem;font-weight:700;color:var(--text-main);">Checking token...</div>
-                            <div id="token-status-expiry" style="font-size:0.65rem;color:var(--text-muted);margin-top:2px;"></div>
+                            <div style="font-size:0.7rem;font-weight:700;color:var(--neon-cyan);text-transform:uppercase;letter-spacing:0.6px;">🔗 Upstox Account Setup</div>
+                            <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Complete each step in order to connect your account</div>
                         </div>
-                        <a href="/auth/upstox" target="_blank" id="btn-login-upstox" style="margin-left:auto;padding:6px 14px;background:linear-gradient(135deg,#00e5ff22,#7c4dff22);border:1px solid #00e5ff;border-radius:6px;color:#00e5ff;font-size:0.72rem;font-weight:700;text-decoration:none;white-space:nowrap;cursor:pointer;" title="One-click OAuth login to get a fresh token automatically">
-                            🔐 Login with Upstox
-                        </a>
+                        <button id="btn-clear-upstox-account" type="button" style="padding:4px 10px;font-size:0.62rem;font-weight:700;background:rgba(255,23,68,0.07);border:1px solid rgba(255,23,68,0.3);border-radius:5px;color:#ff5252;cursor:pointer;" title="Clear all credentials to switch account">✕ Switch Account</button>
                     </div>
-
-                <div id="upstox-config-fields" style="border-left: 2px solid var(--neon-cyan); padding-left: 10px; margin-bottom: 15px;">
-
-                    <!-- Account Switch Helper -->
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-                        <span style="font-size:0.65rem;font-weight:700;color:var(--neon-cyan);text-transform:uppercase;letter-spacing:0.5px;">🔑 Upstox Account Credentials</span>
-                        <button id="btn-clear-upstox-account" type="button" style="padding:4px 10px;font-size:0.65rem;font-weight:700;background:rgba(255,23,68,0.08);border:1px solid rgba(255,23,68,0.35);border-radius:5px;color:#ff5252;cursor:pointer;letter-spacing:0.3px;" title="Clear all credentials to switch to a different Upstox account">✕ Clear &amp; Switch Account</button>
-                    </div>
-
-                    <!-- Redirect URI (read-only, for registering in Upstox App portal) -->
-                    <div class="setting-row" style="margin-bottom:10px;">
-                        <label>Redirect URI <span style="font-size:0.6rem;color:var(--text-muted)">(copy &amp; paste this into your Upstox App → Redirect URL)</span></label>
-                        <div style="display:flex;gap:6px;align-items:center;">
-                            <input type="text" id="set-redirect-uri" readonly style="background:rgba(0,229,255,0.04);color:var(--neon-cyan);border:1px dashed rgba(0,229,255,0.3);padding:7px 10px;border-radius:4px;width:100%;font-family:monospace;font-size:0.72rem;cursor:text;" placeholder="Loading...">
-                            <button id="btn-copy-redirect-uri" type="button" style="padding:7px 12px;font-size:0.7rem;font-weight:700;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.35);border-radius:4px;color:var(--neon-cyan);cursor:pointer;white-space:nowrap;" title="Copy Redirect URI">📋 Copy</button>
-                        </div>
-                    </div>
-
-                    <!-- Server IP Registration (auto-whitelist) -->
-                    <div class="setting-row" style="margin-bottom:14px;padding:10px 12px;background:rgba(0,230,118,0.04);border:1px solid rgba(0,230,118,0.2);border-radius:8px;">
-                        <div style="font-size:0.65rem;font-weight:700;color:#00e676;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">🌐 Static IP Registration (Upstox API)</div>
-                        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-                            <input type="text" id="set-server-ip-primary" readonly style="background:rgba(0,230,118,0.05);color:#00e676;border:1px dashed rgba(0,230,118,0.3);padding:7px 10px;border-radius:4px;width:100%;font-family:monospace;font-size:0.72rem;" placeholder="Detecting server IP...">
-                            <button id="btn-detect-ip" type="button" style="padding:7px 10px;font-size:0.7rem;font-weight:700;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.3);border-radius:4px;color:#00e676;cursor:pointer;white-space:nowrap;" title="Refresh server IP">🔄</button>
-                        </div>
-                        <div style="margin-bottom:6px;">
-                            <input type="text" id="set-server-ip-secondary" style="background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-color);padding:7px 10px;border-radius:4px;width:100%;font-family:monospace;font-size:0.72rem;" placeholder="Secondary IP (optional, e.g. your home/office IP)">
-                        </div>
-                        <button id="btn-register-ip" type="button" style="width:100%;padding:8px 0;font-size:0.75rem;font-weight:700;background:linear-gradient(135deg,rgba(0,230,118,0.15),rgba(0,230,118,0.05));border:1px solid rgba(0,230,118,0.4);border-radius:6px;color:#00e676;cursor:pointer;letter-spacing:0.5px;">
-                            🌐 Register Server IP with Upstox
-                        </button>
-                        <div id="ip-register-result" style="font-size:0.65rem;color:var(--text-muted);margin-top:6px;line-height:1.4;display:none;"></div>
-                        <div style="font-size:0.6rem;color:var(--text-muted);margin-top:6px;">⚠️ Upstox allows IP changes once per week. After registering, your current token is invalidated — you'll need to login again.</div>
-                    </div>
-
-
-                    <!-- API Key -->
-                    <div class="setting-row" style="margin-bottom:10px;">
-                        <label>Upstox API Key <span style="font-size:0.6rem;color:var(--text-muted)">(from Upstox Developer → My Apps)</span></label>
-                        <input type="text" id="set-upstox-api-key" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; font-family:monospace;" placeholder="e.g. 43517b4b-8295-423c-aa15-...8ef7">
-                    </div>
-
-                    <!-- API Secret -->
-                    <div class="setting-row" style="margin-bottom:10px;">
-                        <label>Upstox API Secret <span style="font-size:0.6rem;color:var(--text-muted)">(from Upstox Developer → My Apps)</span></label>
-                        <input type="password" id="set-upstox-api-secret" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; font-family:monospace;" placeholder="API Secret">
-                    </div>
-
-                    <!-- Manual token paste (fallback) -->
-                    <div class="setting-row" style="margin-bottom:10px;">
-                        <label>Access Token <span style="font-size:0.6rem;color:var(--text-muted)">(auto-filled after OAuth login, or paste manually)</span></label>
-                        <input type="password" id="set-upstox-token" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%;" placeholder="Auto-filled by Login button, or paste manually here">
-                    </div>
-
-                    <div class="setting-row" style="margin-top: 10px;">
-                        <label>Option Expiry Date</label>
-                        <select id="set-upstox-expiry" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; cursor: pointer;">
-                            <!-- Will be dynamically populated by JS -->
+                    <!-- Feed Mode row (always visible) -->
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);">
+                        <label style="font-size:0.68rem;font-weight:600;color:var(--text-muted);white-space:nowrap;flex-shrink:0;">Data Feed</label>
+                        <select id="set-feed-mode" style="background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-color);padding:6px 10px;border-radius:5px;width:100%;font-size:0.7rem;cursor:pointer;">
+                            <option value="Simulation">Simulation Mode (Google Finance)</option>
+                            <option value="Upstox">Upstox API Live Feed</option>
                         </select>
                     </div>
-                </div>
+
+
+                    <!-- ─── STEP 1: API Credentials ─── -->
+                    <div id="account-step-1" style="margin-bottom:8px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);overflow:hidden;">
+                        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;" onclick="toggleStep('step1-body')">
+                            <div id="step-badge-1" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:800;flex-shrink:0;border:2px solid rgba(255,255,255,0.2);color:var(--text-muted);background:rgba(255,255,255,0.04);">1</div>
+                            <div style="flex:1;">
+                                <div id="step-title-1" style="font-size:0.72rem;font-weight:700;color:var(--text-main);">Enter API Credentials</div>
+                                <div id="step-sub-1" style="font-size:0.6rem;color:var(--text-muted);margin-top:1px;">API Key &amp; Secret from Upstox Developer → My Apps</div>
+                            </div>
+                            <div id="step-status-1" style="font-size:0.62rem;font-weight:700;color:var(--text-muted);white-space:nowrap;">PENDING</div>
+                        </div>
+                        <div id="step1-body" style="padding:0 14px 14px;border-top:1px solid rgba(255,255,255,0.06);">
+                            <div style="margin-top:10px;">
+                                <label style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px;display:block;">API Key</label>
+                                <input type="text" id="set-upstox-api-key" style="background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-color);padding:8px 10px;border-radius:5px;width:100%;font-family:monospace;font-size:0.72rem;box-sizing:border-box;" placeholder="e.g. 43517b4b-8295-423c-aa15-...8ef7">
+                            </div>
+                            <div style="margin-top:8px;">
+                                <label style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px;display:block;">API Secret</label>
+                                <input type="password" id="set-upstox-api-secret" style="background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-color);padding:8px 10px;border-radius:5px;width:100%;font-family:monospace;font-size:0.72rem;box-sizing:border-box;" placeholder="••••••••••••">
+                            </div>
+                            <div style="margin-top:10px;font-size:0.62rem;color:var(--text-muted);background:rgba(0,229,255,0.04);border:1px dashed rgba(0,229,255,0.2);border-radius:5px;padding:7px 10px;">
+                                💡 <strong>Where to find these:</strong> Log in to <a href="https://developer.upstox.com" target="_blank" style="color:var(--neon-cyan);">developer.upstox.com</a> → My Apps → select your app → copy API Key and Secret
+                            </div>
+                            <button onclick="document.getElementById('btn-save-settings').click()" type="button" style="margin-top:10px;width:100%;padding:8px;font-size:0.72rem;font-weight:700;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.35);border-radius:6px;color:var(--neon-cyan);cursor:pointer;letter-spacing:0.3px;">💾 Save Credentials →</button>
+                        </div>
+                    </div>
+
+                    <!-- ─── STEP 2: Register Redirect URL ─── -->
+                    <div id="account-step-2" style="margin-bottom:8px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);overflow:hidden;">
+                        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;" onclick="toggleStep('step2-body')">
+                            <div id="step-badge-2" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:800;flex-shrink:0;border:2px solid rgba(255,255,255,0.2);color:var(--text-muted);background:rgba(255,255,255,0.04);">2</div>
+                            <div style="flex:1;">
+                                <div style="font-size:0.72rem;font-weight:700;color:var(--text-main);">Register Redirect URL in Upstox</div>
+                                <div style="font-size:0.6rem;color:var(--text-muted);margin-top:1px;">One-time setup in Upstox Developer portal</div>
+                            </div>
+                            <div id="step-status-2" style="font-size:0.62rem;font-weight:700;color:var(--text-muted);white-space:nowrap;">MANUAL</div>
+                        </div>
+                        <div id="step2-body" style="padding:0 14px 14px;border-top:1px solid rgba(255,255,255,0.06);">
+                            <div style="margin-top:10px;">
+                                <label style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px;display:block;">Your Redirect URL (copy this)</label>
+                                <div style="display:flex;gap:6px;align-items:center;">
+                                    <input type="text" id="set-redirect-uri" readonly style="background:rgba(0,229,255,0.04);color:var(--neon-cyan);border:1px dashed rgba(0,229,255,0.3);padding:7px 10px;border-radius:5px;width:100%;font-family:monospace;font-size:0.7rem;box-sizing:border-box;" placeholder="Loading...">
+                                    <button id="btn-copy-redirect-uri" type="button" style="padding:7px 12px;font-size:0.7rem;font-weight:700;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.35);border-radius:5px;color:var(--neon-cyan);cursor:pointer;white-space:nowrap;">📋 Copy</button>
+                                </div>
+                            </div>
+                            <div style="margin-top:10px;font-size:0.62rem;color:var(--text-muted);line-height:1.6;">
+                                <strong style="color:var(--text-main);">Steps in Upstox portal:</strong><br>
+                                1. Go to <a href="https://developer.upstox.com" target="_blank" style="color:var(--neon-cyan);">developer.upstox.com</a> → My Apps<br>
+                                2. Open your app → Redirect URLs → paste the URL above<br>
+                                3. Save changes
+                            </div>
+                            <a href="https://developer.upstox.com/my-apps" target="_blank" style="display:block;margin-top:10px;text-align:center;padding:8px;font-size:0.72rem;font-weight:700;background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.3);border-radius:6px;color:var(--neon-cyan);text-decoration:none;letter-spacing:0.3px;">🔗 Open Upstox My Apps →</a>
+                            <button id="btn-step2-done" type="button" onclick="markStep2Done()" style="margin-top:8px;width:100%;padding:8px;font-size:0.72rem;font-weight:700;background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.3);border-radius:6px;color:#00e676;cursor:pointer;letter-spacing:0.3px;">✓ I've Set Up the Redirect URL</button>
+                        </div>
+                    </div>
+
+                    <!-- ─── STEP 3: Login with Upstox ─── -->
+                    <div id="account-step-3" style="margin-bottom:8px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);overflow:hidden;">
+                        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;" onclick="toggleStep('step3-body')">
+                            <div id="step-badge-3" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:800;flex-shrink:0;border:2px solid rgba(255,255,255,0.2);color:var(--text-muted);background:rgba(255,255,255,0.04);">3</div>
+                            <div style="flex:1;">
+                                <div style="font-size:0.72rem;font-weight:700;color:var(--text-main);">Login with Upstox (Get Token)</div>
+                                <div style="font-size:0.6rem;color:var(--text-muted);margin-top:1px;">OAuth login — token is saved automatically</div>
+                            </div>
+                            <div id="step-status-3" style="font-size:0.62rem;font-weight:700;color:var(--text-muted);white-space:nowrap;">PENDING</div>
+                        </div>
+                        <div id="step3-body" style="padding:0 14px 14px;border-top:1px solid rgba(255,255,255,0.06);">
+                            <!-- Token status (replaces the old top-level banner) -->
+                            <div id="token-status-banner" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.15);margin-top:12px;margin-bottom:12px;">
+                                <span id="token-status-dot" style="width:8px;height:8px;border-radius:50%;background:#aaa;display:inline-block;flex-shrink:0;"></span>
+                                <div style="flex:1;">
+                                    <div id="token-status-label" style="font-size:0.72rem;font-weight:700;color:var(--text-main);">Checking token...</div>
+                                    <div id="token-status-expiry" style="font-size:0.62rem;color:var(--text-muted);margin-top:2px;"></div>
+                                </div>
+                            </div>
+                            <!-- Manual token paste (fallback) -->
+                            <div style="margin-bottom:10px;">
+                                <label style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px;display:block;">Access Token <span style="color:rgba(255,255,255,0.3)">(auto-filled after login, or paste manually)</span></label>
+                                <input type="password" id="set-upstox-token" style="background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-color);padding:8px 10px;border-radius:5px;width:100%;font-family:monospace;font-size:0.7rem;box-sizing:border-box;" placeholder="Auto-filled by login button below">
+                            </div>
+                            <a href="/auth/upstox" target="_blank" id="btn-login-upstox" style="display:block;text-align:center;padding:10px;font-size:0.78rem;font-weight:700;background:linear-gradient(135deg,rgba(0,229,255,0.15),rgba(124,77,255,0.15));border:1px solid var(--neon-cyan);border-radius:7px;color:var(--neon-cyan);text-decoration:none;letter-spacing:0.4px;" title="OAuth login — token saved automatically">🔐 Login with Upstox</a>
+                        </div>
+                    </div>
+
+                    <!-- ─── STEP 4: Register Server IP ─── -->
+                    <div id="account-step-4" style="margin-bottom:8px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);overflow:hidden;">
+                        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;" onclick="toggleStep('step4-body')">
+                            <div id="step-badge-4" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:800;flex-shrink:0;border:2px solid rgba(255,255,255,0.2);color:var(--text-muted);background:rgba(255,255,255,0.04);">4</div>
+                            <div style="flex:1;">
+                                <div style="font-size:0.72rem;font-weight:700;color:var(--text-main);">Register Server IP with Upstox</div>
+                                <div style="font-size:0.6rem;color:var(--text-muted);margin-top:1px;">Whitelist the Render server IP so orders are accepted</div>
+                            </div>
+                            <div id="step-status-4" style="font-size:0.62rem;font-weight:700;color:var(--text-muted);white-space:nowrap;">PENDING</div>
+                        </div>
+                        <div id="step4-body" style="padding:0 14px 14px;border-top:1px solid rgba(255,255,255,0.06);">
+                            <div style="margin-top:10px;">
+                                <label style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px;display:block;">Primary IP (this server's outgoing IP — auto-detected)</label>
+                                <div style="display:flex;gap:6px;align-items:center;">
+                                    <input type="text" id="set-server-ip-primary" readonly style="background:rgba(0,230,118,0.04);color:#00e676;border:1px dashed rgba(0,230,118,0.3);padding:7px 10px;border-radius:5px;width:100%;font-family:monospace;font-size:0.72rem;box-sizing:border-box;" placeholder="Detecting...">
+                                    <button id="btn-detect-ip" type="button" style="padding:7px 10px;font-size:0.7rem;font-weight:700;background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.25);border-radius:5px;color:#00e676;cursor:pointer;white-space:nowrap;" title="Re-detect server IP">🔄</button>
+                                </div>
+                            </div>
+                            <div style="margin-top:8px;">
+                                <label style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px;display:block;">Secondary IP <span style="color:rgba(255,255,255,0.3)">(optional — e.g. your home/office IP)</span></label>
+                                <input type="text" id="set-server-ip-secondary" style="background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-color);padding:7px 10px;border-radius:5px;width:100%;font-family:monospace;font-size:0.72rem;box-sizing:border-box;" placeholder="e.g. 203.0.113.10">
+                            </div>
+                            <div style="margin-top:10px;font-size:0.62rem;color:#ffab40;background:rgba(255,171,64,0.06);border:1px solid rgba(255,171,64,0.2);border-radius:5px;padding:7px 10px;line-height:1.5;">
+                                ⚠️ <strong>Upstox rule:</strong> IP can only be changed <strong>once per calendar week</strong>. After registering, your current token is invalidated — you will need to login again (Step 3).
+                            </div>
+                            <button id="btn-register-ip" type="button" style="margin-top:10px;width:100%;padding:10px;font-size:0.76rem;font-weight:700;background:linear-gradient(135deg,rgba(0,230,118,0.15),rgba(0,230,118,0.05));border:1px solid rgba(0,230,118,0.4);border-radius:7px;color:#00e676;cursor:pointer;letter-spacing:0.4px;">
+                                🌐 Register Server IP with Upstox
+                            </button>
+                            <div id="ip-register-result" style="font-size:0.65rem;margin-top:8px;line-height:1.5;display:none;padding:8px 10px;border-radius:5px;"></div>
+                            <div id="step4-relogin" style="display:none;margin-top:8px;">
+                                <a href="/auth/upstox" target="_blank" style="display:block;text-align:center;padding:9px;font-size:0.74rem;font-weight:700;background:linear-gradient(135deg,rgba(0,229,255,0.15),rgba(124,77,255,0.15));border:1px solid var(--neon-cyan);border-radius:7px;color:var(--neon-cyan);text-decoration:none;letter-spacing:0.4px;">🔐 Re-Login with Upstox (Required)</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ─── Expiry Date ─── -->
+                    <div style="margin-top:12px;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:800;flex-shrink:0;border:2px solid rgba(255,255,255,0.15);color:var(--text-muted);">⚡</div>
+                            <div style="flex:1;">
+                                <label style="font-size:0.72rem;font-weight:700;color:var(--text-main);display:block;margin-bottom:6px;">Option Expiry Date</label>
+                                <select id="set-upstox-expiry" style="background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-color);padding:8px 10px;border-radius:5px;width:100%;cursor:pointer;font-size:0.72rem;">
+                                    <!-- Dynamically populated -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                </div><!-- end upstox-config-fields -->
 
                 <div class="horizontal-divider"></div>
 
@@ -1230,6 +1303,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=3.1.46"></script>
+    <script src="script.js?v=3.1.47"></script>
 </body>
 </html>
