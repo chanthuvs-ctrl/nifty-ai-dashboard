@@ -3876,8 +3876,95 @@ def token_status():
         "message": "Token is expired. Click Login with Upstox to refresh." if is_expired else f"Token valid for {days_left} more days."
     }
 
+@app.get("/api/server-ip")
+def get_server_ip():
+    """Detect and return this server's current outgoing public IP address."""
+    try:
+        # Use multiple IP detection services as fallbacks
+        for url in [
+            "https://api.ipify.org?format=json",
+            "https://api4.my-ip.io/v2/ip.json",
+            "https://ifconfig.me/all.json"
+        ]:
+            try:
+                resp = requests.get(url, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    ip = data.get("ip") or data.get("IP") or data.get("YourFuckingIPAddress")
+                    if ip:
+                        return {"status": "SUCCESS", "server_ip": ip.strip()}
+            except Exception:
+                continue
+        return {"status": "ERROR", "message": "Could not detect server IP from any service."}
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+class UpdateIpRequest(BaseModel):
+    primary_ip: str
+    secondary_ip: Optional[str] = None
+
+@app.post("/api/update-upstox-ip")
+def update_upstox_ip(data: UpdateIpRequest):
+    """
+    Registers the given IP address(es) with Upstox as static IPs for this user account.
+    Upstox rules:
+      - Can only be changed once per calendar week.
+      - Invalidates all existing access tokens after update.
+    """
+    token = state.settings.get("upstox_access_token", "").strip()
+    if not token:
+        return {
+            "status": "ERROR",
+            "message": "No access token found. Please login with Upstox first, then register the IP."
+        }
+
+    payload = {"primary_ip": data.primary_ip.strip()}
+    if data.secondary_ip and data.secondary_ip.strip():
+        payload["secondary_ip"] = data.secondary_ip.strip()
+
+    try:
+        resp = requests.put(
+            "https://api.upstox.com/v2/user/ip",
+            json=payload,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}"
+            },
+            timeout=10
+        )
+        res_json = resp.json()
+        if resp.status_code == 200 and res_json.get("status") == "success":
+            # Token is now invalidated by Upstox — clear it so user knows to re-login
+            state.settings["upstox_access_token"] = ""
+            state.upstox_token_status = "INVALID"
+            state.save_settings()
+            return {
+                "status": "SUCCESS",
+                "message": f"✅ Server IP registered with Upstox! Your existing token has been invalidated. Please click 'Login with Upstox' to generate a new token.",
+                "registered_ip": data.primary_ip,
+                "token_cleared": True
+            }
+        else:
+            # Return the Upstox error message as-is
+            upstox_msg = res_json.get("errors", [{}])
+            if upstox_msg:
+                err = upstox_msg[0].get("message", str(res_json))
+            else:
+                err = res_json.get("message", str(res_json))
+            return {
+                "status": "ERROR",
+                "message": f"Upstox rejected the request: {err}",
+                "http_status": resp.status_code,
+                "raw": res_json
+            }
+    except Exception as e:
+        return {"status": "ERROR", "message": f"Request failed: {str(e)}"}
+
+
 @app.get("/auth/upstox")
 def auth_upstox_start(request: Request):
+
     """Generate Upstox OAuth URL and redirect the user to login."""
     api_key = state.settings.get("upstox_api_key", "").strip()
     if not api_key:

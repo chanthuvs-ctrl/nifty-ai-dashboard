@@ -1114,8 +1114,25 @@ Weekly Review: Week ____ (P&L: _________)
                             <input type="text" id="set-redirect-uri" readonly style="background:rgba(0,229,255,0.04);color:var(--neon-cyan);border:1px dashed rgba(0,229,255,0.3);padding:7px 10px;border-radius:4px;width:100%;font-family:monospace;font-size:0.72rem;cursor:text;" placeholder="Loading...">
                             <button id="btn-copy-redirect-uri" type="button" style="padding:7px 12px;font-size:0.7rem;font-weight:700;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.35);border-radius:4px;color:var(--neon-cyan);cursor:pointer;white-space:nowrap;" title="Copy Redirect URI">📋 Copy</button>
                         </div>
-                        <div style="font-size:0.6rem;color:var(--text-muted);margin-top:4px;">Also whitelist the Render server IP in your Upstox App → IP Whitelist settings.</div>
                     </div>
+
+                    <!-- Server IP Registration (auto-whitelist) -->
+                    <div class="setting-row" style="margin-bottom:14px;padding:10px 12px;background:rgba(0,230,118,0.04);border:1px solid rgba(0,230,118,0.2);border-radius:8px;">
+                        <div style="font-size:0.65rem;font-weight:700;color:#00e676;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">🌐 Static IP Registration (Upstox API)</div>
+                        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+                            <input type="text" id="set-server-ip-primary" readonly style="background:rgba(0,230,118,0.05);color:#00e676;border:1px dashed rgba(0,230,118,0.3);padding:7px 10px;border-radius:4px;width:100%;font-family:monospace;font-size:0.72rem;" placeholder="Detecting server IP...">
+                            <button id="btn-detect-ip" type="button" style="padding:7px 10px;font-size:0.7rem;font-weight:700;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.3);border-radius:4px;color:#00e676;cursor:pointer;white-space:nowrap;" title="Refresh server IP">🔄</button>
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <input type="text" id="set-server-ip-secondary" style="background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-color);padding:7px 10px;border-radius:4px;width:100%;font-family:monospace;font-size:0.72rem;" placeholder="Secondary IP (optional, e.g. your home/office IP)">
+                        </div>
+                        <button id="btn-register-ip" type="button" style="width:100%;padding:8px 0;font-size:0.75rem;font-weight:700;background:linear-gradient(135deg,rgba(0,230,118,0.15),rgba(0,230,118,0.05));border:1px solid rgba(0,230,118,0.4);border-radius:6px;color:#00e676;cursor:pointer;letter-spacing:0.5px;">
+                            🌐 Register Server IP with Upstox
+                        </button>
+                        <div id="ip-register-result" style="font-size:0.65rem;color:var(--text-muted);margin-top:6px;line-height:1.4;display:none;"></div>
+                        <div style="font-size:0.6rem;color:var(--text-muted);margin-top:6px;">⚠️ Upstox allows IP changes once per week. After registering, your current token is invalidated — you'll need to login again.</div>
+                    </div>
+
 
                     <!-- API Key -->
                     <div class="setting-row" style="margin-bottom:10px;">
@@ -1213,6 +1230,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=3.1.45"></script>
+    <script src="script.js?v=3.1.46"></script>
 </body>
 </html>

@@ -2016,6 +2016,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 redirectUriField.value = window.location.origin + '/auth/callback';
             }
 
+            // Auto-detect & populate the server IP field
+            detectServerIp();
+
             document.getElementById('settings-modal').style.display = 'flex';
         });
     }
@@ -2056,6 +2059,81 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Switch auto trade to OFF
             syncAutoTradeButtonVisuals('modal-auto-trade-group', 'OFF');
             showToast('Credentials cleared. Enter new account details and save.', 150, 'neutral', 'ACCOUNT CLEARED');
+        });
+    }
+
+    // Helper: detect and display server IP
+    async function detectServerIp() {
+        const ipField = document.getElementById('set-server-ip-primary');
+        if (!ipField) return;
+        ipField.placeholder = 'Detecting...';
+        try {
+            const resp = await fetch('/api/server-ip');
+            const data = await resp.json();
+            if (data.status === 'SUCCESS' && data.server_ip) {
+                ipField.value = data.server_ip;
+            } else {
+                ipField.placeholder = 'Could not detect IP';
+            }
+        } catch (e) {
+            ipField.placeholder = 'Error detecting IP';
+        }
+    }
+
+    // Detect IP on settings open (already called in the open handler above via detectServerIp())
+    // Refresh IP button
+    const btnDetectIp = document.getElementById('btn-detect-ip');
+    if (btnDetectIp) {
+        btnDetectIp.addEventListener('click', detectServerIp);
+    }
+
+    // Register Server IP with Upstox
+    const btnRegisterIp = document.getElementById('btn-register-ip');
+    if (btnRegisterIp) {
+        btnRegisterIp.addEventListener('click', async () => {
+            const primaryIp = (document.getElementById('set-server-ip-primary') || {}).value || '';
+            const secondaryIp = (document.getElementById('set-server-ip-secondary') || {}).value || '';
+            const resultEl = document.getElementById('ip-register-result');
+
+            if (!primaryIp) {
+                if (resultEl) { resultEl.textContent = '⚠️ No server IP detected. Click 🔄 to refresh first.'; resultEl.style.display = 'block'; resultEl.style.color = '#ffab40'; }
+                return;
+            }
+
+            if (!confirm(`Register IP with Upstox?\n\nPrimary: ${primaryIp}${secondaryIp ? '\nSecondary: ' + secondaryIp : ''}\n\n⚠️ Your current access token will be INVALIDATED after this. You will need to login with Upstox again.\n\nNote: Upstox only allows IP changes ONCE per week.`)) return;
+
+            btnRegisterIp.textContent = '⏳ Registering...';
+            btnRegisterIp.disabled = true;
+            if (resultEl) resultEl.style.display = 'none';
+
+            try {
+                const resp = await fetch('/api/update-upstox-ip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ primary_ip: primaryIp, secondary_ip: secondaryIp || null })
+                });
+                const res = await resp.json();
+
+                if (resultEl) {
+                    resultEl.style.display = 'block';
+                    if (res.status === 'SUCCESS') {
+                        resultEl.style.color = '#00e676';
+                        resultEl.textContent = res.message;
+                        // Clear token display since it's now invalidated
+                        const tokenEl = document.getElementById('set-upstox-token');
+                        if (tokenEl) tokenEl.value = '';
+                        showToast('IP registered! Please login with Upstox to get a new token.', 200, 'neutral', 'IP REGISTERED');
+                    } else {
+                        resultEl.style.color = '#ff5252';
+                        resultEl.textContent = '❌ ' + (res.message || 'Failed to register IP');
+                    }
+                }
+            } catch (e) {
+                if (resultEl) { resultEl.style.display = 'block'; resultEl.style.color = '#ff5252'; resultEl.textContent = '❌ Request failed: ' + e.message; }
+            } finally {
+                btnRegisterIp.textContent = '🌐 Register Server IP with Upstox';
+                btnRegisterIp.disabled = false;
+            }
         });
     }
     
