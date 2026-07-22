@@ -1099,17 +1099,33 @@ Weekly Review: Week ____ (P&L: _________)
                         </a>
                     </div>
 
-                <div id="upstox-config-fields" style="display: none; border-left: 2px solid var(--neon-cyan); padding-left: 10px; margin-bottom: 15px;">
-                    
+                <div id="upstox-config-fields" style="border-left: 2px solid var(--neon-cyan); padding-left: 10px; margin-bottom: 15px;">
+
+                    <!-- Account Switch Helper -->
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                        <span style="font-size:0.65rem;font-weight:700;color:var(--neon-cyan);text-transform:uppercase;letter-spacing:0.5px;">🔑 Upstox Account Credentials</span>
+                        <button id="btn-clear-upstox-account" type="button" style="padding:4px 10px;font-size:0.65rem;font-weight:700;background:rgba(255,23,68,0.08);border:1px solid rgba(255,23,68,0.35);border-radius:5px;color:#ff5252;cursor:pointer;letter-spacing:0.3px;" title="Clear all credentials to switch to a different Upstox account">✕ Clear &amp; Switch Account</button>
+                    </div>
+
+                    <!-- Redirect URI (read-only, for registering in Upstox App portal) -->
+                    <div class="setting-row" style="margin-bottom:10px;">
+                        <label>Redirect URI <span style="font-size:0.6rem;color:var(--text-muted)">(copy &amp; paste this into your Upstox App → Redirect URL)</span></label>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <input type="text" id="set-redirect-uri" readonly style="background:rgba(0,229,255,0.04);color:var(--neon-cyan);border:1px dashed rgba(0,229,255,0.3);padding:7px 10px;border-radius:4px;width:100%;font-family:monospace;font-size:0.72rem;cursor:text;" placeholder="Loading...">
+                            <button id="btn-copy-redirect-uri" type="button" style="padding:7px 12px;font-size:0.7rem;font-weight:700;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.35);border-radius:4px;color:var(--neon-cyan);cursor:pointer;white-space:nowrap;" title="Copy Redirect URI">📋 Copy</button>
+                        </div>
+                        <div style="font-size:0.6rem;color:var(--text-muted);margin-top:4px;">Also whitelist the Render server IP in your Upstox App → IP Whitelist settings.</div>
+                    </div>
+
                     <!-- API Key -->
                     <div class="setting-row" style="margin-bottom:10px;">
-                        <label>Upstox API Key <span style="font-size:0.6rem;color:var(--text-muted)">(from My Apps → nifty dashboard)</span></label>
+                        <label>Upstox API Key <span style="font-size:0.6rem;color:var(--text-muted)">(from Upstox Developer → My Apps)</span></label>
                         <input type="text" id="set-upstox-api-key" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; font-family:monospace;" placeholder="e.g. 43517b4b-8295-423c-aa15-...8ef7">
                     </div>
 
                     <!-- API Secret -->
                     <div class="setting-row" style="margin-bottom:10px;">
-                        <label>Upstox API Secret <span style="font-size:0.6rem;color:var(--text-muted)">(from My Apps → nifty dashboard)</span></label>
+                        <label>Upstox API Secret <span style="font-size:0.6rem;color:var(--text-muted)">(from Upstox Developer → My Apps)</span></label>
                         <input type="password" id="set-upstox-api-secret" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; font-family:monospace;" placeholder="API Secret">
                     </div>
 
@@ -1118,7 +1134,7 @@ Weekly Review: Week ____ (P&L: _________)
                         <label>Access Token <span style="font-size:0.6rem;color:var(--text-muted)">(auto-filled after OAuth login, or paste manually)</span></label>
                         <input type="password" id="set-upstox-token" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%;" placeholder="Auto-filled by Login button, or paste manually here">
                     </div>
-                    
+
                     <div class="setting-row" style="margin-top: 10px;">
                         <label>Option Expiry Date</label>
                         <select id="set-upstox-expiry" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 4px; width: 100%; cursor: pointer;">
@@ -1197,6 +1213,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=3.1.44e"></script>
+    <script src="script.js?v=3.1.45"></script>
 </body>
 </html>

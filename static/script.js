@@ -1463,14 +1463,9 @@ async function closePaperPosition(tradeId, exitSpot) {
     }
 }
 
-// Toggle Upstox inputs visibility
+// Upstox fields are always visible — this function is kept for compatibility but does nothing
 function toggleUpstoxFields(mode) {
-    const fields = document.getElementById('upstox-config-fields');
-    if (mode === 'Upstox') {
-        fields.style.display = 'block';
-    } else {
-        fields.style.display = 'none';
-    }
+    // Fields are permanently visible to allow account switching at any time
 }
 
 // Stop live feed polling
@@ -2014,8 +2009,53 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             
             toggleUpstoxFields(settings.feed_mode || 'Simulation');
-            
+
+            // Populate Redirect URI field
+            const redirectUriField = document.getElementById('set-redirect-uri');
+            if (redirectUriField) {
+                redirectUriField.value = window.location.origin + '/auth/callback';
+            }
+
             document.getElementById('settings-modal').style.display = 'flex';
+        });
+    }
+
+    // Copy Redirect URI button
+    const btnCopyRedirectUri = document.getElementById('btn-copy-redirect-uri');
+    if (btnCopyRedirectUri) {
+        btnCopyRedirectUri.addEventListener('click', () => {
+            const field = document.getElementById('set-redirect-uri');
+            if (field && field.value) {
+                navigator.clipboard.writeText(field.value).then(() => {
+                    btnCopyRedirectUri.textContent = '✅ Copied!';
+                    setTimeout(() => { btnCopyRedirectUri.textContent = '📋 Copy'; }, 2000);
+                }).catch(() => {
+                    field.select();
+                    document.execCommand('copy');
+                    btnCopyRedirectUri.textContent = '✅ Copied!';
+                    setTimeout(() => { btnCopyRedirectUri.textContent = '📋 Copy'; }, 2000);
+                });
+            }
+        });
+    }
+
+    // Clear & Switch Account button
+    const btnClearAccount = document.getElementById('btn-clear-upstox-account');
+    if (btnClearAccount) {
+        btnClearAccount.addEventListener('click', () => {
+            if (!confirm('Clear all Upstox credentials?\n\nThis will remove the API Key, API Secret, and Access Token so you can enter a new account. The system will switch to Simulation mode until you re-authenticate.')) return;
+            const apiKeyEl = document.getElementById('set-upstox-api-key');
+            const apiSecretEl = document.getElementById('set-upstox-api-secret');
+            const tokenEl = document.getElementById('set-upstox-token');
+            if (apiKeyEl) apiKeyEl.value = '';
+            if (apiSecretEl) apiSecretEl.value = '';
+            if (tokenEl) tokenEl.value = '';
+            // Also switch feed mode to Simulation
+            const feedModeEl = document.getElementById('set-feed-mode');
+            if (feedModeEl) feedModeEl.value = 'Simulation';
+            // Switch auto trade to OFF
+            syncAutoTradeButtonVisuals('modal-auto-trade-group', 'OFF');
+            showToast('Credentials cleared. Enter new account details and save.', 150, 'neutral', 'ACCOUNT CLEARED');
         });
     }
     
