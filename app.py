@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.51" 
+VERSION = "3.1.52" 
 import time
 import os
 import json
@@ -3925,9 +3925,47 @@ def get_server_ip():
                         return {"status": "SUCCESS", "server_ip": ip.strip()}
             except Exception:
                 continue
-        return {"status": "ERROR", "message": "Could not detect server IP from any service."}
     except Exception as e:
         return {"status": "ERROR", "message": str(e)}
+
+@app.get("/api/detect-ips")
+def detect_ips(request: Request):
+    """
+    Auto-detects both:
+      1. Server Outgoing Public IP (Render's IP)
+      2. Client Home Public IP (from X-Forwarded-For header)
+    """
+    x_forwarded = request.headers.get("x-forwarded-for")
+    if x_forwarded:
+        client_ip = x_forwarded.split(",")[0].strip()
+    else:
+        client_ip = request.client.host if request.client else "Unknown"
+
+    server_ip = None
+    for url in [
+        "https://api.ipify.org?format=json",
+        "https://api4.my-ip.io/v2/ip.json",
+        "https://ifconfig.me/all.json"
+    ]:
+        try:
+            resp = requests.get(url, timeout=4)
+            if resp.status_code == 200:
+                data = resp.json()
+                ip = data.get("ip") or data.get("IP")
+                if ip:
+                    server_ip = ip.strip()
+                    break
+        except Exception:
+            continue
+
+    if not server_ip:
+        server_ip = "Unknown"
+
+    return {
+        "status": "SUCCESS",
+        "server_ip": server_ip,
+        "client_ip": client_ip
+    }
 
 class UpdateIpRequest(BaseModel):
     primary_ip: str

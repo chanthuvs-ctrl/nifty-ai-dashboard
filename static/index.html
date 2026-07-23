@@ -20,7 +20,7 @@
         <div class="header-brand">
             <div class="pulse-indicator" id="refresh-indicator"></div>
             <h1>INTRADAY <span class="glow-text">DECISION ENGINE</span></h1>
-            <span class="badge-pro" id="version-badge">PRODUCTION v3.1.51</span>
+            <span class="badge-pro" id="version-badge">PRODUCTION v3.1.52</span>
             <span class="badge-pro" id="api-status-badge" style="font-size: 0.58rem; padding: 2px 5px; margin-left: 6px; background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border-color: var(--border-color);">API Checking...</span>
         </div>
         
@@ -1194,23 +1194,24 @@ Weekly Review: Week ____ (P&L: _________)
                             <div id="step-status-4" style="font-size:0.62rem;font-weight:700;color:var(--text-muted);white-space:nowrap;">OPTIONAL</div>
                         </div>
                         <div id="step4-body" style="padding:0 14px 14px;border-top:1px solid rgba(255,255,255,0.06);">
+                            <div id="detected-ips-badge" style="display:none;margin-top:8px;font-size:0.64rem;color:var(--neon-cyan);background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.25);border-radius:5px;padding:6px 10px;line-height:1.4;"></div>
                             <div style="margin-top:10px;">
                                 <label style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px;display:block;">Primary IP (this server's outgoing IP — auto-detected)</label>
                                 <div style="display:flex;gap:6px;align-items:center;">
-                                    <input type="text" id="set-server-ip-primary" readonly style="background:rgba(0,230,118,0.04);color:#00e676;border:1px dashed rgba(0,230,118,0.3);padding:7px 10px;border-radius:5px;width:100%;font-family:monospace;font-size:0.72rem;box-sizing:border-box;" placeholder="Detecting...">
-                                    <button id="btn-detect-ip" type="button" style="padding:7px 10px;font-size:0.7rem;font-weight:700;background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.25);border-radius:5px;color:#00e676;cursor:pointer;white-space:nowrap;" title="Re-detect server IP">🔄</button>
+                                    <input type="text" id="set-server-ip-primary" readonly style="background:rgba(0,230,118,0.04);color:#00e676;border:1px dashed rgba(0,230,118,0.3);padding:7px 10px;border-radius:5px;width:100%;font-family:monospace;font-size:0.72rem;box-sizing:border-box;" placeholder="Detecting Render Server IP...">
+                                    <button id="btn-detect-ip" type="button" style="padding:7px 10px;font-size:0.7rem;font-weight:700;background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.25);border-radius:5px;color:#00e676;cursor:pointer;white-space:nowrap;" title="Re-detect IPs">🔄</button>
                                 </div>
                             </div>
                             <div style="margin-top:8px;">
-                                <label style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px;display:block;">Secondary IP <span style="color:rgba(255,255,255,0.3)">(optional — e.g. your home/office IP)</span></label>
-                                <input type="text" id="set-server-ip-secondary" style="background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-color);padding:7px 10px;border-radius:5px;width:100%;font-family:monospace;font-size:0.72rem;box-sizing:border-box;" placeholder="e.g. 203.0.113.10">
+                                <label style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px;display:block;">Secondary IP <span style="color:var(--neon-cyan);">(Auto-detected Home IP: 111.92.13.37)</span></label>
+                                <input type="text" id="set-server-ip-secondary" style="background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-color);padding:7px 10px;border-radius:5px;width:100%;font-family:monospace;font-size:0.72rem;box-sizing:border-box;" placeholder="e.g. 111.92.13.37">
                             </div>
                             <div style="margin-top:10px;font-size:0.62rem;color:#ffab40;background:rgba(255,171,64,0.06);border:1px solid rgba(255,171,64,0.2);border-radius:5px;padding:7px 10px;line-height:1.5;">
-                                ⚠️ <strong>Note:</strong> Shared cloud servers (like Render) share outgoing IPs. If Upstox says the IP belongs to another account, <strong>you can safely skip this step!</strong> Standard OAuth login (Step 3) is sufficient for most accounts.
+                                ⚠️ <strong>Note:</strong> Upstox invalidates your access token when registering IPs. After clicking Register below, click <strong>Re-Login with Upstox</strong> to issue your new token.
                             </div>
                             <div style="display:flex;gap:8px;margin-top:10px;">
                                 <button id="btn-register-ip" type="button" style="flex:2;padding:10px;font-size:0.75rem;font-weight:700;background:linear-gradient(135deg,rgba(0,230,118,0.15),rgba(0,230,118,0.05));border:1px solid rgba(0,230,118,0.4);border-radius:7px;color:#00e676;cursor:pointer;letter-spacing:0.3px;">
-                                    🌐 Register Server IP
+                                    🌐 Register Both IPs (Server + Home)
                                 </button>
                                 <button id="btn-skip-step4" type="button" onclick="skipStep4()" style="flex:1;padding:10px;font-size:0.72rem;font-weight:700;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);border-radius:7px;color:var(--text-muted);cursor:pointer;">
                                     ⏭️ Skip Step 4
@@ -1311,6 +1312,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=3.1.51"></script>
+    <script src="script.js?v=3.1.52"></script>
 </body>
 </html>

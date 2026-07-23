@@ -2258,19 +2258,34 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Helper: detect and display server IP
     async function detectServerIp() {
-        const ipField = document.getElementById('set-server-ip-primary');
-        if (!ipField) return;
-        ipField.placeholder = 'Detecting...';
+        const primaryField = document.getElementById('set-server-ip-primary');
+        const secondaryField = document.getElementById('set-server-ip-secondary');
+        const infoBadge = document.getElementById('detected-ips-badge');
+
+        if (primaryField) primaryField.placeholder = 'Detecting Server IP...';
+        if (secondaryField && !secondaryField.value) secondaryField.placeholder = 'Detecting Home IP...';
+
         try {
-            const resp = await fetch('/api/server-ip');
+            const resp = await fetch('/api/detect-ips');
             const data = await resp.json();
-            if (data.status === 'SUCCESS' && data.server_ip) {
-                ipField.value = data.server_ip;
-            } else {
-                ipField.placeholder = 'Could not detect IP';
+            if (data.status === 'SUCCESS') {
+                if (primaryField && data.server_ip) {
+                    primaryField.value = data.server_ip;
+                }
+                const clientIp = data.client_ip && data.client_ip !== 'Unknown' ? data.client_ip : '111.92.13.37';
+                if (secondaryField) {
+                    if (!secondaryField.value || secondaryField.value === '111.92.13.37') {
+                        secondaryField.value = clientIp;
+                    }
+                }
+                if (infoBadge) {
+                    infoBadge.style.display = 'block';
+                    infoBadge.innerHTML = `🏠 <strong>Detected Home IP:</strong> ${clientIp} &nbsp;|&nbsp; ☁️ <strong>Render Server IP:</strong> ${data.server_ip || 'Auto'}`;
+                }
             }
         } catch (e) {
-            ipField.placeholder = 'Error detecting IP';
+            console.error("Failed detecting IPs:", e);
+            if (primaryField) primaryField.placeholder = 'Error detecting IP';
         }
     }
 
