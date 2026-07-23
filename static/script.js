@@ -1698,11 +1698,15 @@ async function saveSettings() {
         const apiSecret = getVal('set-upstox-api-secret', '');
         const scalperChecked = document.getElementById('set-scalper-mode') ? document.getElementById('set-scalper-mode').checked : false;
 
+        const activeIndexSelect = document.getElementById('select-active-index');
+        const prefIndex = activeIndexSelect ? activeIndexSelect.value : 'Nifty';
+
         const req = {
             capital: capital,
             risk_pct: risk,
             preferred_broker: broker,
             preferred_strategy: strategy,
+            preferred_index: prefIndex,
             regime_override: regime,
             feed_mode: feedMode,
             upstox_access_token: token,

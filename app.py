@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.50" 
+VERSION = "3.1.51" 
 import time
 import os
 import json
@@ -2928,6 +2928,7 @@ class SettingsUpdate(BaseModel):
     risk_pct: float
     preferred_broker: Optional[str] = "Upstox"
     preferred_strategy: Optional[str] = "All"
+    preferred_index: Optional[str] = "Nifty"
     regime_override: Optional[str] = "Auto"
     feed_mode: Optional[str] = "Upstox"
     upstox_access_token: Optional[str] = ""
@@ -3283,71 +3284,75 @@ def get_settings():
 
 @app.post("/api/settings")
 def update_settings(data: SettingsUpdate):
-    target_mode = data.auto_trade_mode or "OFF"
-    
-    # Check index switch to auto-update expiry
-    old_index = state.settings.get("preferred_index", "Nifty")
-    new_index = data.preferred_index or old_index
-    state.settings["preferred_index"] = new_index
+    try:
+        target_mode = data.auto_trade_mode or "OFF"
+        
+        # Check index switch to auto-update expiry
+        old_index = state.settings.get("preferred_index", "Nifty")
+        new_index = data.preferred_index or old_index
+        state.settings["preferred_index"] = new_index
 
-    # Store settings temporary to run verification
-    state.settings["upstox_access_token"] = data.upstox_access_token or ""
-    
-    # If index changed or no expiry date set, fetch fresh expiries for new index
-    if new_index != old_index or not data.upstox_expiry_date:
-        expiries = state.get_upstox_expiries(new_index)
-        state.settings["upstox_expiry_date"] = expiries[0] if expiries else (data.upstox_expiry_date or "")
-    else:
-        state.settings["upstox_expiry_date"] = data.upstox_expiry_date or ""
-
-    if data.upstox_api_key:
-        state.settings["upstox_api_key"] = data.upstox_api_key
-    if data.upstox_api_secret:
-        state.settings["upstox_api_secret"] = data.upstox_api_secret
-
-    # Clear capital cache to force immediate validation of the token
-    state._cached_capital = None
-    state._capital_cache_time = 0.0
-    
-    # Verify and enforce Live Real rules
-    if target_mode == "Live":
-        state.get_broker_balance() # This queries Upstox API and sets self.upstox_token_status
-        if state.upstox_token_status == "VALID":
-            state.settings["feed_mode"] = "Upstox"
-            state.settings["auto_trade_mode"] = "Live"
+        # Store settings temporary to run verification
+        state.settings["upstox_access_token"] = data.upstox_access_token or ""
+        
+        # If index changed or no expiry date set, fetch fresh expiries for new index
+        if new_index != old_index or not data.upstox_expiry_date:
+            expiries = state.get_upstox_expiries(new_index)
+            state.settings["upstox_expiry_date"] = expiries[0] if expiries else (data.upstox_expiry_date or "")
         else:
-            state.settings["auto_trade_mode"] = "OFF"
-            state.settings["feed_mode"] = "Simulation"
-            state.save_settings()
-            return {
-                "status": "ERROR", 
-                "message": "❌ Upstox API token is inactive/invalid. Please authenticate with Upstox first."
-            }
-    else:
-        state.settings["auto_trade_mode"] = target_mode
-        state.settings["feed_mode"] = data.feed_mode or "Simulation"
+            state.settings["upstox_expiry_date"] = data.upstox_expiry_date or ""
 
+        if data.upstox_api_key:
+            state.settings["upstox_api_key"] = data.upstox_api_key
+        if data.upstox_api_secret:
+            state.settings["upstox_api_secret"] = data.upstox_api_secret
 
-    state.settings["capital"] = data.capital
-    state.settings["risk_pct"] = data.risk_pct
-    state.settings["preferred_broker"] = data.preferred_broker or "Upstox"
-    state.settings["preferred_strategy"] = data.preferred_strategy or "All"
-    state.settings["regime_override"] = data.regime_override or "Auto"
-    state.settings["dashboard_username"] = data.dashboard_username or "admin"
-    state.settings["dashboard_password"] = data.dashboard_password or "password123"
-    state.settings["trailing_sl_pts"] = data.trailing_sl_pts
-    state.settings["scalper_mode"] = data.scalper_mode if data.scalper_mode is not None else state.settings.get("scalper_mode", False)
-    
-    # Try updating the expiry automatically based on token validity/feed mode
-    state.update_default_expiry()
-    
-    # Clear capital query cache to force immediate validation of the new token
-    state._cached_capital = None
-    state._capital_cache_time = 0.0
-    
-    state.evaluate_decision_engine()
-    state.save_settings()
-    return {"status": "SUCCESS"}
+        # Clear capital cache to force immediate validation of the token
+        state._cached_capital = None
+        state._capital_cache_time = 0.0
+        
+        # Verify and enforce Live Real rules
+        if target_mode == "Live":
+            state.get_broker_balance() # This queries Upstox API and sets self.upstox_token_status
+            if state.upstox_token_status == "VALID":
+                state.settings["feed_mode"] = "Upstox"
+                state.settings["auto_trade_mode"] = "Live"
+            else:
+                state.settings["auto_trade_mode"] = "OFF"
+                state.settings["feed_mode"] = "Simulation"
+                state.save_settings()
+                return {
+                    "status": "ERROR", 
+                    "message": "❌ Upstox API token is inactive/invalid. Please authenticate with Upstox first."
+                }
+        else:
+            state.settings["auto_trade_mode"] = target_mode
+            state.settings["feed_mode"] = data.feed_mode or "Simulation"
+
+        state.settings["capital"] = data.capital
+        state.settings["risk_pct"] = data.risk_pct
+        state.settings["preferred_broker"] = data.preferred_broker or "Upstox"
+        state.settings["preferred_strategy"] = data.preferred_strategy or "All"
+        state.settings["regime_override"] = data.regime_override or "Auto"
+        state.settings["dashboard_username"] = data.dashboard_username or "admin"
+        state.settings["dashboard_password"] = data.dashboard_password or "password123"
+        state.settings["trailing_sl_pts"] = data.trailing_sl_pts
+        state.settings["scalper_mode"] = data.scalper_mode if data.scalper_mode is not None else state.settings.get("scalper_mode", False)
+        
+        # Try updating the expiry automatically based on token validity/feed mode
+        state.update_default_expiry()
+        
+        # Clear capital query cache to force immediate validation of the new token
+        state._cached_capital = None
+        state._capital_cache_time = 0.0
+        
+        state.evaluate_decision_engine()
+        state.save_settings()
+        return {"status": "SUCCESS"}
+    except Exception as e:
+        print(f"Error in update_settings: {e}")
+        return {"status": "ERROR", "message": f"Failed to update settings: {str(e)}"}
+
 
 class ExpiryUpdateRequest(BaseModel):
     expiry_date: str
