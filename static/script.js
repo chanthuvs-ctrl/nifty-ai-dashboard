@@ -1486,6 +1486,24 @@ function markStep2Done() {
     if (body) body.style.display = 'none';
 }
 
+// Skip Step 4 (shared IP / optional)
+function skipStep4() {
+    try { localStorage.setItem('upstox_step4_skipped', '1'); } catch(e) {}
+    setStepComplete(4);
+    const status = document.getElementById('step-status-4');
+    if (status) { status.textContent = '⏭️ SKIPPED'; status.style.color = 'var(--text-muted)'; }
+    const resultEl = document.getElementById('ip-register-result');
+    if (resultEl) {
+        resultEl.style.display = 'block';
+        resultEl.style.color = 'var(--text-muted)';
+        resultEl.style.background = 'rgba(255,255,255,0.03)';
+        resultEl.style.border = '1px dashed rgba(255,255,255,0.15)';
+        resultEl.innerHTML = 'ℹ️ Step 4 skipped. You can proceed with standard Upstox Login (Step 3).';
+    }
+    const body = document.getElementById('step4-body');
+    if (body) body.style.display = 'none';
+}
+
 // Set a step's visual to COMPLETE (green) / ACTIVE (cyan) / PENDING (gray)
 function setStepState(num, state) {
     const badge = document.getElementById(`step-badge-${num}`);
@@ -1513,7 +1531,7 @@ function setStepState(num, state) {
         badge.style.background = 'rgba(255,255,255,0.04)';
         badge.style.borderColor = 'rgba(255,255,255,0.2)';
         badge.style.color = 'var(--text-muted)';
-        status.textContent = num === 2 ? 'MANUAL' : 'PENDING';
+        status.textContent = num === 2 ? 'MANUAL' : (num === 4 ? 'OPTIONAL' : 'PENDING');
         status.style.color = 'var(--text-muted)';
         if (card) card.style.borderColor = 'rgba(255,255,255,0.08)';
     }
@@ -1530,6 +1548,8 @@ function updateAccountStepVisuals(settings, tokenStatus) {
     const tokenValid = tokenStatus && tokenStatus.status === 'VALID';
     let step2Done = false;
     try { step2Done = !!localStorage.getItem('upstox_step2_done'); } catch(e) {}
+    let step4Skipped = false;
+    try { step4Skipped = !!localStorage.getItem('upstox_step4_skipped'); } catch(e) {}
 
     // Step 1: API credentials saved
     if (hasApiKey) {
@@ -1568,10 +1588,16 @@ function updateAccountStepVisuals(settings, tokenStatus) {
         setStepPending(3);
     }
 
-    // Step 4: IP registered this session (sessionStorage flag)
+    // Step 4: IP registered this session or skipped
     let ipDone = false;
     try { ipDone = !!sessionStorage.getItem('upstox_ip_registered'); } catch(e) {}
-    if (ipDone && tokenValid) {
+    if (step4Skipped) {
+        setStepComplete(4);
+        const status = document.getElementById('step-status-4');
+        if (status) { status.textContent = '⏭️ SKIPPED'; status.style.color = 'var(--text-muted)'; }
+        const body = document.getElementById('step4-body');
+        if (body) body.style.display = 'none';
+    } else if (ipDone && tokenValid) {
         setStepComplete(4);
         const body = document.getElementById('step4-body');
         if (body) body.style.display = 'none';
@@ -2262,10 +2288,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                         setStepState(3, 'active');
                         showToast('IP registered! Please login with Upstox again to get a new token.', 200, 'neutral', 'IP REGISTERED');
                     } else {
-                        resultEl.style.color = '#ff5252';
-                        resultEl.style.background = 'rgba(255,23,68,0.06)';
-                        resultEl.style.border = '1px solid rgba(255,23,68,0.2)';
-                        resultEl.textContent = '❌ ' + (res.message || 'Failed to register IP');
+                        const errText = res.message || 'Failed to register IP';
+                        resultEl.style.display = 'block';
+                        if (errText.includes('belongs to another Upstox account') || errText.includes('family member')) {
+                            resultEl.style.color = '#ffab40';
+                            resultEl.style.background = 'rgba(255,171,64,0.08)';
+                            resultEl.style.border = '1px solid rgba(255,171,64,0.3)';
+                            resultEl.innerHTML = `⚠️ <strong>Shared Server IP Detected</strong><br>` +
+                                `Render's server IP is shared across hosting users, so another Upstox user registered this IP.<br>` +
+                                `<div style="margin-top:6px;font-weight:700;">👉 Good news: You can SKIP this step! Upstox API works via Step 3 Login without registering server IP for standard apps.</div>` +
+                                `<button onclick="skipStep4()" type="button" style="margin-top:8px;padding:6px 12px;font-size:0.7rem;font-weight:700;background:#ffab40;color:#000;border:none;border-radius:4px;cursor:pointer;">⏭️ Skip Step 4 &amp; Continue</button>`;
+                        } else {
+                            resultEl.style.color = '#ff5252';
+                            resultEl.style.background = 'rgba(255,23,68,0.06)';
+                            resultEl.style.border = '1px solid rgba(255,23,68,0.2)';
+                            resultEl.textContent = '❌ ' + errText;
+                        }
                     }
                 }
             } catch (e) {

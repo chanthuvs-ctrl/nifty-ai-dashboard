@@ -1183,15 +1183,15 @@ Weekly Review: Week ____ (P&L: _________)
                         </div>
                     </div>
 
-                    <!-- ─── STEP 4: Register Server IP ─── -->
+                    <!-- ─── STEP 4: Register Server IP (Optional) ─── -->
                     <div id="account-step-4" style="margin-bottom:8px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);overflow:hidden;">
                         <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;" onclick="toggleStep('step4-body')">
                             <div id="step-badge-4" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:800;flex-shrink:0;border:2px solid rgba(255,255,255,0.2);color:var(--text-muted);background:rgba(255,255,255,0.04);">4</div>
                             <div style="flex:1;">
-                                <div style="font-size:0.72rem;font-weight:700;color:var(--text-main);">Register Server IP with Upstox</div>
-                                <div style="font-size:0.6rem;color:var(--text-muted);margin-top:1px;">Whitelist the Render server IP so orders are accepted</div>
+                                <div style="font-size:0.72rem;font-weight:700;color:var(--text-main);">Register Server IP <span style="font-size:0.62rem;color:var(--neon-cyan);font-weight:600;">(Optional)</span></div>
+                                <div style="font-size:0.6rem;color:var(--text-muted);margin-top:1px;">Whitelist server IP if required by your account (skip if using shared hosting)</div>
                             </div>
-                            <div id="step-status-4" style="font-size:0.62rem;font-weight:700;color:var(--text-muted);white-space:nowrap;">PENDING</div>
+                            <div id="step-status-4" style="font-size:0.62rem;font-weight:700;color:var(--text-muted);white-space:nowrap;">OPTIONAL</div>
                         </div>
                         <div id="step4-body" style="padding:0 14px 14px;border-top:1px solid rgba(255,255,255,0.06);">
                             <div style="margin-top:10px;">
@@ -1206,11 +1206,16 @@ Weekly Review: Week ____ (P&L: _________)
                                 <input type="text" id="set-server-ip-secondary" style="background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-color);padding:7px 10px;border-radius:5px;width:100%;font-family:monospace;font-size:0.72rem;box-sizing:border-box;" placeholder="e.g. 203.0.113.10">
                             </div>
                             <div style="margin-top:10px;font-size:0.62rem;color:#ffab40;background:rgba(255,171,64,0.06);border:1px solid rgba(255,171,64,0.2);border-radius:5px;padding:7px 10px;line-height:1.5;">
-                                ⚠️ <strong>Upstox rule:</strong> IP can only be changed <strong>once per calendar week</strong>. After registering, your current token is invalidated — you will need to login again (Step 3).
+                                ⚠️ <strong>Note:</strong> Shared cloud servers (like Render) share outgoing IPs. If Upstox says the IP belongs to another account, <strong>you can safely skip this step!</strong> Standard OAuth login (Step 3) is sufficient for most accounts.
                             </div>
-                            <button id="btn-register-ip" type="button" style="margin-top:10px;width:100%;padding:10px;font-size:0.76rem;font-weight:700;background:linear-gradient(135deg,rgba(0,230,118,0.15),rgba(0,230,118,0.05));border:1px solid rgba(0,230,118,0.4);border-radius:7px;color:#00e676;cursor:pointer;letter-spacing:0.4px;">
-                                🌐 Register Server IP with Upstox
-                            </button>
+                            <div style="display:flex;gap:8px;margin-top:10px;">
+                                <button id="btn-register-ip" type="button" style="flex:2;padding:10px;font-size:0.75rem;font-weight:700;background:linear-gradient(135deg,rgba(0,230,118,0.15),rgba(0,230,118,0.05));border:1px solid rgba(0,230,118,0.4);border-radius:7px;color:#00e676;cursor:pointer;letter-spacing:0.3px;">
+                                    🌐 Register Server IP
+                                </button>
+                                <button id="btn-skip-step4" type="button" onclick="skipStep4()" style="flex:1;padding:10px;font-size:0.72rem;font-weight:700;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);border-radius:7px;color:var(--text-muted);cursor:pointer;">
+                                    ⏭️ Skip Step 4
+                                </button>
+                            </div>
                             <div id="ip-register-result" style="font-size:0.65rem;margin-top:8px;line-height:1.5;display:none;padding:8px 10px;border-radius:5px;"></div>
                             <div id="step4-relogin" style="display:none;margin-top:8px;">
                                 <a href="/auth/upstox" target="_blank" style="display:block;text-align:center;padding:9px;font-size:0.74rem;font-weight:700;background:linear-gradient(135deg,rgba(0,229,255,0.15),rgba(124,77,255,0.15));border:1px solid var(--neon-cyan);border-radius:7px;color:var(--neon-cyan);text-decoration:none;letter-spacing:0.4px;">🔐 Re-Login with Upstox (Required)</a>
@@ -1303,6 +1308,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=3.1.47"></script>
+    <script src="script.js?v=3.1.48"></script>
 </body>
 </html>
