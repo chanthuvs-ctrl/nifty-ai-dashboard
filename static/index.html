@@ -20,7 +20,7 @@
         <div class="header-brand">
             <div class="pulse-indicator" id="refresh-indicator"></div>
             <h1>INTRADAY <span class="glow-text">DECISION ENGINE</span></h1>
-            <span class="badge-pro" id="version-badge">PRODUCTION v3.1.49</span>
+            <span class="badge-pro" id="version-badge">PRODUCTION v3.1.50</span>
             <span class="badge-pro" id="api-status-badge" style="font-size: 0.58rem; padding: 2px 5px; margin-left: 6px; background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border-color: var(--border-color);">API Checking...</span>
         </div>
         
@@ -1294,9 +1294,12 @@ Weekly Review: Week ____ (P&L: _________)
                 </div>
 
             </div>
-            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                <button class="btn btn-secondary" id="btn-wipe-database" style="border-color: rgba(255, 23, 68, 0.4); color: #ff1744; height: 38px; padding: 0 16px; font-size: 0.75rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Wipe Database & History</button>
-                <button class="btn btn-primary" id="btn-save-settings" style="height: 38px; padding: 0 20px; font-size: 0.8rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Save Config</button>
+            <div class="modal-footer" style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+                <div id="settings-save-msg" style="font-size: 0.72rem; display: none; padding: 6px 12px; border-radius: 6px; text-align: center; width: 100%; box-sizing: border-box;"></div>
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <button class="btn btn-secondary" id="btn-wipe-database" style="border-color: rgba(255, 23, 68, 0.4); color: #ff1744; height: 38px; padding: 0 16px; font-size: 0.75rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Wipe Database & History</button>
+                    <button class="btn btn-primary" id="btn-save-settings" style="height: 38px; padding: 0 20px; font-size: 0.8rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Save Config</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1308,6 +1311,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=3.1.49"></script>
+    <script src="script.js?v=3.1.50"></script>
 </body>
 </html>

@@ -1664,22 +1664,40 @@ function startEngineFeed() {
 
 // Save Settings Config
 async function saveSettings() {
+    const btnSave = document.getElementById('btn-save-settings');
+    const msgEl = document.getElementById('settings-save-msg');
+    
+    if (btnSave) { btnSave.disabled = true; btnSave.textContent = '💾 Saving...'; }
+    if (msgEl) { msgEl.style.display = 'none'; }
+    
     try {
-        const capital = parseFloat(document.getElementById('set-capital').value);
-        const risk = parseFloat(document.getElementById('set-risk').value);
-        const broker = document.getElementById('set-broker').value;
-        const strategy = document.getElementById('set-strategy').value;
-        const regime = document.getElementById('set-regime').value;
-        const feedMode = document.getElementById('set-feed-mode').value;
-        const token = document.getElementById('set-upstox-token').value;
-        const expiry = document.getElementById('set-upstox-expiry').value;
-        const dbUser = document.getElementById('set-auth-user').value;
-        const dbPass = document.getElementById('set-auth-pass').value;
+        const getVal = (id, fallback = '') => {
+            const el = document.getElementById(id);
+            return el && el.value !== undefined ? el.value : fallback;
+        };
+        const parseNum = (id, fallback = 0) => {
+            const v = parseFloat(getVal(id, fallback));
+            return isNaN(v) ? fallback : v;
+        };
+
+        const capital = parseNum('set-capital', 1000000.0);
+        const risk = parseNum('set-risk', 1.0);
+        const broker = getVal('set-broker', 'Upstox');
+        const strategy = getVal('set-strategy', 'All');
+        const regime = getVal('set-regime', 'Auto');
+        const feedMode = getVal('set-feed-mode', 'Simulation');
+        const token = getVal('set-upstox-token', '');
+        const expiry = getVal('set-upstox-expiry', '');
+        const dbUser = getVal('set-auth-user', 'admin');
+        const dbPass = getVal('set-auth-pass', 'password123');
         
         const activeModalBtn = document.querySelector('#modal-auto-trade-group button.active');
         const autoTradeMode = activeModalBtn ? activeModalBtn.getAttribute('data-mode') : 'OFF';
-        const trailingSl = parseFloat(document.getElementById('set-trailing-sl').value) || 30.0;
-        
+        const trailingSl = parseNum('set-trailing-sl', 30.0);
+        const apiKey = getVal('set-upstox-api-key', '');
+        const apiSecret = getVal('set-upstox-api-secret', '');
+        const scalperChecked = document.getElementById('set-scalper-mode') ? document.getElementById('set-scalper-mode').checked : false;
+
         const req = {
             capital: capital,
             risk_pct: risk,
@@ -1689,13 +1707,13 @@ async function saveSettings() {
             feed_mode: feedMode,
             upstox_access_token: token,
             upstox_expiry_date: expiry,
-            upstox_api_key: (document.getElementById('set-upstox-api-key') || {}).value || '',
-            upstox_api_secret: (document.getElementById('set-upstox-api-secret') || {}).value || '',
+            upstox_api_key: apiKey,
+            upstox_api_secret: apiSecret,
             dashboard_username: dbUser,
             dashboard_password: dbPass,
             auto_trade_mode: autoTradeMode,
             trailing_sl_pts: trailingSl,
-            scalper_mode: document.getElementById('set-scalper-mode') ? document.getElementById('set-scalper-mode').checked : false
+            scalper_mode: scalperChecked
         };
         
         const resp = await fetch('/api/settings', {
@@ -1704,26 +1722,43 @@ async function saveSettings() {
             body: JSON.stringify(req)
         });
         const res = await resp.json();
-        if (res.status === "SUCCESS") {
-            // Save settings copy in localStorage as dynamic backup
+        
+        if (resp.status === 200 && res.status !== "ERROR") {
             const cleanSettings = { ...req };
-            safeStorage.setItem('nifty_settings', JSON.stringify(cleanSettings));
+            try { safeStorage.setItem('nifty_settings', JSON.stringify(cleanSettings)); } catch(e) {}
             
-            // Align dashboard view to the newly saved mode (v2.6)
             alignDashboardViewToMode(autoTradeMode);
+            showToast("Configuration Saved Successfully!", 200, "success", "SUCCESS");
             
             document.getElementById('settings-modal').style.display = 'none';
-            // Reload settings to get the correct dynamic expiries and active expiry date
+            
             const settingsResp = await fetch('/api/settings');
             const newSettings = await settingsResp.json();
             await reloadExpiries(newSettings);
             await fetchMarketData();
         } else {
-            showToast(res.message || "Failed to update settings", 300, "danger", "ERROR");
-            await fetchMarketData();
+            const errMsg = res.message || "Failed to update settings";
+            if (msgEl) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'rgba(255,23,68,0.1)';
+                msgEl.style.border = '1px solid rgba(255,23,68,0.3)';
+                msgEl.style.color = '#ff5252';
+                msgEl.textContent = '❌ ' + errMsg;
+            }
+            showToast(errMsg, 300, "danger", "ERROR");
         }
     } catch (e) {
         console.error("Failed saving configuration:", e);
+        if (msgEl) {
+            msgEl.style.display = 'block';
+            msgEl.style.background = 'rgba(255,23,68,0.1)';
+            msgEl.style.border = '1px solid rgba(255,23,68,0.3)';
+            msgEl.style.color = '#ff5252';
+            msgEl.textContent = '❌ Error saving configuration: ' + e.message;
+        }
+        showToast("Error saving configuration: " + e.message, 300, "danger", "ERROR");
+    } finally {
+        if (btnSave) { btnSave.disabled = false; btnSave.textContent = 'Save Config'; }
     }
 }
 
