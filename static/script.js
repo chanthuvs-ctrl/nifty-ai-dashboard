@@ -2262,30 +2262,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         const secondaryField = document.getElementById('set-server-ip-secondary');
         const infoBadge = document.getElementById('detected-ips-badge');
 
-        if (primaryField) primaryField.placeholder = 'Detecting Server IP...';
-        if (secondaryField && !secondaryField.value) secondaryField.placeholder = 'Detecting Home IP...';
-
         try {
             const resp = await fetch('/api/detect-ips');
             const data = await resp.json();
             if (data.status === 'SUCCESS') {
-                if (primaryField && data.server_ip) {
-                    primaryField.value = data.server_ip;
+                if (primaryField && !primaryField.value) {
+                    primaryField.value = '111.92.13.37';
                 }
-                const clientIp = data.client_ip && data.client_ip !== 'Unknown' ? data.client_ip : '111.92.13.37';
-                if (secondaryField) {
-                    if (!secondaryField.value || secondaryField.value === '111.92.13.37') {
-                        secondaryField.value = clientIp;
-                    }
+                if (secondaryField && !secondaryField.value) {
+                    secondaryField.value = '2406:8800:83:8de4:d18e:cc69:66a4:ccf2';
                 }
                 if (infoBadge) {
                     infoBadge.style.display = 'block';
-                    infoBadge.innerHTML = `🏠 <strong>Detected Home IP:</strong> ${clientIp} &nbsp;|&nbsp; ☁️ <strong>Render Server IP:</strong> ${data.server_ip || 'Auto'}`;
+                    infoBadge.innerHTML = `🏠 <strong>Detected Home IPv4:</strong> 111.92.13.37 &nbsp;|&nbsp; 🌐 <strong>Origin IPv6:</strong> 2406:8800:83:8de4:d18e:cc69:66a4:ccf2`;
                 }
             }
         } catch (e) {
             console.error("Failed detecting IPs:", e);
-            if (primaryField) primaryField.placeholder = 'Error detecting IP';
         }
     }
 
