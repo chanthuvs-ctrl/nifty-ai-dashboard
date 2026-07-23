@@ -2170,8 +2170,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('set-regime').value = settings.regime_override;
             document.getElementById('set-feed-mode').value = settings.feed_mode || 'Simulation';
             document.getElementById('set-upstox-token').value = settings.upstox_access_token || '';
-            document.getElementById('set-upstox-api-key').value = settings.upstox_api_key || '';
-            document.getElementById('set-upstox-api-secret').value = settings.upstox_api_secret || '';
+            const keyVal = settings.upstox_api_key && settings.upstox_api_key !== 'test_key' ? settings.upstox_api_key : '82e905c4-6f67-46c4-aa8b-3a86d0798ef7';
+            const secretVal = settings.upstox_api_secret && settings.upstox_api_secret !== 'test_secret' ? settings.upstox_api_secret : 'ec6r0ue7si';
+            document.getElementById('set-upstox-api-key').value = keyVal;
+            document.getElementById('set-upstox-api-secret').value = secretVal;
             document.getElementById('set-auth-user').value = settings.dashboard_username || 'admin';
             document.getElementById('set-auth-pass').value = settings.dashboard_password || 'password123';
 

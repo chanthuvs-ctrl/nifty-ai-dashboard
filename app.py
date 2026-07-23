@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.55" 
+VERSION = "3.1.56" 
 import time
 import os
 import json
@@ -297,6 +297,12 @@ class SimulationState:
                     self.settings.update(saved)
             except Exception as e:
                 print(f"Failed to load settings from disk: {e}")
+                
+        # Override test_key placeholder with user's actual default API key
+        if self.settings.get("upstox_api_key") in ["test_key", "", None]:
+            self.settings["upstox_api_key"] = "82e905c4-6f67-46c4-aa8b-3a86d0798ef7"
+        if self.settings.get("upstox_api_secret") in ["test_secret", "", None]:
+            self.settings["upstox_api_secret"] = "ec6r0ue7si"
                 
         # Ensure saved expiry date is not in the past
         today_str = datetime.date.today().strftime("%Y-%m-%d")
