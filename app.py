@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.54" 
+VERSION = "3.1.55" 
 import time
 import os
 import json
@@ -284,7 +284,9 @@ class SimulationState:
             "session_token": "",
             "auto_trade_mode": "OFF",
             "trailing_sl_pts": 30.0,
-            "scalper_mode": False
+            "scalper_mode": False,
+            "upstox_api_key": "82e905c4-6f67-46c4-aa8b-3a86d0798ef7",
+            "upstox_api_secret": "ec6r0ue7si"
         }
         
         # Load settings from disk if exists
