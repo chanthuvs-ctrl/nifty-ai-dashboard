@@ -53,7 +53,24 @@ async def add_no_cache_headers(request, call_next):
 # 1. BLACK-SCHOLES PRICING & GREEKS ENGINE
 # ==========================================
 
+def get_default_target_weekday(preferred_index: str) -> int:
+    """
+    Returns default target weekday for options expiry fallback when Upstox API is offline.
+    Python weekday: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun.
+    - Nifty 50: Tuesday (1)
+    - Sensex: Thursday (3) / Friday (4)
+    - Bank Nifty: Wednesday (2)
+    """
+    idx = (preferred_index or "Nifty").lower()
+    if "sensex" in idx:
+        return 3  # Thursday (or 4)
+    elif "bank" in idx:
+        return 2  # Wednesday
+    else:
+        return 1  # Tuesday for Nifty 50
+
 def normal_cdf(x: float) -> float:
+
     """Cumulative distribution function for standard normal distribution."""
     return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
 
@@ -417,50 +434,62 @@ class SimulationState:
             print(f"Failed to save settings: {e}")
 
     def get_upstox_expiries(self, preferred_index: str) -> List[str]:
+        """
+        Fetch available option contract expiry dates directly from Upstox API.
+        Handles Tuesday (Nifty), Thursday (Sensex), Wednesday (BankNifty) and holiday shifts automatically.
+        """
         token = self.settings.get("upstox_access_token")
-        if not token:
-            return []
-            
         cache_key = preferred_index.lower()
         now = time.time()
+
         if hasattr(self, "_expiry_cache") and cache_key in self._expiry_cache:
             cache_time, cached_dates = self._expiry_cache[cache_key]
-            if now - cache_time < 3600:
+            if now - cache_time < 600:  # 10 minute cache for fast response
                 return cached_dates
-                
-        try:
-            url = "https://api.upstox.com/v2/option/contract"
-            headers = {
-                "Accept": "application/json",
-                "Authorization": f"Bearer {token}"
-            }
-            instrument_key = "BSE_INDEX|SENSEX" if preferred_index.lower() == "sensex" else "NSE_INDEX|Nifty 50"
-            resp = requests.get(url, headers=headers, params={"instrument_key": instrument_key}, timeout=5)
-            if resp.status_code == 200:
-                res_data = resp.json()
-                if res_data.get("status") == "success":
-                    contracts = res_data.get("data", [])
-                    today_str = datetime.date.today().strftime("%Y-%m-%d")
-                    # Filter contracts to match the selected index to avoid Tuesday/FinNifty bleed
-                    if preferred_index.lower() == "sensex":
-                        filter_fn = lambda c: "SENSEX" in (c.get("underlying_symbol") or c.get("name") or "").upper()
-                    else:
-                        filter_fn = lambda c: "NIFTY" in (c.get("underlying_symbol") or c.get("name") or "").upper() and \
-                                              "FIN" not in (c.get("underlying_symbol") or c.get("name") or "").upper() and \
-                                              "BANK" not in (c.get("underlying_symbol") or c.get("name") or "").upper()
-                                              
-                    expiries = sorted(list(set(
-                        c.get("expiry") for c in contracts 
-                        if c.get("expiry") >= today_str and filter_fn(c)
-                    )))
-                    if not hasattr(self, "_expiry_cache"):
-                        self._expiry_cache = {}
-                    self._expiry_cache[cache_key] = (now, expiries[:6])
-                    return expiries[:6]
-        except Exception as e:
-            print(f"Failed fetching expiries from Upstox: {e}")
-            
-        return []
+
+        if token and token.strip():
+            try:
+                url = "https://api.upstox.com/v2/option/contract"
+                headers = {
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {token.strip()}"
+                }
+                instrument_key = "BSE_INDEX|SENSEX" if preferred_index.lower() == "sensex" else "NSE_INDEX|Nifty 50"
+                resp = requests.get(url, headers=headers, params={"instrument_key": instrument_key}, timeout=5)
+                if resp.status_code == 200:
+                    res_data = resp.json()
+                    if res_data.get("status") == "success":
+                        contracts = res_data.get("data", [])
+                        today_str = datetime.date.today().strftime("%Y-%m-%d")
+                        if preferred_index.lower() == "sensex":
+                            filter_fn = lambda c: "SENSEX" in (c.get("underlying_symbol") or c.get("name") or "").upper()
+                        else:
+                            filter_fn = lambda c: "NIFTY" in (c.get("underlying_symbol") or c.get("name") or "").upper() and \
+                                                  "FIN" not in (c.get("underlying_symbol") or c.get("name") or "").upper() and \
+                                                  "BANK" not in (c.get("underlying_symbol") or c.get("name") or "").upper()
+
+                        expiries = sorted(list(set(
+                            c.get("expiry") for c in contracts
+                            if c.get("expiry") and c.get("expiry") >= today_str and filter_fn(c)
+                        )))
+                        if expiries:
+                            if not hasattr(self, "_expiry_cache"):
+                                self._expiry_cache = {}
+                            self._expiry_cache[cache_key] = (now, expiries[:8])
+                            return expiries[:8]
+            except Exception as e:
+                print(f"⚠️ Upstox contract expiries fetch notice: {e}")
+
+        # Fallback if Upstox API token is offline: calculate dynamic upcoming weekday dates
+        today = datetime.date.today()
+        target_weekday = get_default_target_weekday(preferred_index)
+        days_ahead = (target_weekday - today.weekday()) % 7
+        fallback_expiries = []
+        for i in range(6):
+            next_expiry = today + datetime.timedelta(days=days_ahead + i * 7)
+            fallback_expiries.append(next_expiry.strftime("%Y-%m-%d"))
+
+        return fallback_expiries
 
     def find_hedge_strikes(self, atm_strike: float, strike_interval: float) -> tuple:
         """Returns (hedge_call_strike, hedge_put_strike) strictly < 5.0, preferring premium closest to 2.0."""
@@ -493,32 +522,32 @@ class SimulationState:
         return hedge_call_strike, hedge_put_strike
 
     def get_active_expiry_date(self) -> str:
-        """Returns the appropriate expiry date. If closest expiry is < 3 days away, returns the next expiry."""
+        """
+        Returns the active expiry date.
+        Respects user manual selection if valid & >= today, otherwise uses 1st upcoming expiry from Upstox.
+        Never skips 0DTE/1DTE/2DTE current week expiries.
+        """
+        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        saved_expiry = self.settings.get("upstox_expiry_date")
         pref_index = self.settings.get("preferred_index", "Nifty")
-        feed_mode = self.settings.get("feed_mode", "Simulation")
-        token = self.settings.get("upstox_access_token")
-        
-        if feed_mode == "Upstox" and token:
-            expiries = self.get_upstox_expiries(pref_index)
-            if expiries:
-                closest_expiry = expiries[0]
-                try:
-                    today = datetime.date.today()
-                    exp_date = datetime.datetime.strptime(closest_expiry, "%Y-%m-%d").date()
-                    if (exp_date - today).days < 3:
-                        if len(expiries) > 1:
-                            return expiries[1]
-                except Exception as e:
-                    print(f"⚠️ Error parsing expiry date: {e}")
-                return closest_expiry
-        
+
+        expiries = self.get_upstox_expiries(pref_index)
+
+        # If user selected an expiry in settings and it is valid (today or future), use it!
+        if saved_expiry and saved_expiry >= today_str:
+            if not expiries or saved_expiry in expiries:
+                return saved_expiry
+
+        # Otherwise default to the 1st upcoming real contract expiry from Upstox
+        if expiries:
+            return expiries[0]
+
+        target_weekday = get_default_target_weekday(pref_index)
         today = datetime.date.today()
-        target_weekday = 4 if pref_index.lower() == "sensex" else 3
         days_ahead = (target_weekday - today.weekday()) % 7
-        if days_ahead < 3:
-            days_ahead += 7
         next_expiry = today + datetime.timedelta(days=days_ahead)
         return next_expiry.strftime("%Y-%m-%d")
+
 
     def get_straddle_premium(self) -> float:
         """Returns current combined ATM straddle premium LTP."""
@@ -653,19 +682,16 @@ class SimulationState:
 
     def update_default_expiry(self):
         pref_index = self.settings.get("preferred_index", "Nifty")
-        feed_mode = self.settings.get("feed_mode", "Simulation")
-        
-        if feed_mode == "Upstox" and self.settings.get("upstox_access_token"):
-            expiries = self.get_upstox_expiries(pref_index)
-            if expiries:
-                self.settings["upstox_expiry_date"] = expiries[0]
-                return
-                
-        target_weekday = 4 if pref_index.lower() == "sensex" else 3
-        today = datetime.date.today()
-        days_ahead = (target_weekday - today.weekday()) % 7
-        next_expiry = today + datetime.timedelta(days=days_ahead)
-        self.settings["upstox_expiry_date"] = next_expiry.strftime("%Y-%m-%d")
+        expiries = self.get_upstox_expiries(pref_index)
+        if expiries:
+            self.settings["upstox_expiry_date"] = expiries[0]
+        else:
+            target_weekday = get_default_target_weekday(pref_index)
+            today = datetime.date.today()
+            days_ahead = (target_weekday - today.weekday()) % 7
+            next_expiry = today + datetime.timedelta(days=days_ahead)
+            self.settings["upstox_expiry_date"] = next_expiry.strftime("%Y-%m-%d")
+
 
     def analyze_timeframe(self, candles: List[Dict]) -> Dict:
         """Returns indicators and trend direction for a given completed candle history."""
@@ -3235,35 +3261,21 @@ def get_chart_data():
 @app.get("/api/settings")
 def get_settings():
     pref_index = state.settings.get("preferred_index", "Nifty")
-    feed_mode = state.settings.get("feed_mode", "Simulation")
-    token = state.settings.get("upstox_access_token")
-    
-    expiry_dates = []
-    if feed_mode == "Upstox" and token:
-        expiry_dates = state.get_upstox_expiries(pref_index)
-        
-    if not expiry_dates:
-        # Fallback to calculated weekday expiries
-        today = datetime.date.today()
-        target_weekday = 4 if pref_index.lower() == "sensex" else 3
-        for i in range(5):
-            days_ahead = (target_weekday - today.weekday()) % 7
-            next_expiry = today + datetime.timedelta(days=days_ahead + i * 7)
-            expiry_dates.append(next_expiry.strftime("%Y-%m-%d"))
-            
+    expiry_dates = state.get_upstox_expiries(pref_index)
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     saved_expiry = state.settings.get("upstox_expiry_date")
-    
-    # If saved expiry is in the past, auto-update to the next upcoming expiry
-    if saved_expiry and saved_expiry < today_str:
-        state.settings["upstox_expiry_date"] = expiry_dates[0]
-        state.save_settings()
-        saved_expiry = expiry_dates[0]
-        
+
+    # If saved expiry is missing or in the past, auto-update to 1st upcoming valid expiry
+    if not saved_expiry or saved_expiry < today_str:
+        if expiry_dates:
+            state.settings["upstox_expiry_date"] = expiry_dates[0]
+            state.save_settings()
+            saved_expiry = expiry_dates[0]
+
     if saved_expiry and saved_expiry not in expiry_dates:
         if saved_expiry >= today_str:
             expiry_dates.insert(0, saved_expiry)
-            
+
     return {
         **state.settings,
         "upcoming_expiry_dates": expiry_dates
@@ -3273,9 +3285,21 @@ def get_settings():
 def update_settings(data: SettingsUpdate):
     target_mode = data.auto_trade_mode or "OFF"
     
+    # Check index switch to auto-update expiry
+    old_index = state.settings.get("preferred_index", "Nifty")
+    new_index = data.preferred_index or old_index
+    state.settings["preferred_index"] = new_index
+
     # Store settings temporary to run verification
     state.settings["upstox_access_token"] = data.upstox_access_token or ""
-    state.settings["upstox_expiry_date"] = data.upstox_expiry_date or ""
+    
+    # If index changed or no expiry date set, fetch fresh expiries for new index
+    if new_index != old_index or not data.upstox_expiry_date:
+        expiries = state.get_upstox_expiries(new_index)
+        state.settings["upstox_expiry_date"] = expiries[0] if expiries else (data.upstox_expiry_date or "")
+    else:
+        state.settings["upstox_expiry_date"] = data.upstox_expiry_date or ""
+
     if data.upstox_api_key:
         state.settings["upstox_api_key"] = data.upstox_api_key
     if data.upstox_api_secret:
@@ -3302,6 +3326,7 @@ def update_settings(data: SettingsUpdate):
     else:
         state.settings["auto_trade_mode"] = target_mode
         state.settings["feed_mode"] = data.feed_mode or "Simulation"
+
 
     state.settings["capital"] = data.capital
     state.settings["risk_pct"] = data.risk_pct

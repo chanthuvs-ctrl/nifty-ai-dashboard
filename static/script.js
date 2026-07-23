@@ -1754,17 +1754,25 @@ async function reloadExpiries(settings = null) {
             settings = await resp.json();
         }
         
+        const dates = settings.upcoming_expiry_dates || [];
+
+        // Helper to format option element
+        const createExpiryOpt = (d, idx) => {
+            const opt = document.createElement('option');
+            opt.value = d;
+            let tag = '';
+            if (idx === 0) tag = ' (Current Week)';
+            else if (idx === 1) tag = ' (Next Week)';
+            else if (idx === 2) tag = ' (Far Week)';
+            opt.innerText = d + tag;
+            return opt;
+        };
+
         // Populate settings modal expiry dropdown
         const modalExpiry = document.getElementById('set-upstox-expiry');
         if (modalExpiry) {
             modalExpiry.innerHTML = '';
-            const dates = settings.upcoming_expiry_dates || [];
-            dates.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d;
-                opt.innerText = d;
-                modalExpiry.appendChild(opt);
-            });
+            dates.forEach((d, i) => modalExpiry.appendChild(createExpiryOpt(d, i)));
             modalExpiry.value = settings.upstox_expiry_date || (dates[0] || '');
         }
         
@@ -1772,13 +1780,7 @@ async function reloadExpiries(settings = null) {
         const dashboardExpiry = document.getElementById('set-dashboard-expiry');
         if (dashboardExpiry) {
             dashboardExpiry.innerHTML = '';
-            const dates = settings.upcoming_expiry_dates || [];
-            dates.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d;
-                opt.innerText = d;
-                dashboardExpiry.appendChild(opt);
-            });
+            dates.forEach((d, i) => dashboardExpiry.appendChild(createExpiryOpt(d, i)));
             dashboardExpiry.value = settings.upstox_expiry_date || (dates[0] || '');
         }
     } catch (e) {
