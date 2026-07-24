@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.56" 
+VERSION = "3.1.57" 
 import time
 import os
 import json
@@ -2231,6 +2231,7 @@ class SimulationState:
                             instrument_key=instrument_key,
                             quantity=suggested_lots * lot_size,
                             transaction_type=act,
+                            order_type="MARKET",
                             price=0.0
                         ))
                     
@@ -3409,7 +3410,7 @@ class LiveLegOrder(BaseModel):
     instrument_key: str
     quantity: int
     transaction_type: str
-    order_type: str
+    order_type: str = "MARKET"
     price: float = 0.0
     strike: Optional[float] = None
     option_type: Optional[str] = None
