@@ -1,7 +1,7 @@
 import math
 import random
 
-VERSION = "3.1.57" 
+VERSION = "3.1.58" 
 import time
 import os
 import json
@@ -2237,8 +2237,9 @@ class SimulationState:
                     
                     try:
                         print(f"🚀 AUTO-TRADE REAL: Placing {rec} orders on Upstox...")
-                        res = upstox_execute_orders(live_legs, rec)
-                        if res["status"] == "SUCCESS":
+                        order_req = LiveOrderRequest(strategy=rec, legs=live_legs)
+                        res = execute_live_order(order_req)
+                        if isinstance(res, dict) and res.get("status") == "SUCCESS":
                             self.auto_trade_active_id = res["trade"]["id"]
                             print(f"⚡ AUTO-TRADE REAL: Placed {rec} position successfully (ID: {self.auto_trade_active_id})")
                     except Exception as e:
