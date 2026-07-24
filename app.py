@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.1.60" 
+VERSION = "3.1.61" 
 import time
 import os
 import json
@@ -2136,6 +2136,15 @@ class SimulationState:
 
         # 3. Open New Position (if none exists)
         else:
+            # STRICT SINGLE ACTIVE POSITION GUARD: Ensure NO open trade exists before entering
+            target_prefix = "Live" if mode == "Live" else "Paper"
+            has_any_open = any(
+                t.get("status") == "OPEN" and (t.get("execution_type") or "").startswith(target_prefix)
+                for t in journal.trades
+            )
+            if has_any_open or self.auto_trade_active_id:
+                return  # Block entry — only ONE active strategy allowed at a time!
+
             rec = self.current_recommendation
             conf = self.confidence
             allowed_strategies = [
@@ -3667,15 +3676,17 @@ def execute_live_exit_orders(legs: List[Dict]) -> Dict:
     placed_orders = []
     failed_orders = []
     
-    for leg in legs:
-        orig_action = leg.get("action", "BUY")
-        reverse_action = "SELL" if orig_action == "BUY" else "BUY"
+    # MARGIN SAFETY RULE: Separate short option legs (SELL) from long hedge legs (BUY)
+    # Step 1: Buy back short option legs FIRST so margin requirement drops to zero
+    sell_legs_to_close = [l for l in legs if l.get("action") == "SELL"]
+    buy_legs_to_close = [l for l in legs if l.get("action") == "BUY"]
+    
+    sell_exit_order_ids = []
+    for leg in sell_legs_to_close:
         inst_key = leg.get("instrument_key")
         qty = leg.get("quantity", 65)
-        
         if not inst_key or inst_key.startswith("SIM_"):
             continue
-            
         payload = {
             "quantity": qty,
             "product": "I",
@@ -3684,7 +3695,7 @@ def execute_live_exit_orders(legs: List[Dict]) -> Dict:
             "tag": "decision-engine-exit",
             "instrument_token": inst_key,
             "order_type": "MARKET",
-            "transaction_type": reverse_action,
+            "transaction_type": "BUY",  # Buyback short option
             "disclosed_quantity": 0,
             "trigger_price": 0.0,
             "is_amo": False
@@ -3693,14 +3704,53 @@ def execute_live_exit_orders(legs: List[Dict]) -> Dict:
             resp = requests.post(url, json=payload, headers=headers, timeout=5)
             res_json = resp.json()
             if resp.status_code == 200 and res_json.get("status") == "success":
-                placed_orders.append(res_json.get("data", {}).get("order_id"))
+                o_id = res_json.get("data", {}).get("order_id")
+                placed_orders.append(o_id)
+                sell_exit_order_ids.append(o_id)
+                print(f"✅ UPSTOX EXIT SHORT FILL: Placed Buyback for Short Leg {inst_key} (Order ID: {o_id})")
             else:
                 err_msg = res_json.get("errors", [{}])[0].get("message", "Unknown error") if isinstance(res_json.get("errors"), list) else str(res_json)
                 failed_orders.append({"leg": inst_key, "error": err_msg})
         except Exception as e:
             failed_orders.append({"leg": inst_key, "error": str(e)})
-            
-    print(f"⚡ UPSTOX EXIT EXECUTION: Placed {len(placed_orders)} exit orders on Upstox. Failed: {len(failed_orders)}")
+
+    # Step 2: Await confirmation for short buybacks to release blocked margin
+    for o_id in sell_exit_order_ids:
+        wait_for_order_fill(o_id, token)
+
+    # Step 3: Sell long hedge legs SECOND
+    for leg in buy_legs_to_close:
+        inst_key = leg.get("instrument_key")
+        qty = leg.get("quantity", 65)
+        if not inst_key or inst_key.startswith("SIM_"):
+            continue
+        payload = {
+            "quantity": qty,
+            "product": "I",
+            "validity": "DAY",
+            "price": 0.0,
+            "tag": "decision-engine-exit",
+            "instrument_token": inst_key,
+            "order_type": "MARKET",
+            "transaction_type": "SELL",  # Sell long hedge
+            "disclosed_quantity": 0,
+            "trigger_price": 0.0,
+            "is_amo": False
+        }
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=5)
+            res_json = resp.json()
+            if resp.status_code == 200 and res_json.get("status") == "success":
+                o_id = res_json.get("data", {}).get("order_id")
+                placed_orders.append(o_id)
+                print(f"✅ UPSTOX EXIT LONG FILL: Placed Sell for Long Hedge {inst_key} (Order ID: {o_id})")
+            else:
+                err_msg = res_json.get("errors", [{}])[0].get("message", "Unknown error") if isinstance(res_json.get("errors"), list) else str(res_json)
+                failed_orders.append({"leg": inst_key, "error": err_msg})
+        except Exception as e:
+            failed_orders.append({"leg": inst_key, "error": str(e)})
+
+    print(f"⚡ UPSTOX SAFE EXIT COMPLETE: Placed {len(placed_orders)} exit orders. Failed: {len(failed_orders)}")
     return {"status": "SUCCESS", "placed": placed_orders, "failed": failed_orders}
 
 @app.post("/api/settings/action")
