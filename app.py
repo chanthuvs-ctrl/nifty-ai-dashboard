@@ -1,7 +1,10 @@
 import math
 import random
 
-VERSION = "3.1.58" 
+import urllib3.util.connection
+urllib3.util.connection.HAS_IPV6 = False
+
+VERSION = "3.1.59" 
 import time
 import os
 import json
