@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.1.61" 
+VERSION = "3.1.62" 
 import time
 import os
 import json
@@ -1041,16 +1041,19 @@ class SimulationState:
 
         # 2. Short Strangle / Short Straddle
         elif "Strangle" in strategy or "Straddle" in strategy:
+            # Static safety threshold: ₹160,000 per lot required capital for selling options
+            MARGIN_STRANGLE_SAFETY = 160000.0
+            max_lots_by_capital = max(1, int((capital * 0.85) / MARGIN_STRANGLE_SAFETY))
+            
             # Query dynamic broker margin first
             broker_margin = self.query_upstox_basket_margin(strategy, spot)
             if broker_margin is not None and broker_margin > 0:
-                suggested_lots = max(1, int((capital * 0.80) / broker_margin))
+                calc_lots = max(1, int((capital * 0.80) / broker_margin))
+                suggested_lots = min(calc_lots, max_lots_by_capital)
                 margin_required = suggested_lots * broker_margin
             else:
-                # Static fallback
-                MARGIN_STRANGLE = 160000.0
-                suggested_lots = max(1, int((capital * 0.80) / MARGIN_STRANGLE))
-                margin_required = suggested_lots * MARGIN_STRANGLE
+                suggested_lots = max_lots_by_capital
+                margin_required = suggested_lots * MARGIN_STRANGLE_SAFETY
                 
             risk_amount = max_risk
             return suggested_lots, margin_required, risk_amount
@@ -3646,9 +3649,33 @@ def execute_live_order(data: LiveOrderRequest):
     )
     
     if failed_orders:
+        if placed_orders:
+            # 🚨 EMERGENCY AUTO-ROLLBACK: Square off placed legs to prevent naked position risk
+            print(f"🚨 EMERGENCY AUTO-ROLLBACK: Placed {len(placed_orders)} legs, Failed {len(failed_orders)} legs. Squaring off placed legs on Upstox to eliminate naked option risk...")
+            placed_leg_details = []
+            for p in placed_orders:
+                inst = p["leg"]
+                for l_logged in legs_logged:
+                    if l_logged["instrument_key"] == inst:
+                        placed_leg_details.append(l_logged)
+                        break
+            
+            if placed_leg_details:
+                try:
+                    rollback_res = execute_live_exit_orders(placed_leg_details)
+                    print(f"⚡ AUTO-ROLLBACK EXECUTED: {rollback_res}")
+                except Exception as rollback_err:
+                    print(f"❌ AUTO-ROLLBACK ERROR: {rollback_err}")
+            
+            journal.close_trade(trade["id"], state.spot_price)
+            trade["reason"] = f"🚨 Emergency Auto-Rollback: Partial fill on Upstox (Placed: {len(placed_orders)}, Failed: {len(failed_orders)})"
+            journal.save_journal()
+            state.auto_trade_active_id = None
+
         return {
-            "status": "PARTIAL_SUCCESS" if placed_orders else "FAILED",
-            "message": f"Placed: {len(placed_orders)}, Failed: {len(failed_orders)}",
+            "status": "FAILED",
+            "message": f"Order placement incomplete. Placed: {len(placed_orders)}, Failed: {len(failed_orders)}. "
+                       + ("Auto-rolled back placed legs to eliminate naked risk." if placed_orders else "No legs were placed."),
             "placed": placed_orders,
             "failed": failed_orders,
             "trade": trade
