@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.1.59" 
+VERSION = "3.1.60" 
 import time
 import os
 import json
@@ -2857,6 +2857,11 @@ class TradeJournal:
                     
                 trade["pnl"] = round(pnl + trade.get("booked_pnl", 0.0), 2)
                 trade["outcome"] = "WIN" if pnl > 0 else "LOSS"
+                if (trade.get("execution_type") or "").startswith("Live") and trade.get("legs"):
+                    try:
+                        execute_live_exit_orders(trade.get("legs"))
+                    except Exception as e:
+                        print(f"❌ Failed to execute live exit orders: {e}")
                 self.save_journal()
                 return trade
         return None
@@ -3646,6 +3651,57 @@ def execute_live_order(data: LiveOrderRequest):
         "placed": placed_orders,
         "trade": trade
     }
+
+def execute_live_exit_orders(legs: List[Dict]) -> Dict:
+    token = state.settings.get("upstox_access_token")
+    if not token or state.settings.get("feed_mode") != "Upstox":
+        return {"status": "SKIPPED", "message": "Simulation / No token"}
+    
+    url = "https://api.upstox.com/v2/order/place"
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"Bearer {token}"
+    }
+    
+    placed_orders = []
+    failed_orders = []
+    
+    for leg in legs:
+        orig_action = leg.get("action", "BUY")
+        reverse_action = "SELL" if orig_action == "BUY" else "BUY"
+        inst_key = leg.get("instrument_key")
+        qty = leg.get("quantity", 65)
+        
+        if not inst_key or inst_key.startswith("SIM_"):
+            continue
+            
+        payload = {
+            "quantity": qty,
+            "product": "I",
+            "validity": "DAY",
+            "price": 0.0,
+            "tag": "decision-engine-exit",
+            "instrument_token": inst_key,
+            "order_type": "MARKET",
+            "transaction_type": reverse_action,
+            "disclosed_quantity": 0,
+            "trigger_price": 0.0,
+            "is_amo": False
+        }
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=5)
+            res_json = resp.json()
+            if resp.status_code == 200 and res_json.get("status") == "success":
+                placed_orders.append(res_json.get("data", {}).get("order_id"))
+            else:
+                err_msg = res_json.get("errors", [{}])[0].get("message", "Unknown error") if isinstance(res_json.get("errors"), list) else str(res_json)
+                failed_orders.append({"leg": inst_key, "error": err_msg})
+        except Exception as e:
+            failed_orders.append({"leg": inst_key, "error": str(e)})
+            
+    print(f"⚡ UPSTOX EXIT EXECUTION: Placed {len(placed_orders)} exit orders on Upstox. Failed: {len(failed_orders)}")
+    return {"status": "SUCCESS", "placed": placed_orders, "failed": failed_orders}
 
 @app.post("/api/settings/action")
 def trigger_action(data: TriggerOverride):
