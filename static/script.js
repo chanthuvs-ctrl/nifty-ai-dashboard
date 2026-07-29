@@ -11,6 +11,17 @@ const safeStorage = {
     }
 };
 
+// Helper to get current IST date string (YYYY-MM-DD)
+function getTodayIstDateStr() {
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + istOffset);
+    const yyyy = ist.getFullYear();
+    const mm = (ist.getMonth() + 1).toString().padStart(2, '0');
+    const dd = ist.getDate().toString().padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
 // Globals
 let previousStrategy = null;
 // Helper to sync three-state auto-trade buttons styling dynamically
@@ -1053,11 +1064,15 @@ async function fetchJournal() {
             document.getElementById('live-an-best-strat').innerText = data.live_analytics.best_strategy;
         }
         
-        // Filter trades
-        const activePaper = data.trades.filter(t => t.status === "OPEN" && !(t.execution_type && t.execution_type.startsWith("Live")));
-        const activeLive = data.trades.filter(t => t.status === "OPEN" && (t.execution_type && t.execution_type.startsWith("Live")));
-        const closedPaper = data.trades.filter(t => t.status === "CLOSED" && !(t.execution_type && t.execution_type.startsWith("Live")));
-        const closedLive = data.trades.filter(t => t.status === "CLOSED" && (t.execution_type && t.execution_type.startsWith("Live")));
+        // Filter trades: ONLY show intraday positions (today's date or active OPEN positions)
+        const todayIstStr = getTodayIstDateStr();
+        const intradayTrades = (data.trades || []).filter(t => t.date === todayIstStr || t.status === "OPEN");
+        
+        const activePaper = intradayTrades.filter(t => t.status === "OPEN" && !(t.execution_type && t.execution_type.startsWith("Live")));
+        const activeLive = intradayTrades.filter(t => t.status === "OPEN" && (t.execution_type && t.execution_type.startsWith("Live")));
+        const closedPaper = intradayTrades.filter(t => t.status === "CLOSED" && !(t.execution_type && t.execution_type.startsWith("Live")));
+        const closedLive = intradayTrades.filter(t => t.status === "CLOSED" && (t.execution_type && t.execution_type.startsWith("Live")));
+
         
         // Helper to render active positions
         let totalPaperPnl = 0.0;
@@ -1077,18 +1092,23 @@ async function fetchJournal() {
                     const lotSize = pos.lot_size || 65;
                     const multiplier = lotSize * size;
                     
-                    // Sum up all leg P&Ls for exact option P&L calculation
-                    const legs = ensureLegs(pos, globalOptionChain);
+                    // Calculate exact option floating P&L
                     let totalPnl = pos.booked_pnl || 0.0;
-                    legs.forEach(leg => {
-                        const legLtp = getLegLtp(globalOptionChain, leg.instrument_key, leg.option_type, leg.strike) || leg.entry_price;
-                        const legDiff = legLtp - leg.entry_price;
-                        if (leg.action === 'BUY') {
-                            totalPnl += legDiff * leg.quantity;
-                        } else {
-                            totalPnl -= legDiff * leg.quantity;
-                        }
-                    });
+                    if (pos.floating_pnl !== undefined && pos.floating_pnl !== null) {
+                        totalPnl = pos.floating_pnl;
+                    } else {
+                        const legs = ensureLegs(pos, globalOptionChain);
+                        legs.forEach(leg => {
+                            const legLtp = getLegLtp(globalOptionChain, leg.instrument_key, leg.option_type, leg.strike) || leg.entry_price;
+                            const legDiff = legLtp - leg.entry_price;
+                            if (leg.action === 'BUY') {
+                                totalPnl += legDiff * leg.quantity;
+                            } else {
+                                totalPnl -= legDiff * leg.quantity;
+                            }
+                        });
+                    }
+
                     if (typeLabel === 'PAPER') {
                         totalPaperPnl += totalPnl;
                     } else {

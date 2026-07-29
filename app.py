@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.1.66" 
+VERSION = "3.1.68" 
 import time
 import os
 import json
@@ -504,33 +504,52 @@ class SimulationState:
         return fallback_expiries
 
     def find_hedge_strikes(self, atm_strike: float, strike_interval: float) -> tuple:
-        """Returns (hedge_call_strike, hedge_put_strike) strictly < 5.0, preferring premium closest to 2.0."""
-        hedge_call_strike = atm_strike + 5 * strike_interval
-        hedge_put_strike = atm_strike - 5 * strike_interval
+        """
+        Returns (hedge_call_strike, hedge_put_strike) strictly <= 5.0 (preferring premium closest to 2.0).
+        Searches the FULL UNFILTERED upstox_option_chain so deep OTM low-cost hedges (< ₹5.00) are always found.
+        """
+        chain = self.upstox_option_chain if (self.settings.get("feed_mode") == "Upstox" and self.upstox_option_chain) else self.option_chain
         
-        if not self.option_chain:
-            return hedge_call_strike, hedge_put_strike
-            
-        calls = [x for x in self.option_chain if x.get("call_price") is not None and 2.0 <= x["call_price"] <= 5.0 and x["strike"] > atm_strike]
-        if calls:
-            hedge_call_item = min(calls, key=lambda x: abs(x["call_price"] - 2.0))
+        default_call_strike = atm_strike + 10 * strike_interval
+        default_put_strike = atm_strike - 10 * strike_interval
+
+        if not chain:
+            return default_call_strike, default_put_strike
+
+        # 1. CALL HEDGE (STRICT CE <= 5.0)
+        calls_strict = [x for x in chain if x.get("call_price") is not None and 0.5 <= x["call_price"] <= 5.0 and x["strike"] > atm_strike]
+        if calls_strict:
+            hedge_call_item = min(calls_strict, key=lambda x: abs(x["call_price"] - 2.0))
             hedge_call_strike = hedge_call_item["strike"]
         else:
-            calls_any = [x for x in self.option_chain if x.get("call_price") is not None and x["strike"] > atm_strike]
-            if calls_any:
-                hedge_call_item = min(calls_any, key=lambda x: abs(x["call_price"] - 2.0))
+            calls_under_5 = [x for x in chain if x.get("call_price") is not None and x["call_price"] <= 5.0 and x["strike"] > atm_strike]
+            if calls_under_5:
+                hedge_call_item = max(calls_under_5, key=lambda x: x["strike"])
                 hedge_call_strike = hedge_call_item["strike"]
-                
-        puts = [x for x in self.option_chain if x.get("put_price") is not None and 2.0 <= x["put_price"] <= 5.0 and x["strike"] < atm_strike]
-        if puts:
-            hedge_put_item = min(puts, key=lambda x: abs(x["put_price"] - 2.0))
+            else:
+                calls_otm = [x for x in chain if x.get("strike", 0) > atm_strike]
+                if calls_otm:
+                    hedge_call_strike = max(x["strike"] for x in calls_otm)
+                else:
+                    hedge_call_strike = default_call_strike
+
+        # 2. PUT HEDGE (STRICT PE <= 5.0)
+        puts_strict = [x for x in chain if x.get("put_price") is not None and 0.5 <= x["put_price"] <= 5.0 and x["strike"] < atm_strike]
+        if puts_strict:
+            hedge_put_item = min(puts_strict, key=lambda x: abs(x["put_price"] - 2.0))
             hedge_put_strike = hedge_put_item["strike"]
         else:
-            puts_any = [x for x in self.option_chain if x.get("put_price") is not None and x["strike"] < atm_strike]
-            if puts_any:
-                hedge_put_item = min(puts_any, key=lambda x: abs(x["put_price"] - 2.0))
+            puts_under_5 = [x for x in chain if x.get("put_price") is not None and x["put_price"] <= 5.0 and x["strike"] < atm_strike]
+            if puts_under_5:
+                hedge_put_item = min(puts_under_5, key=lambda x: x["strike"])
                 hedge_put_strike = hedge_put_item["strike"]
-                
+            else:
+                puts_otm = [x for x in chain if x.get("strike", 0) < atm_strike]
+                if puts_otm:
+                    hedge_put_strike = min(x["strike"] for x in puts_otm)
+                else:
+                    hedge_put_strike = default_put_strike
+
         return hedge_call_strike, hedge_put_strike
 
     def get_active_expiry_date(self) -> str:
@@ -1666,17 +1685,20 @@ class SimulationState:
         entry = t["entry_spot"]
         legs = t.get("legs", [])
         strat = t.get("strategy", "")
+        chain = self.upstox_option_chain if (self.settings.get("feed_mode") == "Upstox" and self.upstox_option_chain) else self.option_chain
+        
         if legs:
             for leg in legs:
                 leg_ltp = None
-                if self.settings.get("feed_mode") == "Upstox" and self.upstox_option_chain:
-                    for chain_item in self.upstox_option_chain:
+                if chain:
+                    for chain_item in chain:
                         if chain_item.get("strike") == leg.get("strike"):
                             if leg.get("option_type") == "CE":
                                 leg_ltp = chain_item.get("call_price")
                             else:
                                 leg_ltp = chain_item.get("put_price")
-                if leg_ltp is None:
+                            break
+                if leg_ltp is None or leg_ltp <= 0:
                     t_years = 4.0 / 365.0
                     r = 0.07
                     is_call = leg["option_type"].upper() == "CE"
@@ -1689,6 +1711,7 @@ class SimulationState:
                 else:
                     pnl -= leg_diff * leg["quantity"]
         else:
+
             diff = spot - entry
             multiplier = t.get("lot_size", 65) * t["size"]
             if "CE" in strat or "Bull" in strat:
@@ -2777,13 +2800,24 @@ class TradeJournal:
                         self.trades = []
             except Exception as e:
                 print(f"Failed to load journal from disk: {e}")
+        self.purge_previous_days_trades()
                 
+    def purge_previous_days_trades(self):
+        """Wipes closed trades from previous calendar days so positions tab contains ONLY intraday trades."""
+        today_str = get_ist_date_str()
+        initial_len = len(self.trades)
+        self.trades = [t for t in self.trades if t.get("date") == today_str or t.get("status") == "OPEN"]
+        if len(self.trades) != initial_len:
+            print(f"🧹 AUTO-PURGE: Removed {initial_len - len(self.trades)} trades from previous days. Keeping {len(self.trades)} intraday trades for {today_str}.")
+            self.save_journal()
+
     def save_journal(self):
         try:
             with open("journal.json", "w") as f:
                 json.dump(self.trades, f, indent=4)
         except Exception as e:
             print(f"Failed to save journal: {e}")
+
         
     def add_trade(self, strategy: str, entry_price: float, strikes: List[str], confidence: float, reason: str, size: int = 1, execution_type: str = "Paper", lot_size: int = 65, legs: Optional[List[Dict]] = None, initial_risk: Optional[float] = None):
         trade_id = str(len(self.trades) + 1)
@@ -3966,12 +4000,20 @@ def trigger_action(data: TriggerOverride):
 
 @app.get("/api/journal")
 def get_journal():
+    journal.purge_previous_days_trades()
+    trades_copy = []
+    for t in journal.trades:
+        t_dict = dict(t)
+        if t_dict.get("status") == "OPEN":
+            t_dict["floating_pnl"] = round(state.calculate_trade_pnl(t, state.spot_price), 2)
+        trades_copy.append(t_dict)
     return {
-        "trades": journal.trades[::-1],
+        "trades": trades_copy[::-1],
         "analytics": journal.get_analytics("Paper"),
         "live_analytics": journal.get_analytics("Live"),
         "capital": state.get_available_capital()
     }
+
 
 @app.post("/api/journal/trade")
 def place_trade(data: TradeRequest):
