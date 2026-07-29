@@ -1,31 +1,10 @@
 import math
 import random
 
-VERSION = "3.1.53"
+import urllib3.util.connection
+urllib3.util.connection.HAS_IPV6 = False
 
-# When running locally, route all Upstox API calls through Render's
-# whitelisted static IP proxy so IP restrictions don't block us.
-RENDER_PROXY_URL = "https://nifty-ai-dashboard.onrender.com/api/proxy/upstox"
-
-def upstox_request(path: str, token: str, method: str = "GET", body: dict = None, params: dict = None):
-    """
-    Upstox API caller (v3.1.48). Direct connection to Upstox.
-    Supports optional custom outbound proxy if configured in Settings.
-    """
-    url = f"https://api.upstox.com{path}"
-    headers = {
-        "Accept": "application/json",
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-    proxy_url = state.settings.get("outbound_proxy", "").strip()
-    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-    
-    if method.upper() == "POST":
-        return requests.post(url, headers=headers, json=body or {}, params=params, proxies=proxies, timeout=10)
-    else:
-        return requests.get(url, headers=headers, params=params, proxies=proxies, timeout=10)
- 
+VERSION = "3.1.66" 
 import time
 import os
 import json
@@ -77,7 +56,24 @@ async def add_no_cache_headers(request, call_next):
 # 1. BLACK-SCHOLES PRICING & GREEKS ENGINE
 # ==========================================
 
+def get_default_target_weekday(preferred_index: str) -> int:
+    """
+    Returns default target weekday for options expiry fallback when Upstox API is offline.
+    Python weekday: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun.
+    - Nifty 50: Tuesday (1)
+    - Sensex: Thursday (3) / Friday (4)
+    - Bank Nifty: Wednesday (2)
+    """
+    idx = (preferred_index or "Nifty").lower()
+    if "sensex" in idx:
+        return 3  # Thursday (or 4)
+    elif "bank" in idx:
+        return 2  # Wednesday
+    else:
+        return 1  # Tuesday for Nifty 50
+
 def normal_cdf(x: float) -> float:
+
     """Cumulative distribution function for standard normal distribution."""
     return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
 
@@ -282,7 +278,7 @@ class SimulationState:
             "vix_threshold": 10.0, # % change
             "regime_override": "Auto", # "Auto" or specific name
             "vix_baseline": 14.5,
-            "feed_mode": "Simulation", # "Simulation" or "Upstox"
+            "feed_mode": "Upstox", # "Simulation" or "Upstox"
             "upstox_access_token": "",
             "upstox_expiry_date": (datetime.date.today() + datetime.timedelta(days=(3 - datetime.date.today().weekday()) % 7)).strftime("%Y-%m-%d"),
             "preferred_index": "Nifty",
@@ -292,8 +288,8 @@ class SimulationState:
             "auto_trade_mode": "OFF",
             "trailing_sl_pts": 30.0,
             "scalper_mode": False,
-            "telegram_bot_token": "",
-            "telegram_chat_id": ""
+            "upstox_api_key": "82e905c4-6f67-46c4-aa8b-3a86d0798ef7",
+            "upstox_api_secret": "ec6r0ue7si"
         }
         
         # Load settings from disk if exists
@@ -304,6 +300,12 @@ class SimulationState:
                     self.settings.update(saved)
             except Exception as e:
                 print(f"Failed to load settings from disk: {e}")
+                
+        # Override test_key placeholder with user's actual default API key
+        if self.settings.get("upstox_api_key") in ["test_key", "", None]:
+            self.settings["upstox_api_key"] = "82e905c4-6f67-46c4-aa8b-3a86d0798ef7"
+        if self.settings.get("upstox_api_secret") in ["test_secret", "", None]:
+            self.settings["upstox_api_secret"] = "ec6r0ue7si"
                 
         # Ensure saved expiry date is not in the past
         today_str = datetime.date.today().strftime("%Y-%m-%d")
@@ -336,6 +338,7 @@ class SimulationState:
         self.last_trade_close_time = 0.0  # Unix timestamp of last trade exit
         self.live_trade_errors = []  # Recent Live Real errors for dashboard display
         self.pending_exit_signal = "" 
+        self.expiry_warning = ""
         
         # Trailing Stop Activation State (v1.1)
         self.trail_activated = False
@@ -443,45 +446,62 @@ class SimulationState:
             print(f"Failed to save settings: {e}")
 
     def get_upstox_expiries(self, preferred_index: str) -> List[str]:
+        """
+        Fetch available option contract expiry dates directly from Upstox API.
+        Handles Tuesday (Nifty), Thursday (Sensex), Wednesday (BankNifty) and holiday shifts automatically.
+        """
         token = self.settings.get("upstox_access_token")
-        if not token:
-            return []
-            
         cache_key = preferred_index.lower()
         now = time.time()
+
         if hasattr(self, "_expiry_cache") and cache_key in self._expiry_cache:
             cache_time, cached_dates = self._expiry_cache[cache_key]
-            if now - cache_time < 3600:
+            if now - cache_time < 600:  # 10 minute cache for fast response
                 return cached_dates
-                
-        try:
-            instrument_key = "BSE_INDEX|SENSEX" if preferred_index.lower() == "sensex" else "NSE_INDEX|Nifty 50"
-            resp = upstox_request("/v2/option/contract", token, params={"instrument_key": instrument_key})
-            if resp.status_code == 200:
-                res_data = resp.json()
-                if res_data.get("status") == "success":
-                    contracts = res_data.get("data", [])
-                    today_str = datetime.date.today().strftime("%Y-%m-%d")
-                    # Filter contracts to match the selected index to avoid Tuesday/FinNifty bleed
-                    if preferred_index.lower() == "sensex":
-                        filter_fn = lambda c: "SENSEX" in (c.get("underlying_symbol") or c.get("name") or "").upper()
-                    else:
-                        filter_fn = lambda c: "NIFTY" in (c.get("underlying_symbol") or c.get("name") or "").upper() and \
-                                              "FIN" not in (c.get("underlying_symbol") or c.get("name") or "").upper() and \
-                                              "BANK" not in (c.get("underlying_symbol") or c.get("name") or "").upper()
-                                              
-                    expiries = sorted(list(set(
-                        c.get("expiry") for c in contracts 
-                        if c.get("expiry") >= today_str and filter_fn(c)
-                    )))
-                    if not hasattr(self, "_expiry_cache"):
-                        self._expiry_cache = {}
-                    self._expiry_cache[cache_key] = (now, expiries[:6])
-                    return expiries[:6]
-        except Exception as e:
-            print(f"Failed fetching expiries from Upstox: {e}")
-            
-        return []
+
+        if token and token.strip():
+            try:
+                url = "https://api.upstox.com/v2/option/contract"
+                headers = {
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {token.strip()}"
+                }
+                instrument_key = "BSE_INDEX|SENSEX" if preferred_index.lower() == "sensex" else "NSE_INDEX|Nifty 50"
+                resp = requests.get(url, headers=headers, params={"instrument_key": instrument_key}, timeout=5)
+                if resp.status_code == 200:
+                    res_data = resp.json()
+                    if res_data.get("status") == "success":
+                        contracts = res_data.get("data", [])
+                        today_str = datetime.date.today().strftime("%Y-%m-%d")
+                        if preferred_index.lower() == "sensex":
+                            filter_fn = lambda c: "SENSEX" in (c.get("underlying_symbol") or c.get("name") or "").upper()
+                        else:
+                            filter_fn = lambda c: "NIFTY" in (c.get("underlying_symbol") or c.get("name") or "").upper() and \
+                                                  "FIN" not in (c.get("underlying_symbol") or c.get("name") or "").upper() and \
+                                                  "BANK" not in (c.get("underlying_symbol") or c.get("name") or "").upper()
+
+                        expiries = sorted(list(set(
+                            c.get("expiry") for c in contracts
+                            if c.get("expiry") and c.get("expiry") >= today_str and filter_fn(c)
+                        )))
+                        if expiries:
+                            if not hasattr(self, "_expiry_cache"):
+                                self._expiry_cache = {}
+                            self._expiry_cache[cache_key] = (now, expiries[:8])
+                            return expiries[:8]
+            except Exception as e:
+                print(f"⚠️ Upstox contract expiries fetch notice: {e}")
+
+        # Fallback if Upstox API token is offline: calculate dynamic upcoming weekday dates
+        today = datetime.date.today()
+        target_weekday = get_default_target_weekday(preferred_index)
+        days_ahead = (target_weekday - today.weekday()) % 7
+        fallback_expiries = []
+        for i in range(6):
+            next_expiry = today + datetime.timedelta(days=days_ahead + i * 7)
+            fallback_expiries.append(next_expiry.strftime("%Y-%m-%d"))
+
+        return fallback_expiries
 
     def find_hedge_strikes(self, atm_strike: float, strike_interval: float) -> tuple:
         """Returns (hedge_call_strike, hedge_put_strike) strictly < 5.0, preferring premium closest to 2.0."""
@@ -514,32 +534,79 @@ class SimulationState:
         return hedge_call_strike, hedge_put_strike
 
     def get_active_expiry_date(self) -> str:
-        """Returns the appropriate expiry date. If closest expiry is < 3 days away, returns the next expiry."""
-        pref_index = self.settings.get("preferred_index", "Nifty")
-        feed_mode = self.settings.get("feed_mode", "Simulation")
-        token = self.settings.get("upstox_access_token")
-        
-        if feed_mode == "Upstox" and token:
-            expiries = self.get_upstox_expiries(pref_index)
-            if expiries:
-                closest_expiry = expiries[0]
-                try:
-                    today = datetime.date.today()
-                    exp_date = datetime.datetime.strptime(closest_expiry, "%Y-%m-%d").date()
-                    if (exp_date - today).days < 3:
-                        if len(expiries) > 1:
-                            return expiries[1]
-                except Exception as e:
-                    print(f"⚠️ Error parsing expiry date: {e}")
-                return closest_expiry
-        
+        """
+        Returns the active expiry date for option chain + trade execution.
+
+        ⚠️ 3-DAY EXPIRY SAFETY RULE (user requirement):
+        If the current/saved expiry is ≤ 2 calendar days away (i.e. expires in
+        0, 1 or 2 days), force-switch to NEXT WEEK expiry to avoid:
+          - Theta decay blowout on BUY positions (premium collapses toward 0)
+          - Gamma explosion on SELL positions (P&L swings violently near expiry)
+
+        User can still override this by manually selecting an expiry in Settings.
+        """
         today = datetime.date.today()
-        target_weekday = 4 if pref_index.lower() == "sensex" else 3
-        days_ahead = (target_weekday - today.weekday()) % 7
-        if days_ahead < 3:
-            days_ahead += 7
-        next_expiry = today + datetime.timedelta(days=days_ahead)
-        return next_expiry.strftime("%Y-%m-%d")
+        today_str = today.strftime("%Y-%m-%d")
+        pref_index = self.settings.get("preferred_index", "Nifty")
+        expiries = self.get_upstox_expiries(pref_index)
+
+        # --- Resolve candidate expiry (what the user/default says) ---
+        saved_expiry = self.settings.get("upstox_expiry_date")
+        if saved_expiry and saved_expiry >= today_str:
+            if not expiries or saved_expiry in expiries:
+                candidate = saved_expiry
+            else:
+                candidate = expiries[0] if expiries else saved_expiry
+        elif expiries:
+            candidate = expiries[0]
+        else:
+            target_weekday = get_default_target_weekday(pref_index)
+            days_ahead = (target_weekday - today.weekday()) % 7
+            candidate = (today + datetime.timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+
+        # --- 3-DAY SAFETY RULE ---
+        try:
+            candidate_date = datetime.date.fromisoformat(candidate)
+            days_to_expiry = (candidate_date - today).days
+        except Exception:
+            days_to_expiry = 99
+
+        EXPIRY_DANGER_THRESHOLD = 2  # ≤ 2 days → switch to next week
+
+        if days_to_expiry <= EXPIRY_DANGER_THRESHOLD:
+            # Find the NEXT expiry after the candidate
+            next_expiry = None
+            if expiries:
+                for e in expiries:
+                    try:
+                        e_date = datetime.date.fromisoformat(e)
+                        if e_date > candidate_date:
+                            next_expiry = e
+                            break
+                    except Exception:
+                        continue
+
+            # Fallback: compute next Thursday (Nifty) or Friday (Sensex) after candidate
+            if not next_expiry:
+                target_weekday = get_default_target_weekday(pref_index)
+                days_fwd = (target_weekday - candidate_date.weekday()) % 7
+                if days_fwd == 0:
+                    days_fwd = 7
+                next_expiry = (candidate_date + datetime.timedelta(days=days_fwd)).strftime("%Y-%m-%d")
+
+            self.expiry_warning = (
+                f"⚠️ Auto-switched to next-week expiry ({next_expiry}) — "
+                f"current expiry {candidate} is only {days_to_expiry}d away "
+                f"(≤{EXPIRY_DANGER_THRESHOLD}d threshold). "
+                f"Prevents theta decay on BUYs & gamma blast on SELLs."
+            )
+            print(f"📅 EXPIRY SAFETY: {self.expiry_warning}")
+            return next_expiry
+
+        # Within safe range — use candidate as-is
+        self.expiry_warning = ""
+        return candidate
+
 
     def get_straddle_premium(self) -> float:
         """Returns current combined ATM straddle premium LTP."""
@@ -674,19 +741,16 @@ class SimulationState:
 
     def update_default_expiry(self):
         pref_index = self.settings.get("preferred_index", "Nifty")
-        feed_mode = self.settings.get("feed_mode", "Simulation")
-        
-        if feed_mode == "Upstox" and self.settings.get("upstox_access_token"):
-            expiries = self.get_upstox_expiries(pref_index)
-            if expiries:
-                self.settings["upstox_expiry_date"] = expiries[0]
-                return
-                
-        target_weekday = 4 if pref_index.lower() == "sensex" else 3
-        today = datetime.date.today()
-        days_ahead = (target_weekday - today.weekday()) % 7
-        next_expiry = today + datetime.timedelta(days=days_ahead)
-        self.settings["upstox_expiry_date"] = next_expiry.strftime("%Y-%m-%d")
+        expiries = self.get_upstox_expiries(pref_index)
+        if expiries:
+            self.settings["upstox_expiry_date"] = expiries[0]
+        else:
+            target_weekday = get_default_target_weekday(pref_index)
+            today = datetime.date.today()
+            days_ahead = (target_weekday - today.weekday()) % 7
+            next_expiry = today + datetime.timedelta(days=days_ahead)
+            self.settings["upstox_expiry_date"] = next_expiry.strftime("%Y-%m-%d")
+
 
     def analyze_timeframe(self, candles: List[Dict]) -> Dict:
         """Returns indicators and trend direction for a given completed candle history."""
@@ -766,7 +830,8 @@ class SimulationState:
 
     def get_rolling_momentum(self) -> float:
         """Returns the rolling price change percentage over the last 2 minutes."""
-        if not self.price_history:
+        # Require at least 12 ticks (1 minute) of price history to prevent false breakouts on startup
+        if len(self.price_history) < 12:
             return 0.0
         # Ticks are appended every 5 seconds. 2 minutes = 24 ticks back.
         lookback = min(24, len(self.price_history) - 1)
@@ -787,8 +852,13 @@ class SimulationState:
             if now - self._capital_cache_time < 60.0:
                 return self._cached_capital
                 
+        url = "https://api.upstox.com/v2/user/get-funds-and-margin"
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}"
+        }
         try:
-            resp = upstox_request("/v2/user/get-funds-and-margin", token)
+            resp = requests.get(url, headers=headers, timeout=5)
             if resp.status_code == 200:
                 res_json = resp.json()
                 if res_json.get("status") == "success":
@@ -893,14 +963,14 @@ class SimulationState:
         if not instruments:
             return None
             
-        margin_path = "/v2/charges/margin"
+        url = "https://api.upstox.com/v2/charges/margin"
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Authorization": f"Bearer {token}"
         }
         try:
-            resp = upstox_request(margin_path, token, method="POST", body={"instruments": instruments})
+            resp = requests.post(url, json={"instruments": instruments}, headers=headers, timeout=5)
             if resp.status_code == 200:
                 res_json = resp.json()
                 if res_json.get("status") == "success":
@@ -914,14 +984,14 @@ class SimulationState:
     def calculate_paper_intraday_pnl(self) -> float:
         try:
             today_str = get_ist_date_str()
-            today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str and not t.get("execution_type", "Paper").startswith("Live")]
+            today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str and not (t.get("execution_type") or "Paper").startswith("Live")]
             closed_pnl = sum(t.get("pnl", 0.0) for t in today_closed)
             
             floating_pnl = 0.0
             if self.auto_trade_active_id:
                 active_trade = None
                 for t in journal.trades:
-                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN" and not t.get("execution_type", "Paper").startswith("Live"):
+                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN" and not (t.get("execution_type") or "Paper").startswith("Live"):
                         active_trade = t
                         break
                 if active_trade:
@@ -934,14 +1004,14 @@ class SimulationState:
     def calculate_real_intraday_pnl(self) -> float:
         try:
             today_str = get_ist_date_str()
-            today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str and t.get("execution_type", "Paper").startswith("Live")]
+            today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str and (t.get("execution_type") or "Paper").startswith("Live")]
             closed_pnl = sum(t.get("pnl", 0.0) for t in today_closed)
             
             floating_pnl = 0.0
             if self.auto_trade_active_id:
                 active_trade = None
                 for t in journal.trades:
-                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN" and t.get("execution_type", "Paper").startswith("Live"):
+                    if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN" and (t.get("execution_type") or "Paper").startswith("Live"):
                         active_trade = t
                         break
                 if active_trade:
@@ -1008,6 +1078,8 @@ class SimulationState:
 
             # SL = 10% premium. Risk per lot = premium * lot_size * 0.10
             risk_per_lot = atm_premium * lot_size * 0.10
+            if risk_per_lot <= 0:
+                risk_per_lot = 1.0
             suggested_lots = max(1, int(max_risk / risk_per_lot))
             margin_per_lot = atm_premium * lot_size
             
@@ -1017,16 +1089,19 @@ class SimulationState:
 
         # 2. Short Strangle / Short Straddle
         elif "Strangle" in strategy or "Straddle" in strategy:
+            # Static safety threshold: ₹160,000 per lot required capital for selling options
+            MARGIN_STRANGLE_SAFETY = 160000.0
+            max_lots_by_capital = max(1, int((capital * 0.85) / MARGIN_STRANGLE_SAFETY))
+            
             # Query dynamic broker margin first
             broker_margin = self.query_upstox_basket_margin(strategy, spot)
             if broker_margin is not None and broker_margin > 0:
-                suggested_lots = max(1, int((capital * 0.80) / broker_margin))
+                calc_lots = max(1, int((capital * 0.80) / broker_margin))
+                suggested_lots = min(calc_lots, max_lots_by_capital)
                 margin_required = suggested_lots * broker_margin
             else:
-                # Static fallback
-                MARGIN_STRANGLE = 160000.0
-                suggested_lots = max(1, int((capital * 0.80) / MARGIN_STRANGLE))
-                margin_required = suggested_lots * MARGIN_STRANGLE
+                suggested_lots = max_lots_by_capital
+                margin_required = suggested_lots * MARGIN_STRANGLE_SAFETY
                 
             risk_amount = max_risk
             return suggested_lots, margin_required, risk_amount
@@ -1063,6 +1138,8 @@ class SimulationState:
             risk_per_lot = net_premium * 0.50 * lot_size
             
             # Respect both margin (80% capital allocation limit) and 2% risk
+            if risk_per_lot <= 0:
+                risk_per_lot = 1.0
             max_lots_by_risk = max(1, int(max_risk / risk_per_lot))
             
             # Query dynamic broker margin first
@@ -1104,6 +1181,8 @@ class SimulationState:
                 
         # SL = 10% premium. Risk per lot = premium * lot_size * 0.10
         risk_per_lot = atm_premium * lot_size * 0.10
+        if risk_per_lot <= 0:
+            risk_per_lot = 1.0
         suggested_lots = max(1, int(max_risk / risk_per_lot))
         
         # Momentum strategy status
@@ -1240,45 +1319,49 @@ class SimulationState:
             else:
                 self.premarket_open_price = None
                 
-                # Periodically fetch live price from Google Finance
-                if now - self.last_live_fetch >= 30:
-                    price_data = fetch_live_index_price(preferred_index)
-                    if price_data[0] is not None:
-                        live_price = price_data[0]
-                        self.spot_price = live_price
-                        self.intraday_change_pct = price_data[1]
-                        self.intraday_change_val = price_data[2]
-                        self.prev_close_baseline = price_data[0] - price_data[2]
-                        self.last_live_fetch = now
-                
-                if not live_price:
-                    # Normal drift simulation
-                    drift = 0.0
-                    regime = self.market_regime
-                    if "Strong Bull" in regime:
-                        drift = 0.5
-                    elif "Strong Bear" in regime:
-                        drift = -0.5
+                feed_mode = self.settings.get("feed_mode", "Simulation")
+                if feed_mode == "Upstox":
+                    self.fetch_upstox_data()
+                else:
+                    # Periodically fetch live price from Google Finance
+                    if now - self.last_live_fetch >= 30:
+                        price_data = fetch_live_index_price(preferred_index)
+                        if price_data[0] is not None:
+                            live_price = price_data[0]
+                            self.spot_price = live_price
+                            self.intraday_change_pct = price_data[1]
+                            self.intraday_change_val = price_data[2]
+                            self.prev_close_baseline = price_data[0] - price_data[2]
+                            self.last_live_fetch = now
                     
-                    # Ensure baseline exists
-                    if not getattr(self, "prev_close_baseline", None):
-                        self.prev_close_baseline = self.spot_price - self.intraday_change_val
-                    
-                    # Drift spot price
-                    self.spot_price += drift + random.uniform(-2.0, 2.0)
-                    
-                    # Update change metrics to stay in sync
-                    if self.prev_close_baseline != 0.0:
-                        self.intraday_change_val = self.spot_price - self.prev_close_baseline
-                        self.intraday_change_pct = (self.intraday_change_val / self.prev_close_baseline) * 100.0
-                    
-                    # Bound random spikes relative to starting spot price area
-                    if preferred_index.lower() == "sensex":
-                        if self.spot_price > 110000: self.spot_price -= 100.0
-                        if self.spot_price < 50000: self.spot_price += 100.0
-                    else:
-                        if self.spot_price > 35000: self.spot_price -= 25.0
-                        if self.spot_price < 15000: self.spot_price += 25.0
+                    if not live_price:
+                        # Normal drift simulation
+                        drift = 0.0
+                        regime = self.market_regime
+                        if "Strong Bull" in regime:
+                            drift = 0.5
+                        elif "Strong Bear" in regime:
+                            drift = -0.5
+                        
+                        # Ensure baseline exists
+                        if not getattr(self, "prev_close_baseline", None):
+                            self.prev_close_baseline = self.spot_price - self.intraday_change_val
+                        
+                        # Drift spot price
+                        self.spot_price += drift + random.uniform(-2.0, 2.0)
+                        
+                        # Update change metrics to stay in sync
+                        if self.prev_close_baseline != 0.0:
+                            self.intraday_change_val = self.spot_price - self.prev_close_baseline
+                            self.intraday_change_pct = (self.intraday_change_val / self.prev_close_baseline) * 100.0
+                        
+                        # Bound random spikes relative to starting spot price area
+                        if preferred_index.lower() == "sensex":
+                            if self.spot_price > 110000: self.spot_price -= 100.0
+                            if self.spot_price < 50000: self.spot_price += 100.0
+                        else:
+                            if self.spot_price > 35000: self.spot_price -= 25.0
+                            if self.spot_price < 15000: self.spot_price += 25.0
 
         # Update source and timestamps
         if override_type:
@@ -1358,7 +1441,7 @@ class SimulationState:
         if not token or not expiry:
             return False
             
-        option_chain_path = "/v2/option/chain"
+        url = "https://api.upstox.com/v2/option/chain"
         headers = {
             "Accept": "application/json",
             "Authorization": f"Bearer {token}"
@@ -1371,7 +1454,7 @@ class SimulationState:
         }
         
         try:
-            resp = upstox_request(option_chain_path, token, params=params)
+            resp = requests.get(url, headers=headers, params=params, timeout=5)
             if resp.status_code != 200:
                 print(f"Upstox API returned error {resp.status_code}: {resp.text}")
                 return False
@@ -1494,12 +1577,12 @@ class SimulationState:
                 
             # Query actual live India VIX spot price from Upstox market quotes!
             try:
-                vix_path = "/v2/market-quote/quotes"
+                vix_url = "https://api.upstox.com/v2/market-quote/quotes"
                 vix_headers = {
                     "Accept": "application/json",
                     "Authorization": f"Bearer {token}"
                 }
-                vix_resp = upstox_request(vix_path, token, params={"symbol": "NSE_INDEX|India VIX"})
+                vix_resp = requests.get(vix_url, headers=vix_headers, params={"symbol": "NSE_INDEX|India VIX"}, timeout=3)
                 if vix_resp.status_code == 200:
                     vix_data = vix_resp.json()
                     if vix_data.get("status") == "success":
@@ -2104,6 +2187,15 @@ class SimulationState:
 
         # 3. Open New Position (if none exists)
         else:
+            # STRICT SINGLE ACTIVE POSITION GUARD: Ensure NO open trade exists before entering
+            target_prefix = "Live" if mode == "Live" else "Paper"
+            has_any_open = any(
+                t.get("status") == "OPEN" and (t.get("execution_type") or "").startswith(target_prefix)
+                for t in journal.trades
+            )
+            if has_any_open or self.auto_trade_active_id:
+                return  # Block entry — only ONE active strategy allowed at a time!
+
             rec = self.current_recommendation
             conf = self.confidence
             allowed_strategies = [
@@ -2202,13 +2294,15 @@ class SimulationState:
                             instrument_key=instrument_key,
                             quantity=suggested_lots * lot_size,
                             transaction_type=act,
+                            order_type="MARKET",
                             price=0.0
                         ))
                     
                     try:
                         print(f"🚀 AUTO-TRADE REAL: Placing {rec} orders on Upstox...")
-                        res = upstox_execute_orders(live_legs, rec)
-                        if res["status"] == "SUCCESS":
+                        order_req = LiveOrderRequest(strategy=rec, legs=live_legs)
+                        res = execute_live_order(order_req)
+                        if isinstance(res, dict) and res.get("status") == "SUCCESS":
                             self.auto_trade_active_id = res["trade"]["id"]
                             print(f"⚡ AUTO-TRADE REAL: Placed {rec} position successfully (ID: {self.auto_trade_active_id})")
                     except Exception as e:
@@ -2585,45 +2679,11 @@ class SimulationState:
                     "reason": self.recalculation_trigger,
                     "indicators_changed": ", ".join(reasoning_list[:3])
                 })
-                # Trigger strategy shift alert
-                if prev_strat != primary_rec:
-                    msg = f"🔄 <b>AI Strategy Shift Alert</b>\n\n" \
-                          f"• <b>Index:</b> {self.settings.get('preferred_index', 'Nifty')}\n" \
-                          f"• <b>Prev Strategy:</b> {prev_strat}\n" \
-                          f"• <b>New Strategy:</b> {primary_rec}\n" \
-                          f"• <b>Confidence:</b> {confidence_pct:.1f}%\n" \
-                          f"• <b>Trigger:</b> {self.recalculation_trigger}\n" \
-                          f"• <b>Spot Price:</b> \u20b9{self.spot_price:.2f}"
-                    send_telegram_alert(msg)
         
         # Reset trigger
         self.recalculation_trigger = "Schedule"
         self.last_rec_time = time.time()
 
-
-def send_telegram_alert(message: str):
-    token = state.settings.get("telegram_bot_token", "").strip()
-    chat_id = state.settings.get("telegram_chat_id", "").strip()
-    if not token or not chat_id:
-        return
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": message,
-        "parse_mode": "HTML"
-    }
-    try:
-        import threading
-        def _post():
-            try:
-                proxy_url = state.settings.get("outbound_proxy", "").strip()
-                proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-                requests.post(url, json=payload, proxies=proxies, timeout=5)
-            except Exception as e:
-                print(f"Failed to send Telegram alert: {e}")
-        threading.Thread(target=_post, daemon=True).start()
-    except Exception as e:
-        print(f"Failed to start Telegram alert thread: {e}")
 
 # Singleton simulation state instance
 state = SimulationState()
@@ -2782,12 +2842,6 @@ class TradeJournal:
         
         self.trades.append(trade)
         self.save_journal()
-        # Trigger entry alert
-        msg = f"📈 <b>Trade Entry Alert [{execution_type.upper()}]</b>\n\n" \
-              f"• <b>Strategy:</b> {strategy}\n" \
-              f"• <b>Strikes:</b> {', '.join(strikes)}\n"               f"• <b>Confidence:</b> {confidence:.1f}%\n" \
-              f"• <b>Entry Spot:</b> \u20b9{entry_price:.2f}"
-        send_telegram_alert(msg)
         return trade
         
     def close_trade(self, trade_id: str, exit_spot: float):
@@ -2863,22 +2917,20 @@ class TradeJournal:
                     
                 trade["pnl"] = round(pnl + trade.get("booked_pnl", 0.0), 2)
                 trade["outcome"] = "WIN" if pnl > 0 else "LOSS"
+                if (trade.get("execution_type") or "").startswith("Live") and trade.get("legs"):
+                    try:
+                        execute_live_exit_orders(trade.get("legs"))
+                    except Exception as e:
+                        print(f"❌ Failed to execute live exit orders: {e}")
                 self.save_journal()
-                # Trigger exit alert
-                msg = f"📉 <b>Trade Exit Alert [{trade.get('execution_type', 'Paper').upper()}]</b>\n\n" \
-                      f"• <b>Strategy:</b> {trade.get('strategy')}\n" \
-                      f"• <b>Exit Spot:</b> \u20b9{exit_spot:.2f}\n" \
-                      f"• <b>Trade P&L:</b> \u20b9{trade.get('pnl', 0.0):.2f}\n" \
-                      f"• <b>Outcome:</b> {trade['outcome']}"
-                send_telegram_alert(msg)
                 return trade
         return None
 
     def get_analytics(self, execution_type: str = "All") -> Dict:
         if execution_type == "Live":
-            closed_trades = [t for t in self.trades if t["status"] == "CLOSED" and t.get("execution_type", "Paper").startswith("Live")]
+            closed_trades = [t for t in self.trades if t["status"] == "CLOSED" and (t.get("execution_type") or "Paper").startswith("Live")]
         elif execution_type == "Paper":
-            closed_trades = [t for t in self.trades if t["status"] == "CLOSED" and not t.get("execution_type", "Paper").startswith("Live")]
+            closed_trades = [t for t in self.trades if t["status"] == "CLOSED" and not (t.get("execution_type") or "Paper").startswith("Live")]
         else:
             closed_trades = [t for t in self.trades if t["status"] == "CLOSED"]
             
@@ -2954,20 +3006,18 @@ class SettingsUpdate(BaseModel):
     risk_pct: float
     preferred_broker: Optional[str] = "Upstox"
     preferred_strategy: Optional[str] = "All"
+    preferred_index: Optional[str] = "Nifty"
     regime_override: Optional[str] = "Auto"
-    feed_mode: Optional[str] = "Simulation"
+    feed_mode: Optional[str] = "Upstox"
     upstox_access_token: Optional[str] = ""
     upstox_expiry_date: Optional[str] = ""
     upstox_api_key: Optional[str] = ""
     upstox_api_secret: Optional[str] = ""
-    outbound_proxy: Optional[str] = ""
     dashboard_username: Optional[str] = "admin"
     dashboard_password: Optional[str] = "password123"
     auto_trade_mode: Optional[str] = "OFF"
     trailing_sl_pts: float = 30.0
     scalper_mode: Optional[bool] = None
-    telegram_bot_token: Optional[str] = ""
-    telegram_chat_id: Optional[str] = "" 
 
 class LoginRequest(BaseModel):
     username: str
@@ -3019,14 +3069,6 @@ def get_market_data():
                     state.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
                     state.live_trade_errors = state.live_trade_errors[-10:]
                 print(err)
-                # Calculate dynamic fallback expiry
-                pref_index = state.settings.get("preferred_index", "Nifty")
-                target_weekday = 4 if pref_index.lower() == "sensex" else 3
-                today = datetime.date.today()
-                days_ahead = (target_weekday - today.weekday()) % 7
-                next_expiry = today + datetime.timedelta(days=days_ahead)
-                fallback_expiry = next_expiry.strftime("%Y-%m-%d")
-
                 return {
                     "version": VERSION,
                     "spot_price": round(state.spot_price, 2),
@@ -3046,61 +3088,9 @@ def get_market_data():
                     "secondary_recommendation": "No Trade",
                     "tertiary_recommendation": "No Trade",
                     "reasoning": ["⚠️ Upstox Live API connection error. Live trading paused."],
-                    "negation": [],
                     "auto_trade_mode": mode,
                     "scalper_mode": state.settings.get("scalper_mode", False),
-                    "live_trade_errors": state.live_trade_errors[-5:],
-                    "trailing_sl_pts": state.settings.get("trailing_sl_pts", 30.0),
-                    "daily_stop_limit_hit": state.daily_stop_limit_hit,
-                    "daily_pnl": 0.0,
-                    "daily_brokerage": 0.0,
-                    "total_brokerage": 0.0,
-                    "today_trades": 0,
-                    "today_legs": 0,
-                    "timeframe_trends": {
-                        "m15": "Neutral",
-                        "m5": "Neutral",
-                        "m1": "Neutral"
-                    },
-                    "decision_components": {},
-                    "indicators": {
-                        "ema_20": round(state.ema_20, 2),
-                        "ema_50": round(state.ema_50, 2),
-                        "rsi": round(state.rsi, 1),
-                        "adx": round(state.adx, 1),
-                        "macd": round(state.macd, 2),
-                        "macd_signal": round(state.macd_signal, 2),
-                        "supertrend": state.supertrend,
-                        "supertrend_val": round(state.supertrend_val, 2),
-                        "vwap": round(state.get_vwap(), 2),
-                        "atr": 35.0,
-                        "advance_decline": round(state.advance_decline, 2),
-                        "max_pain": "N/A",
-                        "expected_move": 0.0
-                    },
-                    "session": {
-                        "opening_range_high": state.opening_range_high,
-                        "opening_range_low": state.opening_range_low,
-                        "prev_day_high": state.prev_day_high,
-                        "prev_day_low": state.prev_day_low,
-                        "today_high": state.today_high,
-                        "today_low": state.today_low,
-                        "gap_pct": state.gap_pct
-                    },
-                    "trade_card": {
-                        "strategy": "No Trade",
-                        "direction": "Neutral",
-                        "entry_zone": "N/A",
-                        "stop_loss": "N/A",
-                        "target": "N/A",
-                        "risk_reward": "N/A",
-                        "max_risk": "₹0.00",
-                        "margin_required": 0.0,
-                        "suggested_lots": 0,
-                        "lot_size": 20 if pref_index.lower() == "sensex" else 65,
-                        "theta_decay": "N/A"
-                    },
-                    "recommended_legs": []
+                    "live_trade_errors": state.live_trade_errors[-5:]
                 }
             else:
                 # For non-live settings (e.g. Paper mode with Upstox feed selected), fall back to Simulation
@@ -3125,7 +3115,7 @@ def get_market_data():
         return state.calculate_trade_pnl(t, spot)
 
     # Check Paper Trades Capital Protection
-    paper_open = [t for t in journal.trades if t.get("status") == "OPEN" and not t.get("execution_type", "Paper").startswith("Live")]
+    paper_open = [t for t in journal.trades if t.get("status") == "OPEN" and not (t.get("execution_type") or "Paper").startswith("Live")]
     if paper_open:
         total_paper_pnl = sum(get_single_trade_pnl(t) for t in paper_open)
         if total_paper_pnl <= -risk_limit:
@@ -3136,7 +3126,7 @@ def get_market_data():
             journal.save_journal()
 
     # Check Live Trades Capital Protection
-    live_open = [t for t in journal.trades if t.get("status") == "OPEN" and t.get("execution_type", "Paper").startswith("Live")]
+    live_open = [t for t in journal.trades if t.get("status") == "OPEN" and (t.get("execution_type") or "Paper").startswith("Live")]
     if live_open:
         total_live_pnl = sum(get_single_trade_pnl(t) for t in live_open)
         if total_live_pnl <= -risk_limit:
@@ -3278,11 +3268,11 @@ def get_market_data():
         "live_trade_errors": getattr(state, 'live_trade_errors', [])[-5:],
         "trailing_sl_pts": state.settings.get("trailing_sl_pts", 30.0),
         "daily_stop_limit_hit": state.daily_stop_limit_hit,
-        "daily_pnl": round(sum(t.get("pnl", 0.0) for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))), 2),
-        "daily_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))), 2),
-        "total_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))), 2),
-        "today_trades": sum(1 for t in journal.trades if t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))),
-        "today_legs": sum(len(t.get("legs") or []) or 1 for t in journal.trades if t.get("date") == get_ist_date_str() and (not t.get("execution_type", "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else t.get("execution_type", "Paper").startswith("Live"))),
+        "daily_pnl": round(sum(t.get("pnl", 0.0) for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str() and (not (t.get("execution_type") or "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else (t.get("execution_type") or "Paper").startswith("Live"))), 2),
+        "daily_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if t.get("date") == get_ist_date_str() and (not (t.get("execution_type") or "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else (t.get("execution_type") or "Paper").startswith("Live"))), 2),
+        "total_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if t.get("date") == get_ist_date_str() and (not (t.get("execution_type") or "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else (t.get("execution_type") or "Paper").startswith("Live"))), 2),
+        "today_trades": sum(1 for t in journal.trades if t.get("date") == get_ist_date_str() and (not (t.get("execution_type") or "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else (t.get("execution_type") or "Paper").startswith("Live"))),
+        "today_legs": sum(len(t.get("legs") or []) or 1 for t in journal.trades if t.get("date") == get_ist_date_str() and (not (t.get("execution_type") or "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else (t.get("execution_type") or "Paper").startswith("Live"))),
         "timeframe_trends": {
             "m15": state.analyze_timeframe(candles_15m_temp)["trend"],
             "m5": state.analyze_timeframe(candles_5m_temp)["trend"],
@@ -3331,12 +3321,115 @@ def get_market_data():
         "option_buy_strategies": option_buy_strategies,
         "fallback_active": fallback_active,
         "market_session": state.market_session,
+        "expiry_warning": getattr(state, "expiry_warning", ""),
+        "live_trade_errors": getattr(state, "live_trade_errors", []),
         "lock_remaining_seconds": max(0, int(60.0 - (time.time() - state.last_strategy_change_time)))
     }
 
 @app.get("/api/logs")
 def get_logs():
     return state.change_log
+
+@app.get("/api/payoff")
+def get_payoff_data():
+    """
+    Compute payoff diagram points for the currently OPEN trade.
+    Returns P&L at expiry across a range of spot prices ±8% from current spot.
+    Also includes the current floating P&L point (marked with current_spot).
+    """
+    spot = state.spot_price
+    preferred_index = state.settings.get("preferred_index", "Nifty")
+    lot_size = 20 if preferred_index.lower() == "sensex" else 65
+
+    # Find the currently OPEN trade
+    open_trade = None
+    for t in journal.trades:
+        if t.get("status") == "OPEN":
+            open_trade = t
+            break
+
+    if not open_trade or not open_trade.get("legs"):
+        return {
+            "has_position": False,
+            "labels": [],
+            "payoff": [],
+            "breakevens": [],
+            "current_spot": round(spot, 0),
+            "current_pnl": 0.0,
+            "max_profit": 0.0,
+            "max_loss": 0.0,
+            "strategy": "No Open Position"
+        }
+
+    legs = open_trade.get("legs", [])
+    size = open_trade.get("size", 1)
+
+    # Build spot range: ±8% from current spot in 80 steps
+    range_pct = 0.08
+    spot_low = spot * (1 - range_pct)
+    spot_high = spot * (1 + range_pct)
+    num_steps = 80
+    step = (spot_high - spot_low) / num_steps
+    spot_range = [round(spot_low + i * step, 0) for i in range(num_steps + 1)]
+
+    payoff_points = []
+    for s in spot_range:
+        total_pnl = 0.0
+        for leg in legs:
+            action = leg.get("action", "BUY")
+            option_type = leg.get("option_type", "CE")
+            strike = leg.get("strike", s)
+            entry_price = leg.get("entry_price", 0.0)
+            qty = leg.get("quantity", lot_size)
+
+            # Intrinsic value at expiry
+            if option_type == "CE":
+                intrinsic = max(0.0, s - strike)
+            else:
+                intrinsic = max(0.0, strike - s)
+
+            # P&L for this leg at expiry
+            if action == "BUY":
+                leg_pnl = (intrinsic - entry_price) * qty
+            else:
+                leg_pnl = (entry_price - intrinsic) * qty
+
+            total_pnl += leg_pnl
+
+        payoff_points.append(round(total_pnl, 2))
+
+    # Find breakeven points (sign changes in payoff)
+    breakevens = []
+    for i in range(len(payoff_points) - 1):
+        if payoff_points[i] * payoff_points[i+1] < 0:
+            # Linear interpolation
+            be = spot_range[i] - payoff_points[i] * (spot_range[i+1] - spot_range[i]) / (payoff_points[i+1] - payoff_points[i])
+            breakevens.append(round(be, 0))
+
+    # Current floating P&L (from entry prices vs live LTP approximation)
+    current_pnl = round(state.calculate_trade_pnl(open_trade, spot), 2)
+
+    max_profit = max(payoff_points)
+    max_loss = min(payoff_points)
+
+    # Cap max_loss display for naked selling strategies (theoretical infinite loss)
+    if max_loss < -1000000:
+        max_loss = -999999.0
+
+    return {
+        "has_position": True,
+        "labels": spot_range,
+        "payoff": payoff_points,
+        "breakevens": breakevens,
+        "current_spot": round(spot, 0),
+        "current_pnl": current_pnl,
+        "max_profit": round(max_profit, 2),
+        "max_loss": round(max_loss, 2),
+        "strategy": open_trade.get("strategy", "Unknown"),
+        "trade_id": open_trade.get("id"),
+        "entry_spot": open_trade.get("entry_spot", spot),
+        "size": size
+    }
 
 @app.get("/api/chart-data")
 def get_chart_data():
@@ -3350,35 +3443,21 @@ def get_chart_data():
 @app.get("/api/settings")
 def get_settings():
     pref_index = state.settings.get("preferred_index", "Nifty")
-    feed_mode = state.settings.get("feed_mode", "Simulation")
-    token = state.settings.get("upstox_access_token")
-    
-    expiry_dates = []
-    if feed_mode == "Upstox" and token:
-        expiry_dates = state.get_upstox_expiries(pref_index)
-        
-    if not expiry_dates:
-        # Fallback to calculated weekday expiries
-        today = datetime.date.today()
-        target_weekday = 4 if pref_index.lower() == "sensex" else 3
-        for i in range(5):
-            days_ahead = (target_weekday - today.weekday()) % 7
-            next_expiry = today + datetime.timedelta(days=days_ahead + i * 7)
-            expiry_dates.append(next_expiry.strftime("%Y-%m-%d"))
-            
+    expiry_dates = state.get_upstox_expiries(pref_index)
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     saved_expiry = state.settings.get("upstox_expiry_date")
-    
-    # If saved expiry is in the past, auto-update to the next upcoming expiry
-    if saved_expiry and saved_expiry < today_str:
-        state.settings["upstox_expiry_date"] = expiry_dates[0]
-        state.save_settings()
-        saved_expiry = expiry_dates[0]
-        
+
+    # If saved expiry is missing or in the past, auto-update to 1st upcoming valid expiry
+    if not saved_expiry or saved_expiry < today_str:
+        if expiry_dates:
+            state.settings["upstox_expiry_date"] = expiry_dates[0]
+            state.save_settings()
+            saved_expiry = expiry_dates[0]
+
     if saved_expiry and saved_expiry not in expiry_dates:
         if saved_expiry >= today_str:
             expiry_dates.insert(0, saved_expiry)
-            
+
     return {
         **state.settings,
         "upcoming_expiry_dates": expiry_dates
@@ -3386,61 +3465,75 @@ def get_settings():
 
 @app.post("/api/settings")
 def update_settings(data: SettingsUpdate):
-    target_mode = data.auto_trade_mode or "OFF"
-    
-    # Save settings parameters immediately so they persist even if validation fails (v3.1.49)
-    state.settings["upstox_access_token"] = data.upstox_access_token or ""
-    state.settings["upstox_expiry_date"] = data.upstox_expiry_date or ""
-    if data.upstox_api_key:
-        state.settings["upstox_api_key"] = data.upstox_api_key
-    if data.upstox_api_secret:
-        state.settings["upstox_api_secret"] = data.upstox_api_secret
-    state.settings["outbound_proxy"] = data.outbound_proxy or ""
-    state.settings["telegram_bot_token"] = data.telegram_bot_token or ""
-    state.settings["telegram_chat_id"] = data.telegram_chat_id or ""
+    try:
+        target_mode = data.auto_trade_mode or "OFF"
+        
+        # Check index switch to auto-update expiry
+        old_index = state.settings.get("preferred_index", "Nifty")
+        new_index = data.preferred_index or old_index
+        state.settings["preferred_index"] = new_index
 
-    state.settings["capital"] = data.capital
-    state.settings["risk_pct"] = data.risk_pct
-    state.settings["preferred_broker"] = data.preferred_broker or "Upstox"
-    state.settings["preferred_strategy"] = data.preferred_strategy or "All"
-    state.settings["regime_override"] = data.regime_override or "Auto"
-    state.settings["dashboard_username"] = data.dashboard_username or "admin"
-    state.settings["dashboard_password"] = data.dashboard_password or "password123"
-    state.settings["trailing_sl_pts"] = data.trailing_sl_pts
-    state.settings["scalper_mode"] = data.scalper_mode if data.scalper_mode is not None else state.settings.get("scalper_mode", False)
-
-    # Clear capital cache to force immediate validation of the token
-    state._cached_capital = None
-    state._capital_cache_time = 0.0
-    
-    # Verify and enforce Live Real rules
-    if target_mode == "Live":
-        state.get_broker_balance() # This queries Upstox API and sets self.upstox_token_status
-        if state.upstox_token_status == "VALID":
-            state.settings["feed_mode"] = "Upstox"
-            state.settings["auto_trade_mode"] = "Live"
+        # Store settings temporary to run verification
+        state.settings["upstox_access_token"] = data.upstox_access_token or ""
+        
+        # If index changed or no expiry date set, fetch fresh expiries for new index
+        if new_index != old_index or not data.upstox_expiry_date:
+            expiries = state.get_upstox_expiries(new_index)
+            state.settings["upstox_expiry_date"] = expiries[0] if expiries else (data.upstox_expiry_date or "")
         else:
-            state.settings["auto_trade_mode"] = "OFF"
-            state.settings["feed_mode"] = "Simulation"
-            state.save_settings()
-            return {
-                "status": "ERROR", 
-                "message": "❌ Upstox API token is inactive/invalid. Please authenticate with Upstox first."
-            }
-    else:
-        state.settings["auto_trade_mode"] = target_mode
-        state.settings["feed_mode"] = data.feed_mode or "Simulation" 
-    
-    # Try updating the expiry automatically based on token validity/feed mode
-    state.update_default_expiry()
-    
-    # Clear capital query cache to force immediate validation of the new token
-    state._cached_capital = None
-    state._capital_cache_time = 0.0
-    
-    state.evaluate_decision_engine()
-    state.save_settings()
-    return {"status": "SUCCESS"}
+            state.settings["upstox_expiry_date"] = data.upstox_expiry_date or ""
+
+        if data.upstox_api_key:
+            state.settings["upstox_api_key"] = data.upstox_api_key
+        if data.upstox_api_secret:
+            state.settings["upstox_api_secret"] = data.upstox_api_secret
+
+        # Clear capital cache to force immediate validation of the token
+        state._cached_capital = None
+        state._capital_cache_time = 0.0
+        
+        # Verify and enforce Live Real rules
+        if target_mode == "Live":
+            state.get_broker_balance() # This queries Upstox API and sets self.upstox_token_status
+            if state.upstox_token_status == "VALID":
+                state.settings["feed_mode"] = "Upstox"
+                state.settings["auto_trade_mode"] = "Live"
+            else:
+                state.settings["auto_trade_mode"] = "OFF"
+                state.settings["feed_mode"] = "Simulation"
+                state.save_settings()
+                return {
+                    "status": "ERROR", 
+                    "message": "❌ Upstox API token is inactive/invalid. Please authenticate with Upstox first."
+                }
+        else:
+            state.settings["auto_trade_mode"] = target_mode
+            state.settings["feed_mode"] = data.feed_mode or "Simulation"
+
+        state.settings["capital"] = data.capital
+        state.settings["risk_pct"] = data.risk_pct
+        state.settings["preferred_broker"] = data.preferred_broker or "Upstox"
+        state.settings["preferred_strategy"] = data.preferred_strategy or "All"
+        state.settings["regime_override"] = data.regime_override or "Auto"
+        state.settings["dashboard_username"] = data.dashboard_username or "admin"
+        state.settings["dashboard_password"] = data.dashboard_password or "password123"
+        state.settings["trailing_sl_pts"] = data.trailing_sl_pts
+        state.settings["scalper_mode"] = data.scalper_mode if data.scalper_mode is not None else state.settings.get("scalper_mode", False)
+        
+        # Try updating the expiry automatically based on token validity/feed mode
+        state.update_default_expiry()
+        
+        # Clear capital query cache to force immediate validation of the new token
+        state._cached_capital = None
+        state._capital_cache_time = 0.0
+        
+        state.evaluate_decision_engine()
+        state.save_settings()
+        return {"status": "SUCCESS"}
+    except Exception as e:
+        print(f"Error in update_settings: {e}")
+        return {"status": "ERROR", "message": f"Failed to update settings: {str(e)}"}
+
 
 class ExpiryUpdateRequest(BaseModel):
     expiry_date: str
@@ -3489,7 +3582,7 @@ class LiveLegOrder(BaseModel):
     instrument_key: str
     quantity: int
     transaction_type: str
-    order_type: str
+    order_type: str = "MARKET"
     price: float = 0.0
     strike: Optional[float] = None
     option_type: Optional[str] = None
@@ -3499,14 +3592,14 @@ class LiveOrderRequest(BaseModel):
     legs: List[LiveLegOrder]
 
 def wait_for_order_fill(order_id: str, token: str) -> bool:
-    order_history_path = f"/v2/order/history"
+    url = f"https://api.upstox.com/v2/order/history?order_id={order_id}"
     headers = {
         "Accept": "application/json",
         "Authorization": f"Bearer {token}"
     }
     for _ in range(10): # retry for 10 times (approx 5 seconds)
         try:
-            resp = upstox_request(order_history_path, token, params={"order_id": order_id})
+            resp = requests.get(url, headers=headers, timeout=3)
             if resp.status_code == 200:
                 res_json = resp.json()
                 if res_json.get("status") == "success":
@@ -3576,7 +3669,7 @@ def execute_live_order(data: LiveOrderRequest):
             "trade": trade
         }
         
-    order_place_path = "/v2/order/place"
+    url = "https://api.upstox.com/v2/order/place"
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -3609,7 +3702,7 @@ def execute_live_order(data: LiveOrderRequest):
                 "is_amo": False
             }
             try:
-                resp = upstox_request(order_place_path, token, method="POST", body=payload)
+                resp = requests.post(url, json=payload, headers=headers, timeout=5)
                 res_json = resp.json()
                 if resp.status_code == 200 and res_json.get("status") == "success":
                     order_id = res_json.get("data", {}).get("order_id")
@@ -3644,7 +3737,7 @@ def execute_live_order(data: LiveOrderRequest):
                 "is_amo": False
             }
             try:
-                resp = upstox_request(order_place_path, token, method="POST", body=payload)
+                resp = requests.post(url, json=payload, headers=headers, timeout=5)
                 res_json = resp.json()
                 if resp.status_code == 200 and res_json.get("status") == "success":
                     placed_orders.append({
@@ -3674,7 +3767,7 @@ def execute_live_order(data: LiveOrderRequest):
                 "is_amo": False
             }
             try:
-                resp = upstox_request(order_place_path, token, method="POST", body=payload)
+                resp = requests.post(url, json=payload, headers=headers, timeout=5)
                 res_json = resp.json()
                 if resp.status_code == 200 and res_json.get("status") == "success":
                     placed_orders.append({
@@ -3707,13 +3800,53 @@ def execute_live_order(data: LiveOrderRequest):
     )
     
     if failed_orders:
+        first_err = failed_orders[0].get("error", "Unknown error")
+        err_msg = f"❌ Live Order Placement Failed ({data.strategy}): {first_err}"
+        print(f"🚨 UPSTOX LIVE ERROR: {err_msg}")
+        
+        # Log to live_trade_errors for dashboard alert banner
+        state.live_trade_errors = getattr(state, 'live_trade_errors', [])
+        state.live_trade_errors.append({"time": get_ist_time_str(), "error": err_msg})
+        state.live_trade_errors = state.live_trade_errors[-10:]
+
+        if placed_orders:
+            # 🚨 EMERGENCY AUTO-ROLLBACK: Square off placed legs to prevent naked position risk
+            print(f"🚨 EMERGENCY AUTO-ROLLBACK: Placed {len(placed_orders)} legs, Failed {len(failed_orders)} legs. Squaring off placed legs on Upstox to eliminate naked option risk...")
+            placed_leg_details = []
+            for p in placed_orders:
+                inst = p["leg"]
+                for l_logged in legs_logged:
+                    if l_logged["instrument_key"] == inst:
+                        placed_leg_details.append(l_logged)
+                        break
+            
+            if placed_leg_details:
+                try:
+                    rollback_res = execute_live_exit_orders(placed_leg_details)
+                    print(f"⚡ AUTO-ROLLBACK EXECUTED: {rollback_res}")
+                except Exception as rollback_err:
+                    print(f"❌ AUTO-ROLLBACK ERROR: {rollback_err}")
+            
+            journal.close_trade(trade["id"], state.spot_price)
+            trade["reason"] = f"🚨 Emergency Auto-Rollback: Partial fill on Upstox (Placed: {len(placed_orders)}, Failed: {len(failed_orders)}) | Err: {first_err}"
+            journal.save_journal()
+            state.auto_trade_active_id = None
+        else:
+            # 0 orders placed — close and mark trade as FAILED immediately so trade lock is not stuck!
+            journal.close_trade(trade["id"], state.spot_price)
+            trade["reason"] = f"❌ Live Order Failed: {first_err}"
+            trade["outcome"] = "FAILED"
+            journal.save_journal()
+            state.auto_trade_active_id = None
+
         return {
-            "status": "PARTIAL_SUCCESS" if placed_orders else "FAILED",
-            "message": f"Placed: {len(placed_orders)}, Failed: {len(failed_orders)}",
+            "status": "FAILED",
+            "message": f"Order placement failed. Placed: {len(placed_orders)}, Failed: {len(failed_orders)}. {first_err}",
             "placed": placed_orders,
             "failed": failed_orders,
             "trade": trade
         }
+
         
     return {
         "status": "SUCCESS",
@@ -3721,6 +3854,98 @@ def execute_live_order(data: LiveOrderRequest):
         "placed": placed_orders,
         "trade": trade
     }
+
+def execute_live_exit_orders(legs: List[Dict]) -> Dict:
+    token = state.settings.get("upstox_access_token")
+    if not token or state.settings.get("feed_mode") != "Upstox":
+        return {"status": "SKIPPED", "message": "Simulation / No token"}
+    
+    url = "https://api.upstox.com/v2/order/place"
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"Bearer {token}"
+    }
+    
+    placed_orders = []
+    failed_orders = []
+    
+    # MARGIN SAFETY RULE: Separate short option legs (SELL) from long hedge legs (BUY)
+    # Step 1: Buy back short option legs FIRST so margin requirement drops to zero
+    sell_legs_to_close = [l for l in legs if l.get("action") == "SELL"]
+    buy_legs_to_close = [l for l in legs if l.get("action") == "BUY"]
+    
+    sell_exit_order_ids = []
+    for leg in sell_legs_to_close:
+        inst_key = leg.get("instrument_key")
+        qty = leg.get("quantity", 65)
+        if not inst_key or inst_key.startswith("SIM_"):
+            continue
+        payload = {
+            "quantity": qty,
+            "product": "I",
+            "validity": "DAY",
+            "price": 0.0,
+            "tag": "decision-engine-exit",
+            "instrument_token": inst_key,
+            "order_type": "MARKET",
+            "transaction_type": "BUY",  # Buyback short option
+            "disclosed_quantity": 0,
+            "trigger_price": 0.0,
+            "is_amo": False
+        }
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=5)
+            res_json = resp.json()
+            if resp.status_code == 200 and res_json.get("status") == "success":
+                o_id = res_json.get("data", {}).get("order_id")
+                placed_orders.append(o_id)
+                sell_exit_order_ids.append(o_id)
+                print(f"✅ UPSTOX EXIT SHORT FILL: Placed Buyback for Short Leg {inst_key} (Order ID: {o_id})")
+            else:
+                err_msg = res_json.get("errors", [{}])[0].get("message", "Unknown error") if isinstance(res_json.get("errors"), list) else str(res_json)
+                failed_orders.append({"leg": inst_key, "error": err_msg})
+        except Exception as e:
+            failed_orders.append({"leg": inst_key, "error": str(e)})
+
+    # Step 2: Await confirmation for short buybacks to release blocked margin
+    for o_id in sell_exit_order_ids:
+        wait_for_order_fill(o_id, token)
+
+    # Step 3: Sell long hedge legs SECOND
+    for leg in buy_legs_to_close:
+        inst_key = leg.get("instrument_key")
+        qty = leg.get("quantity", 65)
+        if not inst_key or inst_key.startswith("SIM_"):
+            continue
+        payload = {
+            "quantity": qty,
+            "product": "I",
+            "validity": "DAY",
+            "price": 0.0,
+            "tag": "decision-engine-exit",
+            "instrument_token": inst_key,
+            "order_type": "MARKET",
+            "transaction_type": "SELL",  # Sell long hedge
+            "disclosed_quantity": 0,
+            "trigger_price": 0.0,
+            "is_amo": False
+        }
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=5)
+            res_json = resp.json()
+            if resp.status_code == 200 and res_json.get("status") == "success":
+                o_id = res_json.get("data", {}).get("order_id")
+                placed_orders.append(o_id)
+                print(f"✅ UPSTOX EXIT LONG FILL: Placed Sell for Long Hedge {inst_key} (Order ID: {o_id})")
+            else:
+                err_msg = res_json.get("errors", [{}])[0].get("message", "Unknown error") if isinstance(res_json.get("errors"), list) else str(res_json)
+                failed_orders.append({"leg": inst_key, "error": err_msg})
+        except Exception as e:
+            failed_orders.append({"leg": inst_key, "error": str(e)})
+
+    print(f"⚡ UPSTOX SAFE EXIT COMPLETE: Placed {len(placed_orders)} exit orders. Failed: {len(failed_orders)}")
+    return {"status": "SUCCESS", "placed": placed_orders, "failed": failed_orders}
 
 @app.post("/api/settings/action")
 def trigger_action(data: TriggerOverride):
@@ -3914,6 +4139,44 @@ def delete_all_journal_trades(request: Request):
     }
 
 
+# ---------------------------------------------------------------------------
+# UPSTOX PROXY ENDPOINT
+# Allows local laptop instances to route Upstox API calls through Render's
+# whitelisted static IP. The local app sends requests here with the user token;
+# Render forwards to Upstox and returns the response.
+# ---------------------------------------------------------------------------
+class UpstoxProxyRequest(BaseModel):
+    path: str
+    method: str = "GET"
+    token: str
+    body: Optional[dict] = None
+    params: Optional[dict] = None
+
+@app.post("/api/proxy/upstox")
+def upstox_proxy(req: UpstoxProxyRequest):
+    """Secure Upstox API proxy through Render's whitelisted static IP."""
+    if not req.path.startswith("/v2/"):
+        raise HTTPException(status_code=400, detail="Only Upstox /v2/ paths are allowed.")
+    upstox_url = f"https://api.upstox.com{req.path}"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {req.token}",
+        "Content-Type": "application/json"
+    }
+    try:
+        if req.method.upper() == "POST":
+            resp = requests.post(upstox_url, headers=headers, json=req.body or {}, params=req.params, timeout=10)
+        else:
+            resp = requests.get(upstox_url, headers=headers, params=req.params, timeout=10)
+        try:
+            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+        except Exception:
+            return JSONResponse(content={"raw": resp.text}, status_code=resp.status_code)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Proxy error: {str(e)}")
+
+
+
 # ─────────────────────────────────────────────────────────────────
 # UPSTOX OAUTH 2.0 AUTO-TOKEN REFRESH FLOW
 # ─────────────────────────────────────────────────────────────────
@@ -3956,8 +4219,133 @@ def token_status():
         "message": "Token is expired. Click Login with Upstox to refresh." if is_expired else f"Token valid for {days_left} more days."
     }
 
+@app.get("/api/server-ip")
+def get_server_ip():
+    """Detect and return this server's current outgoing public IP address."""
+    try:
+        # Use multiple IP detection services as fallbacks
+        for url in [
+            "https://api.ipify.org?format=json",
+            "https://api4.my-ip.io/v2/ip.json",
+            "https://ifconfig.me/all.json"
+        ]:
+            try:
+                resp = requests.get(url, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    ip = data.get("ip") or data.get("IP") or data.get("YourFuckingIPAddress")
+                    if ip:
+                        return {"status": "SUCCESS", "server_ip": ip.strip()}
+            except Exception:
+                continue
+    except Exception as e:
+        return {"status": "ERROR", "message": str(e)}
+
+@app.get("/api/detect-ips")
+def detect_ips(request: Request):
+    """
+    Auto-detects both:
+      1. Server Outgoing Public IP (Render's IP)
+      2. Client Home Public IP (from X-Forwarded-For header)
+    """
+    x_forwarded = request.headers.get("x-forwarded-for")
+    if x_forwarded:
+        client_ip = x_forwarded.split(",")[0].strip()
+    else:
+        client_ip = request.client.host if request.client else "Unknown"
+
+    server_ip = None
+    for url in [
+        "https://api.ipify.org?format=json",
+        "https://api4.my-ip.io/v2/ip.json",
+        "https://ifconfig.me/all.json"
+    ]:
+        try:
+            resp = requests.get(url, timeout=4)
+            if resp.status_code == 200:
+                data = resp.json()
+                ip = data.get("ip") or data.get("IP")
+                if ip:
+                    server_ip = ip.strip()
+                    break
+        except Exception:
+            continue
+
+    if not server_ip:
+        server_ip = "Unknown"
+
+    return {
+        "status": "SUCCESS",
+        "server_ip": server_ip,
+        "client_ip": client_ip
+    }
+
+class UpdateIpRequest(BaseModel):
+    primary_ip: str
+    secondary_ip: Optional[str] = None
+
+@app.post("/api/update-upstox-ip")
+def update_upstox_ip(data: UpdateIpRequest):
+    """
+    Registers the given IP address(es) with Upstox as static IPs for this user account.
+    Upstox rules:
+      - Can only be changed once per calendar week.
+      - Invalidates all existing access tokens after update.
+    """
+    token = state.settings.get("upstox_access_token", "").strip()
+    if not token:
+        return {
+            "status": "ERROR",
+            "message": "No access token found. Please login with Upstox first, then register the IP."
+        }
+
+    payload = {"primary_ip": data.primary_ip.strip()}
+    if data.secondary_ip and data.secondary_ip.strip():
+        payload["secondary_ip"] = data.secondary_ip.strip()
+
+    try:
+        resp = requests.put(
+            "https://api.upstox.com/v2/user/ip",
+            json=payload,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}"
+            },
+            timeout=10
+        )
+        res_json = resp.json()
+        if resp.status_code == 200 and res_json.get("status") == "success":
+            # Token is now invalidated by Upstox — clear it so user knows to re-login
+            state.settings["upstox_access_token"] = ""
+            state.upstox_token_status = "INVALID"
+            state.save_settings()
+            return {
+                "status": "SUCCESS",
+                "message": f"✅ Server IP registered with Upstox! Your existing token has been invalidated. Please click 'Login with Upstox' to generate a new token.",
+                "registered_ip": data.primary_ip,
+                "token_cleared": True
+            }
+        else:
+            # Return the Upstox error message as-is
+            upstox_msg = res_json.get("errors", [{}])
+            if upstox_msg:
+                err = upstox_msg[0].get("message", str(res_json))
+            else:
+                err = res_json.get("message", str(res_json))
+            return {
+                "status": "ERROR",
+                "message": f"Upstox rejected the request: {err}",
+                "http_status": resp.status_code,
+                "raw": res_json
+            }
+    except Exception as e:
+        return {"status": "ERROR", "message": f"Request failed: {str(e)}"}
+
+
 @app.get("/auth/upstox")
 def auth_upstox_start(request: Request):
+
     """Generate Upstox OAuth URL and redirect the user to login."""
     api_key = state.settings.get("upstox_api_key", "").strip()
     if not api_key:
@@ -3965,13 +4353,8 @@ def auth_upstox_start(request: Request):
             content={"error": "API Key not configured. Go to Settings and enter your Upstox API Key first."},
             status_code=400
         )
-    # Reconstruct public redirect URI from reverse proxy headers if present (v3.1.47)
-    x_forwarded_proto = request.headers.get("x-forwarded-proto", "http")
-    x_forwarded_host = request.headers.get("x-forwarded-host")
-    if x_forwarded_host:
-        base_url = f"{x_forwarded_proto}://{x_forwarded_host}"
-    else:
-        base_url = str(request.base_url).rstrip('/')
+    # Dynamic redirect URI based on client host (v3.1.43)
+    base_url = str(request.base_url).rstrip('/')
     redirect_uri = f"{base_url}/auth/callback"
     params = {
         "client_id": api_key,
@@ -4013,13 +4396,8 @@ def auth_upstox_callback(request: Request, code: str = None, error: str = None):
 
     api_key = state.settings.get("upstox_api_key", "").strip()
     api_secret = state.settings.get("upstox_api_secret", "").strip()
-    # Reconstruct public redirect URI from reverse proxy headers if present (v3.1.47)
-    x_forwarded_proto = request.headers.get("x-forwarded-proto", "http")
-    x_forwarded_host = request.headers.get("x-forwarded-host")
-    if x_forwarded_host:
-        base_url = f"{x_forwarded_proto}://{x_forwarded_host}"
-    else:
-        base_url = str(request.base_url).rstrip('/')
+    # Dynamic redirect URI based on client host (v3.1.43)
+    base_url = str(request.base_url).rstrip('/')
     redirect_uri = f"{base_url}/auth/callback"
 
     if not api_key or not api_secret:

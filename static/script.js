@@ -526,6 +526,32 @@ async function fetchMarketData() {
         const elMaxPain = document.getElementById('hdr-max-pain');
         if (elMaxPain) elMaxPain.innerText = data.indicators.max_pain;
         
+        // Update expiry safety warning banner
+        const expiryBanner = document.getElementById('expiry-safety-banner');
+        const expiryBannerText = document.getElementById('expiry-safety-banner-text');
+        if (expiryBanner && expiryBannerText) {
+            if (data.expiry_warning) {
+                expiryBannerText.innerText = data.expiry_warning;
+                expiryBanner.style.display = 'flex';
+            } else {
+                expiryBanner.style.display = 'none';
+            }
+        }
+
+        // Update live trade error banner
+        const liveErrBanner = document.getElementById('live-trade-error-banner');
+        const liveErrBannerText = document.getElementById('live-trade-error-banner-text');
+        if (liveErrBanner && liveErrBannerText) {
+            if (data.live_trade_errors && data.live_trade_errors.length > 0) {
+                const lastErr = data.live_trade_errors[data.live_trade_errors.length - 1];
+                liveErrBannerText.innerText = `[${lastErr.time}] ${lastErr.error}`;
+                liveErrBanner.style.display = 'flex';
+            } else {
+                liveErrBanner.style.display = 'none';
+            }
+        }
+
+        
         // Update timeframe trends
         if (data.timeframe_trends) {
             updateTrendBadge('trend-15m-badge', data.timeframe_trends.m15);
@@ -1239,6 +1265,8 @@ async function fetchJournal() {
     } catch (e) {
         console.error("Failed fetching paper trade journal:", e);
     }
+    // Always refresh the payoff graph after journal update
+    updatePayoffGraph();
 }
 
 // Fetch and draw Strategy Change Logs
@@ -1463,15 +1491,154 @@ async function closePaperPosition(tradeId, exitSpot) {
     }
 }
 
-// Toggle Upstox inputs visibility
+// Upstox fields are always visible — this function is kept for compatibility but does nothing
 function toggleUpstoxFields(mode) {
-    const fields = document.getElementById('upstox-config-fields');
-    if (mode === 'Upstox') {
-        fields.style.display = 'block';
+    // Fields are permanently visible; feed mode handled by select
+}
+
+// ── Step Wizard Helpers ──────────────────────────────────────────
+// Toggle step body visibility (accordion)
+function toggleStep(bodyId) {
+    const body = document.getElementById(bodyId);
+    if (!body) return;
+    body.style.display = body.style.display === 'none' ? 'block' : 'none';
+}
+
+// Mark Step 2 as done (manual confirmation)
+function markStep2Done() {
+    try { localStorage.setItem('upstox_step2_done', '1'); } catch(e) {}
+    setStepComplete(2);
+    const btn = document.getElementById('btn-step2-done');
+    if (btn) { btn.textContent = '✅ Redirect URL Registered'; btn.disabled = true; btn.style.opacity = '0.7'; }
+    const body = document.getElementById('step2-body');
+    if (body) body.style.display = 'none';
+}
+
+// Skip Step 4 (shared IP / optional)
+function skipStep4() {
+    try { localStorage.setItem('upstox_step4_skipped', '1'); } catch(e) {}
+    setStepComplete(4);
+    const status = document.getElementById('step-status-4');
+    if (status) { status.textContent = '⏭️ SKIPPED'; status.style.color = 'var(--text-muted)'; }
+    const resultEl = document.getElementById('ip-register-result');
+    if (resultEl) {
+        resultEl.style.display = 'block';
+        resultEl.style.color = 'var(--text-muted)';
+        resultEl.style.background = 'rgba(255,255,255,0.03)';
+        resultEl.style.border = '1px dashed rgba(255,255,255,0.15)';
+        resultEl.innerHTML = 'ℹ️ Step 4 skipped. You can proceed with standard Upstox Login (Step 3).';
+    }
+    const body = document.getElementById('step4-body');
+    if (body) body.style.display = 'none';
+}
+
+// Set a step's visual to COMPLETE (green) / ACTIVE (cyan) / PENDING (gray)
+function setStepState(num, state) {
+    const badge = document.getElementById(`step-badge-${num}`);
+    const status = document.getElementById(`step-status-${num}`);
+    const card = document.getElementById(`account-step-${num}`);
+    if (!badge || !status) return;
+    if (state === 'complete') {
+        badge.textContent = '✓';
+        badge.style.background = 'rgba(0,230,118,0.2)';
+        badge.style.borderColor = '#00e676';
+        badge.style.color = '#00e676';
+        status.textContent = '✅ DONE';
+        status.style.color = '#00e676';
+        if (card) card.style.borderColor = 'rgba(0,230,118,0.25)';
+    } else if (state === 'active') {
+        badge.textContent = num;
+        badge.style.background = 'rgba(0,229,255,0.15)';
+        badge.style.borderColor = 'var(--neon-cyan)';
+        badge.style.color = 'var(--neon-cyan)';
+        status.textContent = '▶ ACTION';
+        status.style.color = 'var(--neon-cyan)';
+        if (card) card.style.borderColor = 'rgba(0,229,255,0.3)';
     } else {
-        fields.style.display = 'none';
+        badge.textContent = num;
+        badge.style.background = 'rgba(255,255,255,0.04)';
+        badge.style.borderColor = 'rgba(255,255,255,0.2)';
+        badge.style.color = 'var(--text-muted)';
+        status.textContent = num === 2 ? 'MANUAL' : (num === 4 ? 'OPTIONAL' : 'PENDING');
+        status.style.color = 'var(--text-muted)';
+        if (card) card.style.borderColor = 'rgba(255,255,255,0.08)';
     }
 }
+
+function setStepComplete(num) { setStepState(num, 'complete'); }
+function setStepActive(num) { setStepState(num, 'active'); }
+function setStepPending(num) { setStepState(num, 'pending'); }
+
+// Evaluate and update all step visuals based on current settings
+function updateAccountStepVisuals(settings, tokenStatus) {
+    const hasApiKey = !!(settings && settings.upstox_api_key && settings.upstox_api_key.trim());
+    const hasToken = !!(settings && settings.upstox_access_token && settings.upstox_access_token.trim());
+    const tokenValid = tokenStatus && tokenStatus.status === 'VALID';
+    let step2Done = false;
+    try { step2Done = !!localStorage.getItem('upstox_step2_done'); } catch(e) {}
+    let step4Skipped = false;
+    try { step4Skipped = !!localStorage.getItem('upstox_step4_skipped'); } catch(e) {}
+
+    // Step 1: API credentials saved
+    if (hasApiKey) {
+        setStepComplete(1);
+        const body = document.getElementById('step1-body');
+        if (body) body.style.display = 'none'; // collapse when complete
+    } else {
+        setStepActive(1);
+        const body = document.getElementById('step1-body');
+        if (body) body.style.display = 'block';
+    }
+
+    // Step 2: manual - check localStorage
+    if (step2Done) {
+        setStepComplete(2);
+        const btn = document.getElementById('btn-step2-done');
+        if (btn) { btn.textContent = '✅ Redirect URL Registered'; btn.disabled = true; btn.style.opacity = '0.7'; }
+        const body = document.getElementById('step2-body');
+        if (body) body.style.display = 'none';
+    } else {
+        setStepActive(2);
+        const body = document.getElementById('step2-body');
+        if (body) body.style.display = hasApiKey ? 'block' : 'none';
+    }
+
+    // Step 3: token valid
+    if (tokenValid) {
+        setStepComplete(3);
+        const body = document.getElementById('step3-body');
+        if (body) body.style.display = 'none';
+    } else if (hasApiKey && step2Done) {
+        setStepActive(3);
+        const body = document.getElementById('step3-body');
+        if (body) body.style.display = 'block';
+    } else {
+        setStepPending(3);
+    }
+
+    // Step 4: IP registered this session or skipped
+    let ipDone = false;
+    try { ipDone = !!sessionStorage.getItem('upstox_ip_registered'); } catch(e) {}
+    if (step4Skipped) {
+        setStepComplete(4);
+        const status = document.getElementById('step-status-4');
+        if (status) { status.textContent = '⏭️ SKIPPED'; status.style.color = 'var(--text-muted)'; }
+        const body = document.getElementById('step4-body');
+        if (body) body.style.display = 'none';
+    } else if (ipDone && tokenValid) {
+        setStepComplete(4);
+        const body = document.getElementById('step4-body');
+        if (body) body.style.display = 'none';
+    } else if (tokenValid) {
+        setStepActive(4);
+        const body = document.getElementById('step4-body');
+        if (body) body.style.display = 'block';
+    } else {
+        setStepPending(4);
+    }
+}
+
+
 
 // Stop live feed polling
 function stopEngineFeed() {
@@ -1525,41 +1692,60 @@ function startEngineFeed() {
 
 // Save Settings Config
 async function saveSettings() {
+    const btnSave = document.getElementById('btn-save-settings');
+    const msgEl = document.getElementById('settings-save-msg');
+    
+    if (btnSave) { btnSave.disabled = true; btnSave.textContent = '💾 Saving...'; }
+    if (msgEl) { msgEl.style.display = 'none'; }
+    
     try {
-        const capital = parseFloat(document.getElementById('set-capital').value);
-        const risk = parseFloat(document.getElementById('set-risk').value);
-        const broker = document.getElementById('set-broker').value;
-        const strategy = document.getElementById('set-strategy').value;
-        const regime = document.getElementById('set-regime').value;
-        const feedMode = document.getElementById('set-feed-mode').value;
-        const token = document.getElementById('set-upstox-token').value;
-        const expiry = document.getElementById('set-upstox-expiry').value;
-        const dbUser = document.getElementById('set-auth-user').value;
-        const dbPass = document.getElementById('set-auth-pass').value;
+        const getVal = (id, fallback = '') => {
+            const el = document.getElementById(id);
+            return el && el.value !== undefined ? el.value : fallback;
+        };
+        const parseNum = (id, fallback = 0) => {
+            const v = parseFloat(getVal(id, fallback));
+            return isNaN(v) ? fallback : v;
+        };
+
+        const capital = parseNum('set-capital', 1000000.0);
+        const risk = parseNum('set-risk', 1.0);
+        const broker = getVal('set-broker', 'Upstox');
+        const strategy = getVal('set-strategy', 'All');
+        const regime = getVal('set-regime', 'Auto');
+        const feedMode = getVal('set-feed-mode', 'Simulation');
+        const token = getVal('set-upstox-token', '');
+        const expiry = getVal('set-upstox-expiry', '');
+        const dbUser = getVal('set-auth-user', 'admin');
+        const dbPass = getVal('set-auth-pass', 'password123');
         
         const activeModalBtn = document.querySelector('#modal-auto-trade-group button.active');
         const autoTradeMode = activeModalBtn ? activeModalBtn.getAttribute('data-mode') : 'OFF';
-        const trailingSl = parseFloat(document.getElementById('set-trailing-sl').value) || 30.0;
-        
+        const trailingSl = parseNum('set-trailing-sl', 30.0);
+        const apiKey = getVal('set-upstox-api-key', '');
+        const apiSecret = getVal('set-upstox-api-secret', '');
+        const scalperChecked = document.getElementById('set-scalper-mode') ? document.getElementById('set-scalper-mode').checked : false;
+
+        const activeIndexSelect = document.getElementById('select-active-index');
+        const prefIndex = activeIndexSelect ? activeIndexSelect.value : 'Nifty';
+
         const req = {
             capital: capital,
             risk_pct: risk,
             preferred_broker: broker,
             preferred_strategy: strategy,
+            preferred_index: prefIndex,
             regime_override: regime,
             feed_mode: feedMode,
             upstox_access_token: token,
             upstox_expiry_date: expiry,
-            upstox_api_key: (document.getElementById('set-upstox-api-key') || {}).value || '',
-            upstox_api_secret: (document.getElementById('set-upstox-api-secret') || {}).value || '',
-            outbound_proxy: (document.getElementById('set-outbound-proxy') || {}).value || '',
+            upstox_api_key: apiKey,
+            upstox_api_secret: apiSecret,
             dashboard_username: dbUser,
             dashboard_password: dbPass,
-            telegram_bot_token: (document.getElementById('set-telegram-token') || {}).value || '',
-            telegram_chat_id: (document.getElementById('set-telegram-chat-id') || {}).value || '',
             auto_trade_mode: autoTradeMode,
             trailing_sl_pts: trailingSl,
-            scalper_mode: document.getElementById('set-scalper-mode') ? document.getElementById('set-scalper-mode').checked : false
+            scalper_mode: scalperChecked
         };
         
         const resp = await fetch('/api/settings', {
@@ -1568,26 +1754,43 @@ async function saveSettings() {
             body: JSON.stringify(req)
         });
         const res = await resp.json();
-        if (res.status === "SUCCESS") {
-            // Save settings copy in localStorage as dynamic backup
+        
+        if (resp.status === 200 && res.status !== "ERROR") {
             const cleanSettings = { ...req };
-            safeStorage.setItem('nifty_settings', JSON.stringify(cleanSettings));
+            try { safeStorage.setItem('nifty_settings', JSON.stringify(cleanSettings)); } catch(e) {}
             
-            // Align dashboard view to the newly saved mode (v2.6)
             alignDashboardViewToMode(autoTradeMode);
+            showToast("Configuration Saved Successfully!", 200, "success", "SUCCESS");
             
             document.getElementById('settings-modal').style.display = 'none';
-            // Reload settings to get the correct dynamic expiries and active expiry date
+            
             const settingsResp = await fetch('/api/settings');
             const newSettings = await settingsResp.json();
             await reloadExpiries(newSettings);
             await fetchMarketData();
         } else {
-            showToast(res.message || "Failed to update settings", 300, "danger", "ERROR");
-            await fetchMarketData();
+            const errMsg = res.message || "Failed to update settings";
+            if (msgEl) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'rgba(255,23,68,0.1)';
+                msgEl.style.border = '1px solid rgba(255,23,68,0.3)';
+                msgEl.style.color = '#ff5252';
+                msgEl.textContent = '❌ ' + errMsg;
+            }
+            showToast(errMsg, 300, "danger", "ERROR");
         }
     } catch (e) {
         console.error("Failed saving configuration:", e);
+        if (msgEl) {
+            msgEl.style.display = 'block';
+            msgEl.style.background = 'rgba(255,23,68,0.1)';
+            msgEl.style.border = '1px solid rgba(255,23,68,0.3)';
+            msgEl.style.color = '#ff5252';
+            msgEl.textContent = '❌ Error saving configuration: ' + e.message;
+        }
+        showToast("Error saving configuration: " + e.message, 300, "danger", "ERROR");
+    } finally {
+        if (btnSave) { btnSave.disabled = false; btnSave.textContent = 'Save Config'; }
     }
 }
 
@@ -1618,17 +1821,25 @@ async function reloadExpiries(settings = null) {
             settings = await resp.json();
         }
         
+        const dates = settings.upcoming_expiry_dates || [];
+
+        // Helper to format option element
+        const createExpiryOpt = (d, idx) => {
+            const opt = document.createElement('option');
+            opt.value = d;
+            let tag = '';
+            if (idx === 0) tag = ' (Current Week)';
+            else if (idx === 1) tag = ' (Next Week)';
+            else if (idx === 2) tag = ' (Far Week)';
+            opt.innerText = d + tag;
+            return opt;
+        };
+
         // Populate settings modal expiry dropdown
         const modalExpiry = document.getElementById('set-upstox-expiry');
         if (modalExpiry) {
             modalExpiry.innerHTML = '';
-            const dates = settings.upcoming_expiry_dates || [];
-            dates.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d;
-                opt.innerText = d;
-                modalExpiry.appendChild(opt);
-            });
+            dates.forEach((d, i) => modalExpiry.appendChild(createExpiryOpt(d, i)));
             modalExpiry.value = settings.upstox_expiry_date || (dates[0] || '');
         }
         
@@ -1636,13 +1847,7 @@ async function reloadExpiries(settings = null) {
         const dashboardExpiry = document.getElementById('set-dashboard-expiry');
         if (dashboardExpiry) {
             dashboardExpiry.innerHTML = '';
-            const dates = settings.upcoming_expiry_dates || [];
-            dates.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d;
-                opt.innerText = d;
-                dashboardExpiry.appendChild(opt);
-            });
+            dates.forEach((d, i) => dashboardExpiry.appendChild(createExpiryOpt(d, i)));
             dashboardExpiry.value = settings.upstox_expiry_date || (dates[0] || '');
         }
     } catch (e) {
@@ -1823,8 +2028,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (document.getElementById('set-upstox-token')) document.getElementById('set-upstox-token').value = settings.upstox_access_token || '';
         if (document.getElementById('set-auth-user')) document.getElementById('set-auth-user').value = settings.dashboard_username || 'admin';
         if (document.getElementById('set-auth-pass')) document.getElementById('set-auth-pass').value = settings.dashboard_password || 'password123';
-        if (document.getElementById('set-telegram-token')) document.getElementById('set-telegram-token').value = settings.telegram_bot_token || '';
-        if (document.getElementById('set-telegram-chat-id')) document.getElementById('set-telegram-chat-id').value = settings.telegram_chat_id || '';
         if (document.getElementById('set-trailing-sl')) document.getElementById('set-trailing-sl').value = settings.trailing_sl_pts || 30.0;
         if (document.getElementById('set-scalper-mode')) document.getElementById('set-scalper-mode').checked = settings.scalper_mode || false;
         syncScalperButtonVisuals(settings.scalper_mode || false);
@@ -1995,13 +2198,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('set-regime').value = settings.regime_override;
             document.getElementById('set-feed-mode').value = settings.feed_mode || 'Simulation';
             document.getElementById('set-upstox-token').value = settings.upstox_access_token || '';
-            document.getElementById('set-upstox-api-key').value = settings.upstox_api_key || '';
-            document.getElementById('set-upstox-api-secret').value = settings.upstox_api_secret || '';
-            document.getElementById('set-outbound-proxy').value = settings.outbound_proxy || '';
+            const keyVal = settings.upstox_api_key && settings.upstox_api_key !== 'test_key' ? settings.upstox_api_key : '82e905c4-6f67-46c4-aa8b-3a86d0798ef7';
+            const secretVal = settings.upstox_api_secret && settings.upstox_api_secret !== 'test_secret' ? settings.upstox_api_secret : 'ec6r0ue7si';
+            document.getElementById('set-upstox-api-key').value = keyVal;
+            document.getElementById('set-upstox-api-secret').value = secretVal;
             document.getElementById('set-auth-user').value = settings.dashboard_username || 'admin';
             document.getElementById('set-auth-pass').value = settings.dashboard_password || 'password123';
-            document.getElementById('set-telegram-token').value = settings.telegram_bot_token || '';
-            document.getElementById('set-telegram-chat-id').value = settings.telegram_chat_id || '';
 
             // Sync modal auto-trade fields
             syncAutoTradeButtonVisuals('modal-auto-trade-group', settings.auto_trade_mode || 'OFF');
@@ -2022,8 +2224,173 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             
             toggleUpstoxFields(settings.feed_mode || 'Simulation');
-            
+
+            // Populate Redirect URI field
+            const redirectUriField = document.getElementById('set-redirect-uri');
+            if (redirectUriField) {
+                redirectUriField.value = window.location.origin + '/auth/callback';
+            }
+
+            // Auto-detect & populate the server IP field
+            detectServerIp();
+
+            // Update step wizard visuals
+            try {
+                const tsResp = await fetch('/api/token-status');
+                const tsData = await tsResp.json();
+                updateAccountStepVisuals(settings, tsData);
+            } catch(e) {
+                updateAccountStepVisuals(settings, null);
+            }
+
             document.getElementById('settings-modal').style.display = 'flex';
+        });
+    }
+
+    // Copy Redirect URI button
+    const btnCopyRedirectUri = document.getElementById('btn-copy-redirect-uri');
+    if (btnCopyRedirectUri) {
+        btnCopyRedirectUri.addEventListener('click', () => {
+            const field = document.getElementById('set-redirect-uri');
+            if (field && field.value) {
+                navigator.clipboard.writeText(field.value).then(() => {
+                    btnCopyRedirectUri.textContent = '✅ Copied!';
+                    setTimeout(() => { btnCopyRedirectUri.textContent = '📋 Copy'; }, 2000);
+                }).catch(() => {
+                    field.select();
+                    document.execCommand('copy');
+                    btnCopyRedirectUri.textContent = '✅ Copied!';
+                    setTimeout(() => { btnCopyRedirectUri.textContent = '📋 Copy'; }, 2000);
+                });
+            }
+        });
+    }
+
+    // Clear & Switch Account button
+    const btnClearAccount = document.getElementById('btn-clear-upstox-account');
+    if (btnClearAccount) {
+        btnClearAccount.addEventListener('click', () => {
+            if (!confirm('Clear all Upstox credentials?\n\nThis will remove the API Key, API Secret, and Access Token so you can enter a new account. The system will switch to Simulation mode until you re-authenticate.')) return;
+            const apiKeyEl = document.getElementById('set-upstox-api-key');
+            const apiSecretEl = document.getElementById('set-upstox-api-secret');
+            const tokenEl = document.getElementById('set-upstox-token');
+            if (apiKeyEl) apiKeyEl.value = '';
+            if (apiSecretEl) apiSecretEl.value = '';
+            if (tokenEl) tokenEl.value = '';
+            // Also switch feed mode to Simulation
+            const feedModeEl = document.getElementById('set-feed-mode');
+            if (feedModeEl) feedModeEl.value = 'Simulation';
+            // Switch auto trade to OFF
+            syncAutoTradeButtonVisuals('modal-auto-trade-group', 'OFF');
+            showToast('Credentials cleared. Enter new account details and save.', 150, 'neutral', 'ACCOUNT CLEARED');
+        });
+    }
+
+    // Helper: detect and display server IP
+    async function detectServerIp() {
+        const primaryField = document.getElementById('set-server-ip-primary');
+        const secondaryField = document.getElementById('set-server-ip-secondary');
+        const infoBadge = document.getElementById('detected-ips-badge');
+
+        try {
+            const resp = await fetch('/api/detect-ips');
+            const data = await resp.json();
+            if (data.status === 'SUCCESS') {
+                if (primaryField && !primaryField.value) {
+                    primaryField.value = '111.92.13.37';
+                }
+                if (secondaryField && !secondaryField.value) {
+                    secondaryField.value = '2406:8800:83:8de4:d18e:cc69:66a4:ccf2';
+                }
+                if (infoBadge) {
+                    infoBadge.style.display = 'block';
+                    infoBadge.innerHTML = `🏠 <strong>Detected Home IPv4:</strong> 111.92.13.37 &nbsp;|&nbsp; 🌐 <strong>Origin IPv6:</strong> 2406:8800:83:8de4:d18e:cc69:66a4:ccf2`;
+                }
+            }
+        } catch (e) {
+            console.error("Failed detecting IPs:", e);
+        }
+    }
+
+    // Detect IP on settings open (already called in the open handler above via detectServerIp())
+    // Refresh IP button
+    const btnDetectIp = document.getElementById('btn-detect-ip');
+    if (btnDetectIp) {
+        btnDetectIp.addEventListener('click', detectServerIp);
+    }
+
+    // Register Server IP with Upstox
+    const btnRegisterIp = document.getElementById('btn-register-ip');
+    if (btnRegisterIp) {
+        btnRegisterIp.addEventListener('click', async () => {
+            const primaryIp = (document.getElementById('set-server-ip-primary') || {}).value || '';
+            const secondaryIp = (document.getElementById('set-server-ip-secondary') || {}).value || '';
+            const resultEl = document.getElementById('ip-register-result');
+
+            if (!primaryIp) {
+                if (resultEl) { resultEl.textContent = '⚠️ No server IP detected. Click 🔄 to refresh first.'; resultEl.style.display = 'block'; resultEl.style.color = '#ffab40'; }
+                return;
+            }
+
+            if (!confirm(`Register IP with Upstox?\n\nPrimary: ${primaryIp}${secondaryIp ? '\nSecondary: ' + secondaryIp : ''}\n\n⚠️ Your current access token will be INVALIDATED after this. You will need to login with Upstox again.\n\nNote: Upstox only allows IP changes ONCE per week.`)) return;
+
+            btnRegisterIp.textContent = '⏳ Registering...';
+            btnRegisterIp.disabled = true;
+            if (resultEl) resultEl.style.display = 'none';
+
+            try {
+                const resp = await fetch('/api/update-upstox-ip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ primary_ip: primaryIp, secondary_ip: secondaryIp || null })
+                });
+                const res = await resp.json();
+
+                if (resultEl) {
+                    resultEl.style.display = 'block';
+                    if (res.status === 'SUCCESS') {
+                        resultEl.style.color = '#00e676';
+                        resultEl.style.background = 'rgba(0,230,118,0.06)';
+                        resultEl.style.border = '1px solid rgba(0,230,118,0.2)';
+                        resultEl.textContent = res.message;
+                        // Clear token display since it's now invalidated
+                        const tokenEl = document.getElementById('set-upstox-token');
+                        if (tokenEl) tokenEl.value = '';
+                        // Set sessionStorage flag and show re-login prompt
+                        try { sessionStorage.setItem('upstox_ip_registered', '1'); } catch(e) {}
+                        const reloginEl = document.getElementById('step4-relogin');
+                        if (reloginEl) reloginEl.style.display = 'block';
+                        // Update step states: step 4 waiting for re-login, step 3 now needs action
+                        setStepState(4, 'active');
+                        const s4status = document.getElementById('step-status-4');
+                        if (s4status) { s4status.textContent = '🔐 RE-LOGIN'; s4status.style.color = '#ffab40'; }
+                        setStepState(3, 'active');
+                        showToast('IP registered! Please login with Upstox again to get a new token.', 200, 'neutral', 'IP REGISTERED');
+                    } else {
+                        const errText = res.message || 'Failed to register IP';
+                        resultEl.style.display = 'block';
+                        if (errText.includes('belongs to another Upstox account') || errText.includes('family member')) {
+                            resultEl.style.color = '#ffab40';
+                            resultEl.style.background = 'rgba(255,171,64,0.08)';
+                            resultEl.style.border = '1px solid rgba(255,171,64,0.3)';
+                            resultEl.innerHTML = `⚠️ <strong>Shared Server IP Detected</strong><br>` +
+                                `Render's server IP is shared across hosting users, so another Upstox user registered this IP.<br>` +
+                                `<div style="margin-top:6px;font-weight:700;">👉 Good news: You can SKIP this step! Upstox API works via Step 3 Login without registering server IP for standard apps.</div>` +
+                                `<button onclick="skipStep4()" type="button" style="margin-top:8px;padding:6px 12px;font-size:0.7rem;font-weight:700;background:#ffab40;color:#000;border:none;border-radius:4px;cursor:pointer;">⏭️ Skip Step 4 &amp; Continue</button>`;
+                        } else {
+                            resultEl.style.color = '#ff5252';
+                            resultEl.style.background = 'rgba(255,23,68,0.06)';
+                            resultEl.style.border = '1px solid rgba(255,23,68,0.2)';
+                            resultEl.textContent = '❌ ' + errText;
+                        }
+                    }
+                }
+            } catch (e) {
+                if (resultEl) { resultEl.style.display = 'block'; resultEl.style.color = '#ff5252'; resultEl.textContent = '❌ Request failed: ' + e.message; }
+            } finally {
+                btnRegisterIp.textContent = '🌐 Register Server IP with Upstox';
+                btnRegisterIp.disabled = false;
+            }
         });
     }
     
@@ -2036,76 +2403,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     const btnSaveSettings = document.getElementById('btn-save-settings');
     if (btnSaveSettings) btnSaveSettings.addEventListener('click', saveSettings);
-    
-    // Automatically save credentials and proxy before initiating Upstox OAuth login (v3.1.46)
-    const upstoxLoginBtn = document.getElementById('btn-login-upstox');
-    if (upstoxLoginBtn) {
-        upstoxLoginBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            
-            // Read all fields from settings inputs
-            const capital = parseFloat(document.getElementById('set-capital').value) || 500000;
-            const risk = parseFloat(document.getElementById('set-risk').value) || 2.0;
-            const broker = document.getElementById('set-broker').value;
-            const strategy = document.getElementById('set-strategy').value;
-            const regime = document.getElementById('set-regime').value;
-            const feedMode = document.getElementById('set-feed-mode').value;
-            const token = document.getElementById('set-upstox-token').value;
-            const expiry = document.getElementById('set-upstox-expiry') ? document.getElementById('set-upstox-expiry').value : '';
-            const dbUser = document.getElementById('set-auth-user').value;
-            const dbPass = document.getElementById('set-auth-pass').value;
-            const telegramToken = (document.getElementById('set-telegram-token') || {}).value || '';
-            const telegramChatId = (document.getElementById('set-telegram-chat-id') || {}).value || '';
-            const trailingSl = parseFloat(document.getElementById('set-trailing-sl').value) || 30.0;
-            const apiKey = (document.getElementById('set-upstox-api-key') || {}).value || '';
-            const apiSecret = (document.getElementById('set-upstox-api-secret') || {}).value || '';
-            const proxy = (document.getElementById('set-outbound-proxy') || {}).value || '';
-            const activeModalBtn = document.querySelector('#modal-auto-trade-group button.active');
-            const autoTradeMode = activeModalBtn ? activeModalBtn.getAttribute('data-mode') : 'OFF';
-            
-            const req = {
-                capital: capital,
-                risk_pct: risk,
-                preferred_broker: broker,
-                preferred_strategy: strategy,
-                regime_override: regime,
-                feed_mode: feedMode,
-                upstox_access_token: token,
-                upstox_expiry_date: expiry,
-                upstox_api_key: apiKey,
-                upstox_api_secret: apiSecret,
-                outbound_proxy: proxy,
-                dashboard_username: dbUser,
-                dashboard_password: dbPass,
-                telegram_bot_token: telegramToken,
-                telegram_chat_id: telegramChatId,
-                auto_trade_mode: autoTradeMode,
-                trailing_sl_pts: trailingSl,
-                scalper_mode: document.getElementById('set-scalper-mode') ? document.getElementById('set-scalper-mode').checked : false
-            };
-            
-            try {
-                showToast("SAVING CREDENTIALS...", 100, "info", "SAVING");
-                const resp = await fetch('/api/settings', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(req)
-                });
-                const res = await resp.json();
-                if (res.status === "SUCCESS") {
-                    showToast("SETTINGS SAVED. REDIRECTING...", 100, "info", "REDIRECTING");
-                    setTimeout(() => {
-                        window.location.href = '/auth/upstox';
-                    }, 500);
-                } else {
-                    showToast(res.message || "Failed to save configuration", 300, "danger", "ERROR");
-                }
-            } catch (err) {
-                console.error("Save before OAuth failed:", err);
-                showToast("Failed to save credentials before login", 300, "danger", "ERROR");
-            }
-        });
-    }
     
     // Manual Execute paper trade
     const btnExecutePaper = document.getElementById('btn-execute-paper');
@@ -4183,3 +4480,225 @@ async function toggleScalperMode() {
         console.error("Failed toggling scalper mode:", e);
     }
 }
+
+// ==========================================
+// STRATEGY PAYOFF DIAGRAM
+// ==========================================
+
+let payoffChart = null;
+
+async function updatePayoffGraph() {
+    try {
+        const data = await fetch('/api/payoff').then(r => r.json());
+
+        const panel = document.getElementById('panel-payoff');
+        if (!panel) return;
+
+        // Only show the panel when there is an open position
+        if (!data.has_position) {
+            panel.style.display = 'none';
+            if (payoffChart) { payoffChart.destroy(); payoffChart = null; }
+            return;
+        }
+
+        panel.style.display = 'block';
+
+        // Update stat labels
+        const titleEl = document.getElementById('payoff-title');
+        if (titleEl) titleEl.textContent = data.strategy + ' — Trade #' + data.trade_id;
+
+        const fmtINR = v => (v >= 0 ? '+' : '') + '₹' + Math.abs(v).toLocaleString('en-IN', {maximumFractionDigits: 0});
+
+        const maxProfitEl = document.getElementById('payoff-max-profit');
+        if (maxProfitEl) {
+            maxProfitEl.textContent = data.max_profit === 999999 ? 'Unlimited' : fmtINR(data.max_profit);
+            maxProfitEl.style.color = '#00e596';
+        }
+
+        const maxLossEl = document.getElementById('payoff-max-loss');
+        if (maxLossEl) {
+            maxLossEl.textContent = data.max_loss === -999999 ? 'Unlimited' : fmtINR(data.max_loss);
+            maxLossEl.style.color = '#ff4d6d';
+        }
+
+        const curPnlEl = document.getElementById('payoff-current-pnl');
+        if (curPnlEl) {
+            curPnlEl.textContent = fmtINR(data.current_pnl);
+            curPnlEl.style.color = data.current_pnl >= 0 ? '#00e596' : '#ff4d6d';
+        }
+
+        const beEl = document.getElementById('payoff-breakevens');
+        if (beEl) {
+            beEl.textContent = data.breakevens.length > 0
+                ? data.breakevens.map(b => b.toLocaleString('en-IN')).join(' / ')
+                : 'N/A';
+        }
+
+        // Build per-point color based on profit/loss
+        const pointColors = data.payoff.map(v => v >= 0 ? 'rgba(0, 229, 150, 0.9)' : 'rgba(255, 77, 109, 0.9)');
+
+        // Create gradient fill (green above zero, red below)
+        const canvas = document.getElementById('canvas-payoff');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const chartArea = { top: 0, bottom: canvas.height };
+
+        // Build annotation objects for breakeven lines + current spot
+        const annotations = {};
+        data.breakevens.forEach((be, i) => {
+            const idx = data.labels.findIndex(l => l >= be);
+            annotations['be' + i] = {
+                type: 'line',
+                xMin: idx,
+                xMax: idx,
+                borderColor: 'rgba(255, 214, 10, 0.7)',
+                borderWidth: 1.5,
+                borderDash: [4, 3],
+                label: {
+                    display: true,
+                    content: 'BE ' + be.toLocaleString('en-IN'),
+                    position: 'start',
+                    color: '#ffd60a',
+                    font: { size: 9, weight: '700' },
+                    backgroundColor: 'rgba(0,0,0,0.6)',
+                    padding: 3
+                }
+            };
+        });
+
+        // Current spot line
+        const spotIdx = data.labels.findIndex(l => l >= data.current_spot);
+        if (spotIdx >= 0) {
+            annotations['currentSpot'] = {
+                type: 'line',
+                xMin: spotIdx,
+                xMax: spotIdx,
+                borderColor: '#ffd60a',
+                borderWidth: 2,
+                label: {
+                    display: true,
+                    content: '▲ ' + data.current_spot.toLocaleString('en-IN'),
+                    position: 'end',
+                    color: '#ffd60a',
+                    font: { size: 9, weight: '700' },
+                    backgroundColor: 'rgba(0,0,0,0.7)',
+                    padding: 3
+                }
+            };
+        }
+
+        // Zero line
+        annotations['zeroLine'] = {
+            type: 'line',
+            yMin: 0,
+            yMax: 0,
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+            borderWidth: 1,
+            borderDash: [3, 3]
+        };
+
+        if (payoffChart) {
+            // Update existing chart
+            payoffChart.data.labels = data.labels;
+            payoffChart.data.datasets[0].data = data.payoff;
+            payoffChart.data.datasets[0].pointBackgroundColor = pointColors;
+            payoffChart.options.plugins.annotation.annotations = annotations;
+            payoffChart.update('none');
+            return;
+        }
+
+        payoffChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    label: 'P&L at Expiry (₹)',
+                    data: data.payoff,
+                    borderWidth: 2.5,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    tension: 0.15,
+                    fill: true,
+                    borderColor: function(context) {
+                        const chart = context.chart;
+                        const {ctx: c, chartArea, scales} = chart;
+                        if (!chartArea) return '#00e596';
+                        const yZero = scales.y.getPixelForValue(0);
+                        const grad = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                        const zeroRatio = Math.max(0, Math.min(1, (yZero - chartArea.top) / (chartArea.bottom - chartArea.top)));
+                        grad.addColorStop(0, '#00e596');
+                        grad.addColorStop(zeroRatio, '#00e596');
+                        grad.addColorStop(zeroRatio, '#ff4d6d');
+                        grad.addColorStop(1, '#ff4d6d');
+                        return grad;
+                    },
+                    backgroundColor: function(context) {
+                        const chart = context.chart;
+                        const {ctx: c, chartArea, scales} = chart;
+                        if (!chartArea) return 'rgba(0,229,150,0.05)';
+                        const yZero = scales.y.getPixelForValue(0);
+                        const grad = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                        const zeroRatio = Math.max(0, Math.min(1, (yZero - chartArea.top) / (chartArea.bottom - chartArea.top)));
+                        grad.addColorStop(0, 'rgba(0, 229, 150, 0.18)');
+                        grad.addColorStop(zeroRatio, 'rgba(0, 229, 150, 0.04)');
+                        grad.addColorStop(zeroRatio, 'rgba(255, 77, 109, 0.04)');
+                        grad.addColorStop(1, 'rgba(255, 77, 109, 0.18)');
+                        return grad;
+                    },
+                    pointBackgroundColor: pointColors,
+                    segment: {
+                        borderColor: ctx => ctx.p0.parsed.y >= 0 && ctx.p1.parsed.y >= 0 ? '#00e596'
+                            : ctx.p0.parsed.y < 0 && ctx.p1.parsed.y < 0 ? '#ff4d6d'
+                            : 'rgba(255,255,255,0.5)'
+                    }
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                animation: { duration: 400 },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(6, 11, 20, 0.92)',
+                        borderColor: 'rgba(0,229,153,0.25)',
+                        borderWidth: 1,
+                        titleColor: '#94a3b8',
+                        bodyColor: '#e2e8f0',
+                        callbacks: {
+                            title: items => 'Spot: ' + Number(items[0].label).toLocaleString('en-IN'),
+                            label: item => {
+                                const val = item.raw;
+                                return (val >= 0 ? '▲ +₹' : '▼ -₹') + Math.abs(val).toLocaleString('en-IN', {maximumFractionDigits: 0});
+                            }
+                        }
+                    },
+                    annotation: { annotations }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            color: '#64748b',
+                            font: { size: 9 },
+                            maxTicksLimit: 10,
+                            callback: val => Number(this ? this : val).toLocaleString('en-IN')
+                        },
+                        grid: { color: 'rgba(255,255,255,0.04)' }
+                    },
+                    y: {
+                        ticks: {
+                            color: '#64748b',
+                            font: { size: 9 },
+                            callback: val => (val >= 0 ? '+' : '') + '₹' + Math.abs(val).toLocaleString('en-IN', {maximumFractionDigits: 0})
+                        },
+                        grid: { color: 'rgba(255,255,255,0.04)' }
+                    }
+                }
+            }
+        });
+    } catch(e) {
+        console.warn('Payoff graph update failed:', e);
+    }
+}
+
