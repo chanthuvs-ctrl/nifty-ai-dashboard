@@ -91,9 +91,9 @@ def calculate_greeks(
     sigma: implied volatility (as decimal, e.g., 0.15)
     r: risk-free interest rate (as decimal, e.g., 0.07)
     """
-    if t <= 0:
-        # Expiry state
-        price = max(0.0, s - k) if is_call else max(0.0, k - s)
+    if t <= 0 or sigma <= 0 or s <= 0 or k <= 0:
+        # Expiry state or invalid inputs — return zero greeks
+        price = max(0.0, s - k) if (is_call and k > 0) else (max(0.0, k - s) if k > 0 else 0.0)
         return {
             "price": price, "delta": 1.0 if is_call and s > k else (-1.0 if not is_call and s < k else 0.0),
             "gamma": 0.0, "theta": 0.0, "vega": 0.0
