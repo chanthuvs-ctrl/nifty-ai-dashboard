@@ -91,7 +91,7 @@ def calculate_greeks(
     sigma: implied volatility (as decimal, e.g., 0.15)
     r: risk-free interest rate (as decimal, e.g., 0.07)
     """
-    if t <= 0:
+    if t <= 0 or sigma <= 0 or s <= 0 or k <= 0:
         # Expiry state
         price = max(0.0, s - k) if is_call else max(0.0, k - s)
         return {
