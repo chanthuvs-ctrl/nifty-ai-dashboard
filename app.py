@@ -2247,6 +2247,13 @@ class SimulationState:
                     else:
                         print(f"🔄 COOLDOWN SKIP: Strategy shifted {last_closed_strat} → {rec}, entering immediately.")
             
+            # MARGIN GUARD: If Upstox rejected a trade with insufficient margin this session,
+            # restrict auto-trade entries to low-margin strategies only (Buy CE/PE, Spreads).
+            high_margin_strategies = ["Short Strangle", "Short Straddle", "Iron Condor"]
+            if getattr(state, "margin_insufficient", False) and rec in high_margin_strategies:
+                print(f"⚠️ MARGIN GUARD: Skipping {rec} entry — insufficient margin flag active. Waiting for Buy CE/PE or Spread signal.")
+                return
+
             if conf >= 65.0 and rec in allowed_strategies:
                 # IV Crush Check for Buying / Spread strategies - BYPASSED for Paper & Scalper modes
                 is_scalper = self.settings.get("scalper_mode", False)
@@ -3837,15 +3844,22 @@ def execute_live_order(data: LiveOrderRequest):
         first_err = failed_orders[0].get("error", "Unknown error")
         err_msg = f"❌ Live Order Placement Failed ({data.strategy}): {first_err}"
         print(f"🚨 UPSTOX LIVE ERROR: {err_msg}")
-        
+
+        # Detect margin-related rejection from Upstox
+        margin_keywords = ["add rs", "insufficient", "margin", "funds", "balance"]
+        is_margin_error = any(kw in first_err.lower() for kw in margin_keywords)
+        if is_margin_error:
+            state.margin_insufficient = True
+            print(f"🔴 MARGIN INSUFFICIENT FLAG SET: System will only allow low-margin strategies (Buy CE/PE, Spreads) going forward this session.")
+
         # Log to live_trade_errors for dashboard alert banner
         state.live_trade_errors = getattr(state, 'live_trade_errors', [])
         state.live_trade_errors.append({"time": get_ist_time_str(), "error": err_msg})
         state.live_trade_errors = state.live_trade_errors[-10:]
 
         if placed_orders:
-            # 🚨 EMERGENCY AUTO-ROLLBACK: Square off placed legs to prevent naked position risk
-            print(f"🚨 EMERGENCY AUTO-ROLLBACK: Placed {len(placed_orders)} legs, Failed {len(failed_orders)} legs. Squaring off placed legs on Upstox to eliminate naked option risk...")
+            # Square off any legs that were placed — but do NOT retry entry
+            print(f"🚨 PARTIAL FILL EXIT: {len(placed_orders)} legs placed, {len(failed_orders)} legs failed. Exiting placed legs on Upstox...")
             placed_leg_details = []
             for p in placed_orders:
                 inst = p["leg"]
@@ -3853,22 +3867,22 @@ def execute_live_order(data: LiveOrderRequest):
                     if l_logged["instrument_key"] == inst:
                         placed_leg_details.append(l_logged)
                         break
-            
+
             if placed_leg_details:
                 try:
                     rollback_res = execute_live_exit_orders(placed_leg_details)
-                    print(f"⚡ AUTO-ROLLBACK EXECUTED: {rollback_res}")
+                    print(f"⚡ PARTIAL EXIT EXECUTED: {rollback_res}")
                 except Exception as rollback_err:
-                    print(f"❌ AUTO-ROLLBACK ERROR: {rollback_err}")
-            
+                    print(f"❌ PARTIAL EXIT ERROR: {rollback_err}")
+
             journal.close_trade(trade["id"], state.spot_price)
-            trade["reason"] = f"🚨 Emergency Auto-Rollback: Partial fill on Upstox (Placed: {len(placed_orders)}, Failed: {len(failed_orders)}) | Err: {first_err}"
+            trade["reason"] = f"❌ Partial Fill Exit: {len(placed_orders)} placed / {len(failed_orders)} rejected | {'⚠️ Margin Insufficient — switching to low-margin strategies only' if is_margin_error else first_err}"
             journal.save_journal()
             state.auto_trade_active_id = None
         else:
-            # 0 orders placed — close and mark trade as FAILED immediately so trade lock is not stuck!
+            # No legs placed — just close the trade record and unlock
             journal.close_trade(trade["id"], state.spot_price)
-            trade["reason"] = f"❌ Live Order Failed: {first_err}"
+            trade["reason"] = f"❌ Live Order Rejected: {first_err}{'  ⚠️ Margin Insufficient' if is_margin_error else ''}"
             trade["outcome"] = "FAILED"
             journal.save_journal()
             state.auto_trade_active_id = None
