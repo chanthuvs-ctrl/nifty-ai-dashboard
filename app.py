@@ -132,11 +132,29 @@ def calculate_greeks(
 
 
 def fetch_live_index_price(index_symbol: str = "Nifty"):
-    """Fetch live Nifty 50 or SENSEX spot price and intraday changes from Google Finance."""
+    """Fetch live Nifty 50 or SENSEX spot price, previous close, and intraday changes."""
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
-    price, change_pct, change_val = None, 0.0, 0.0
+    price, change_pct, change_val, prev_close = None, 0.0, 0.0, None
+    
+    # 1. Primary: Yahoo Finance API (Exact Previous Close & Live Price)
+    try:
+        yf_symbol = "^BSESN" if index_symbol.lower() == "sensex" else "^NSEI"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf_symbol}?interval=1d&range=2d"
+        resp = requests.get(url, headers=headers, timeout=4)
+        if resp.status_code == 200:
+            meta = resp.json()["chart"]["result"][0]["meta"]
+            price = meta.get("regularMarketPrice")
+            prev_close = meta.get("chartPreviousClose") or meta.get("previousClose")
+            if price and prev_close:
+                change_val = round(price - prev_close, 2)
+                change_pct = round((change_val / prev_close) * 100.0, 2)
+                return price, change_pct, change_val, prev_close
+    except Exception as e:
+        print(f"Yahoo Finance {index_symbol} fetch warning:", e)
+        
+    # 2. Fallback: Google Finance
     try:
         if index_symbol.lower() == "sensex":
             url = "https://www.google.com/finance/quote/SENSEX:INDEXBOM"
@@ -145,7 +163,7 @@ def fetch_live_index_price(index_symbol: str = "Nifty"):
             url = "https://www.google.com/finance/quote/NIFTY_50:INDEXNSE"
             title = "NIFTY 50"
             
-        resp = requests.get(url, headers=headers, timeout=5)
+        resp = requests.get(url, headers=headers, timeout=4)
         idx = resp.text.find(f'class="gO24Ff">{title}</div>')
         if idx != -1:
             block = resp.text[idx:idx+1500]
@@ -168,10 +186,12 @@ def fetch_live_index_price(index_symbol: str = "Nifty"):
             if match_val:
                 val_str = match_val.group(1).replace(",", "")
                 change_val = float(val_str)
+                if price:
+                    prev_close = price - change_val
     except Exception as e:
-        print(f"Live {index_symbol} fetch warning:", e)
-    return price, change_pct, change_val
-
+        print(f"Google Finance {index_symbol} fetch warning:", e)
+        
+    return price, change_pct, change_val, prev_close
 
 # ==========================================
 # 2. SIMULATION & DATA ENGINE STATE
@@ -185,7 +205,7 @@ class SimulationState:
         self.spot_price = live_price
         self.intraday_change_pct = price_data[1]
         self.intraday_change_val = price_data[2]
-        self.prev_close_baseline = live_price - self.intraday_change_val
+        self.prev_close_baseline = price_data[3] if len(price_data) > 3 and price_data[3] is not None else (live_price - self.intraday_change_val)
         self.vix = 14.5
         self.pcr = 0.95
         self.last_live_fetch = time.time()
@@ -1350,7 +1370,7 @@ class SimulationState:
                             self.spot_price = live_price
                             self.intraday_change_pct = price_data[1]
                             self.intraday_change_val = price_data[2]
-                            self.prev_close_baseline = price_data[0] - price_data[2]
+                            self.prev_close_baseline = price_data[3] if len(price_data) > 3 and price_data[3] is not None else (price_data[0] - price_data[2])
                             self.last_live_fetch = now
                     
                     if not live_price:
@@ -3109,8 +3129,8 @@ def get_market_data():
                     "capital": round(state.get_available_capital(), 2),
                     "broker_capital": round(state.get_broker_balance(), 2),
                     "upstox_token_status": state.upstox_token_status,
-                    "change_pct": state.intraday_change_pct,
-                    "change_val": state.intraday_change_val,
+                    "change_pct": round(state.intraday_change_pct, 2),
+                    "change_val": round(state.intraday_change_val, 2),
                     "price_source": "Upstox API Feed (ERROR/STALE)",
                     "price_date": state.price_date,
                     "price_time": state.price_time,
@@ -3283,8 +3303,8 @@ def get_market_data():
         "capital": round(state.get_available_capital(), 2),
         "broker_capital": round(state.get_broker_balance(), 2),
         "upstox_token_status": state.upstox_token_status,
-        "change_pct": state.intraday_change_pct,
-        "change_val": state.intraday_change_val,
+        "change_pct": round(state.intraday_change_pct, 2),
+        "change_val": round(state.intraday_change_val, 2),
         "price_source": state.price_source,
         "price_date": state.price_date,
         "price_time": state.price_time,
@@ -3603,7 +3623,7 @@ def update_settings_index(data: IndexUpdateRequest):
         state.spot_price = live_price
         state.intraday_change_pct = price_data[1]
         state.intraday_change_val = price_data[2]
-        state.prev_close_baseline = live_price - price_data[2]
+        state.prev_close_baseline = price_data[3] if len(price_data) > 3 and price_data[3] is not None else (live_price - price_data[2])
     state.evaluate_decision_engine()
     state.save_settings()
     return {
