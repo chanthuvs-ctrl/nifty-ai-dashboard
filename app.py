@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.2.1" 
+VERSION = "3.2.2" 
 import time
 import os
 import json

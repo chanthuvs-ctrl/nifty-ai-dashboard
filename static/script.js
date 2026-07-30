@@ -4729,12 +4729,15 @@ async function updatePayoffGraph() {
                 scales: {
                     x: {
                         ticks: {
-                            color: '#64748b',
-                            font: { size: 9 },
+                            color: '#94a3b8',
+                            font: { size: 10, weight: '600' },
                             maxTicksLimit: 10,
-                            callback: val => Number(this ? this : val).toLocaleString('en-IN')
+                            callback: function(val) {
+                                const lbl = this.getLabelForValue(val);
+                                return lbl ? Number(lbl).toLocaleString('en-IN') : val;
+                            }
                         },
-                        grid: { color: 'rgba(255,255,255,0.04)' }
+                        grid: { color: 'rgba(255,255,255,0.05)' }
                     },
                     y: {
                         ticks: {
