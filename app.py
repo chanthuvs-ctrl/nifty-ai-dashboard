@@ -3771,75 +3771,128 @@ def execute_live_order(data: LiveOrderRequest):
             "trade": trade
         }
         
-    # ── PRE-FLIGHT MARGIN CHECK ──────────────────────────────────────────
-    # Query Upstox /v2/charges/margin with the EXACT legs being traded.
-    # If required margin > available balance → block all orders immediately.
-    # This prevents BUY legs succeeding while SELL legs fail (partial fills).
+    # ── PRE-FLIGHT MARGIN CHECK WITH AUTO LOT REDUCTION ─────────────────
+    # Before placing a single order:
+    #   1. Query Upstox /v2/charges/margin with the EXACT legs & quantities
+    #   2. Compare against available balance
+    #   3. If insufficient → reduce lots (half → 1-lot minimum) and retry check
+    #   4. If even 1 lot fails → set margin_insufficient flag, block, return MARGIN_BLOCKED
+    #   5. If reduced lots pass → update leg quantities in-place and proceed
+    #
+    # Strategy shift auto-clear:
+    #   If margin_insufficient flag is set but this is a low-margin strategy
+    #   (Buy CE/PE, Spread) AND pre-flight passes → auto-clear the flag.
     try:
-        margin_instruments = [
-            {
-                "instrument_key": leg.instrument_key,
-                "quantity": leg.quantity,
-                "transaction_type": leg.transaction_type,
-                "product": "I"
-            }
-            for leg in data.legs
-            if not leg.instrument_key.startswith("SIM_")
-        ]
-        if margin_instruments:
+        available_balance = state.get_broker_balance()
+        # Force fresh balance — invalidate 60s cache for margin decisions
+        state._capital_cache_time = 0.0
+
+        real_legs = [l for l in data.legs if not l.instrument_key.startswith("SIM_")]
+        if real_legs:
             margin_chk_url = "https://api.upstox.com/v2/charges/margin"
             margin_chk_hdrs = {
                 "Content-Type": "application/json",
                 "Accept": "application/json",
                 "Authorization": f"Bearer {token}"
             }
-            margin_resp = requests.post(
-                margin_chk_url,
-                json={"instruments": margin_instruments},
-                headers=margin_chk_hdrs,
-                timeout=5
-            )
-            if margin_resp.status_code == 200:
-                margin_data = margin_resp.json()
-                if margin_data.get("status") == "success":
-                    required_margin = float(margin_data.get("data", {}).get("final_margin", 0.0))
 
-                    # Get available balance (use cache if fresh, else live fetch)
-                    available_balance = state.get_broker_balance()
+            # Determine lot_size (shares per lot) from first leg quantity
+            # Original quantity = suggested_lots * lot_size_per_lot
+            # We'll find the per-lot unit by dividing by current suggested_lots
+            preferred_index = state.settings.get("preferred_index", "Nifty")
+            lot_size_per_lot = 20 if preferred_index.lower() == "sensex" else 65
+            original_qty_per_leg = real_legs[0].quantity  # e.g. 8 lots × 65 = 520
+            original_lots = max(1, original_qty_per_leg // lot_size_per_lot)
 
-                    if required_margin > 0 and available_balance < required_margin:
-                        shortfall = required_margin - available_balance
+            def _query_margin_for_lots(n_lots):
+                """Call Upstox margin API for n_lots and return required margin or None."""
+                chk_instruments = [
+                    {
+                        "instrument_key": leg.instrument_key,
+                        "quantity": n_lots * lot_size_per_lot,
+                        "transaction_type": leg.transaction_type,
+                        "product": "I"
+                    }
+                    for leg in real_legs
+                ]
+                try:
+                    resp = requests.post(
+                        margin_chk_url,
+                        json={"instruments": chk_instruments},
+                        headers=margin_chk_hdrs,
+                        timeout=5
+                    )
+                    if resp.status_code == 200 and resp.json().get("status") == "success":
+                        return float(resp.json().get("data", {}).get("final_margin", 0.0))
+                except Exception:
+                    pass
+                return None
+
+            # Step 1: Check margin at original lot size
+            required_margin = _query_margin_for_lots(original_lots)
+
+            if required_margin is not None and required_margin > 0:
+                if available_balance >= required_margin:
+                    # ✅ Full lots fit — proceed as-is
+                    is_low_margin_strategy = any(x in data.strategy for x in ["Buy CE", "Buy PE", "Spread"])
+                    if is_low_margin_strategy and getattr(state, "margin_insufficient", False):
+                        # Auto-clear margin flag — strategy shifted to low-margin and it passes
+                        state.margin_insufficient = False
+                        state.margin_shortfall_amount = 0.0
+                        state.settings.pop("margin_insufficient", None)
+                        state.settings.pop("margin_shortfall_amount", None)
+                        state.save_settings()
+                        print(f"✅ MARGIN FLAG AUTO-CLEARED: {data.strategy} passed pre-flight at ₹{required_margin:,.2f}")
+                    print(f"✅ PRE-FLIGHT MARGIN OK: {original_lots} lots | Required ₹{required_margin:,.2f} | Available ₹{available_balance:,.2f}")
+                else:
+                    # ❌ Original lots fail — try reducing: half lots → 1 lot
+                    approved_lots = 0
+                    approved_margin = 0.0
+                    candidates = sorted(set([max(1, original_lots // 2), 1]), reverse=True)
+                    for try_lots in candidates:
+                        m = _query_margin_for_lots(try_lots)
+                        if m is not None and m > 0 and available_balance >= m:
+                            approved_lots = try_lots
+                            approved_margin = m
+                            break
+
+                    if approved_lots > 0:
+                        # ✅ Reduced lot size fits — scale down all leg quantities
+                        scale = approved_lots * lot_size_per_lot
+                        for leg in data.legs:
+                            leg.quantity = scale
+                        # Also update legs_logged to match
+                        for ll in legs_logged:
+                            ll["quantity"] = scale
+                        print(f"⚠️ LOT REDUCTION: {original_lots} lots insufficient (₹{required_margin:,.2f}), reduced to {approved_lots} lots (₹{approved_margin:,.2f}) | Available ₹{available_balance:,.2f}")
+                    else:
+                        # ❌ Even 1 lot fails — hard block
+                        m1 = _query_margin_for_lots(1)
+                        shortfall = (m1 - available_balance) if m1 else (required_margin - available_balance)
                         err = (
-                            f"🛑 PRE-FLIGHT MARGIN CHECK FAILED: "
-                            f"Required ₹{required_margin:,.2f} | "
-                            f"Available ₹{available_balance:,.2f} | "
-                            f"Shortfall ₹{shortfall:,.2f}. "
-                            f"No orders placed."
+                            f"🛑 MARGIN INSUFFICIENT for 1-lot {data.strategy}: "
+                            f"Required ₹{m1:,.2f} | Available ₹{available_balance:,.2f} | "
+                            f"Shortfall ₹{shortfall:,.2f}. No orders placed."
                         )
                         print(err)
-                        # Set and persist margin flag
                         state.margin_insufficient = True
-                        state.margin_shortfall_amount = shortfall
+                        state.margin_shortfall_amount = round(shortfall, 2)
                         state.settings["margin_insufficient"] = True
-                        state.settings["margin_shortfall_amount"] = shortfall
+                        state.settings["margin_shortfall_amount"] = round(shortfall, 2)
                         state.save_settings()
-                        # Stamp cooldown so no retry for 60s
                         state.last_live_order_attempt_time = time.time()
-                        # Log error for dashboard banner
                         state.live_trade_errors = getattr(state, "live_trade_errors", [])
                         state.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
                         state.live_trade_errors = state.live_trade_errors[-10:]
                         return {
                             "status": "MARGIN_BLOCKED",
                             "message": err,
-                            "required": required_margin,
+                            "required": m1,
                             "available": available_balance,
                             "shortfall": shortfall
                         }
-                    print(f"✅ PRE-FLIGHT MARGIN OK: Required ₹{required_margin:,.2f} | Available ₹{available_balance:,.2f}")
     except Exception as _margin_chk_err:
-        # If margin check itself fails (e.g. network), log and continue cautiously
-        print(f"⚠️ Pre-flight margin check failed (proceeding): {_margin_chk_err}")
+        print(f"⚠️ Pre-flight margin check error (proceeding cautiously): {_margin_chk_err}")
     # ─────────────────────────────────────────────────────────────────────
 
     url = "https://api.upstox.com/v2/order/place"
