@@ -3771,6 +3771,77 @@ def execute_live_order(data: LiveOrderRequest):
             "trade": trade
         }
         
+    # ── PRE-FLIGHT MARGIN CHECK ──────────────────────────────────────────
+    # Query Upstox /v2/charges/margin with the EXACT legs being traded.
+    # If required margin > available balance → block all orders immediately.
+    # This prevents BUY legs succeeding while SELL legs fail (partial fills).
+    try:
+        margin_instruments = [
+            {
+                "instrument_key": leg.instrument_key,
+                "quantity": leg.quantity,
+                "transaction_type": leg.transaction_type,
+                "product": "I"
+            }
+            for leg in data.legs
+            if not leg.instrument_key.startswith("SIM_")
+        ]
+        if margin_instruments:
+            margin_chk_url = "https://api.upstox.com/v2/charges/margin"
+            margin_chk_hdrs = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Bearer {token}"
+            }
+            margin_resp = requests.post(
+                margin_chk_url,
+                json={"instruments": margin_instruments},
+                headers=margin_chk_hdrs,
+                timeout=5
+            )
+            if margin_resp.status_code == 200:
+                margin_data = margin_resp.json()
+                if margin_data.get("status") == "success":
+                    required_margin = float(margin_data.get("data", {}).get("final_margin", 0.0))
+
+                    # Get available balance (use cache if fresh, else live fetch)
+                    available_balance = state.get_broker_balance()
+
+                    if required_margin > 0 and available_balance < required_margin:
+                        shortfall = required_margin - available_balance
+                        err = (
+                            f"🛑 PRE-FLIGHT MARGIN CHECK FAILED: "
+                            f"Required ₹{required_margin:,.2f} | "
+                            f"Available ₹{available_balance:,.2f} | "
+                            f"Shortfall ₹{shortfall:,.2f}. "
+                            f"No orders placed."
+                        )
+                        print(err)
+                        # Set and persist margin flag
+                        state.margin_insufficient = True
+                        state.margin_shortfall_amount = shortfall
+                        state.settings["margin_insufficient"] = True
+                        state.settings["margin_shortfall_amount"] = shortfall
+                        state.save_settings()
+                        # Stamp cooldown so no retry for 60s
+                        state.last_live_order_attempt_time = time.time()
+                        # Log error for dashboard banner
+                        state.live_trade_errors = getattr(state, "live_trade_errors", [])
+                        state.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
+                        state.live_trade_errors = state.live_trade_errors[-10:]
+                        return {
+                            "status": "MARGIN_BLOCKED",
+                            "message": err,
+                            "required": required_margin,
+                            "available": available_balance,
+                            "shortfall": shortfall
+                        }
+                    print(f"✅ PRE-FLIGHT MARGIN OK: Required ₹{required_margin:,.2f} | Available ₹{available_balance:,.2f}")
+    except Exception as _margin_chk_err:
+        # If margin check itself fails (e.g. network), log and continue cautiously
+        print(f"⚠️ Pre-flight margin check failed (proceeding): {_margin_chk_err}")
+    # ─────────────────────────────────────────────────────────────────────
+
     url = "https://api.upstox.com/v2/order/place"
     headers = {
         "Content-Type": "application/json",
