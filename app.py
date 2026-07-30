@@ -3364,8 +3364,19 @@ def get_market_data():
         "market_session": state.market_session,
         "expiry_warning": getattr(state, "expiry_warning", ""),
         "live_trade_errors": getattr(state, "live_trade_errors", []),
-        "lock_remaining_seconds": max(0, int(60.0 - (time.time() - state.last_strategy_change_time)))
+        "lock_remaining_seconds": max(0, int(60.0 - (time.time() - state.last_strategy_change_time))),
+        "margin_insufficient": getattr(state, "margin_insufficient", False),
+        "margin_shortfall": getattr(state, "margin_shortfall_amount", 0.0)
     }
+
+
+@app.post("/api/reset-margin-flag")
+def reset_margin_flag():
+    """User has added funds to broker — clear the margin insufficient flag so Strangle/IC can trade again."""
+    state.margin_insufficient = False
+    state.margin_shortfall_amount = 0.0
+    print("✅ MARGIN FLAG RESET by user — Strangle/Iron Condor strategies re-enabled.")
+    return {"status": "OK", "message": "Margin flag cleared. Strangle and Iron Condor strategies re-enabled."}
 
 @app.get("/api/logs")
 def get_logs():
@@ -3850,6 +3861,10 @@ def execute_live_order(data: LiveOrderRequest):
         is_margin_error = any(kw in first_err.lower() for kw in margin_keywords)
         if is_margin_error:
             state.margin_insufficient = True
+            # Try to extract the shortfall amount from Upstox error message e.g. "add Rs. 22762.66"
+            import re as _re
+            shortfall_match = _re.search(r'Rs\.?\s*([\d,]+\.?\d*)', first_err, _re.IGNORECASE)
+            state.margin_shortfall_amount = float(shortfall_match.group(1).replace(',','')) if shortfall_match else 0.0
             print(f"🔴 MARGIN INSUFFICIENT FLAG SET: System will only allow low-margin strategies (Buy CE/PE, Spreads) going forward this session.")
 
         # Log to live_trade_errors for dashboard alert banner

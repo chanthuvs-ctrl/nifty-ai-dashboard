@@ -452,6 +452,21 @@ function updateStrategyLegs(data) {
 }
 
 // Core Market Data Fetching & UI Binder
+async function resetMarginFlag() {
+    const btn = document.getElementById('btn-reset-margin');
+    if (btn) { btn.disabled = true; btn.innerText = 'Resetting...'; }
+    try {
+        const resp = await fetch('/api/reset-margin-flag', { method: 'POST' });
+        const data = await resp.json();
+        console.log('Margin flag reset:', data.message);
+        // Banner will auto-hide on next market data poll
+    } catch (e) {
+        console.error('Failed to reset margin flag:', e);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = '✅ Funds Added — Resume Strangle / IC'; }
+    }
+}
+
 async function fetchMarketData() {
     try {
         const resp = await fetch('/api/market-data');
@@ -563,6 +578,21 @@ async function fetchMarketData() {
         }
 
         
+        // Update margin warning banner
+        const marginBanner = document.getElementById('margin-warning-banner');
+        const marginBannerText = document.getElementById('margin-warning-text');
+        if (marginBanner && marginBannerText) {
+            if (data.margin_insufficient) {
+                const shortfall = data.margin_shortfall && data.margin_shortfall > 0
+                    ? `Add ₹${data.margin_shortfall.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} to your Upstox account.`
+                    : 'Add funds to your Upstox account to re-enable.';
+                marginBannerText.innerHTML = `<strong>⚠️ Margin Shortfall Detected — Strangle &amp; Iron Condor paused.</strong><br>${shortfall} System is trading Buy CE / Buy PE / Spreads only until margin is restored.`;
+                marginBanner.style.display = 'flex';
+            } else {
+                marginBanner.style.display = 'none';
+            }
+        }
+
         // Update timeframe trends
         if (data.timeframe_trends) {
             updateTrendBadge('trend-15m-badge', data.timeframe_trends.m15);
