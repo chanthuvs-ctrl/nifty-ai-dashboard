@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.2.5" 
+VERSION = "3.2.6" 
 import time
 import os
 import json
@@ -3349,6 +3349,16 @@ def get_market_data():
         "total_brokerage": round(sum(t.get("brokerage", 0.0) for t in journal.trades if t.get("date") == get_ist_date_str() and (not (t.get("execution_type") or "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else (t.get("execution_type") or "Paper").startswith("Live"))), 2),
         "today_trades": sum(1 for t in journal.trades if t.get("date") == get_ist_date_str() and (not (t.get("execution_type") or "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else (t.get("execution_type") or "Paper").startswith("Live"))),
         "today_legs": sum(len(t.get("legs") or []) or 1 for t in journal.trades if t.get("date") == get_ist_date_str() and (not (t.get("execution_type") or "Paper").startswith("Live") if state.settings.get("auto_trade_mode", "OFF") == "Paper" else (t.get("execution_type") or "Paper").startswith("Live"))),
+        "live_floating_pnl": round(sum(
+            state.calculate_trade_pnl(t, state.spot_price)
+            for t in journal.trades
+            if t.get("status") == "OPEN" and (t.get("execution_type") or "").startswith("Live")
+        ), 2),
+        "paper_floating_pnl": round(sum(
+            state.calculate_trade_pnl(t, state.spot_price)
+            for t in journal.trades
+            if t.get("status") == "OPEN" and not (t.get("execution_type") or "").startswith("Live")
+        ), 2),
         "timeframe_trends": {
             "m15": state.analyze_timeframe(candles_15m_temp)["trend"],
             "m5": state.analyze_timeframe(candles_5m_temp)["trend"],
@@ -4307,11 +4317,22 @@ def trigger_action(data: TriggerOverride):
 @app.get("/api/journal")
 def get_journal():
     journal.purge_previous_days_trades()
+
+    # Fetch Upstox live positions once for all live trades
+    token = state.settings.get("upstox_access_token")
+    upstox_positions = get_upstox_live_positions(token) if token else []
+    upstox_total_pnl = round(sum(p.get("pnl", 0.0) for p in upstox_positions), 2)
+
     trades_copy = []
     for t in journal.trades:
         t_dict = dict(t)
         if t_dict.get("status") == "OPEN":
-            t_dict["floating_pnl"] = round(state.calculate_trade_pnl(t, state.spot_price), 2)
+            is_live = (t_dict.get("execution_type") or "").startswith("Live")
+            if is_live and upstox_positions:
+                # Use actual Upstox unrealised PnL for live trades
+                t_dict["floating_pnl"] = upstox_total_pnl
+            else:
+                t_dict["floating_pnl"] = round(state.calculate_trade_pnl(t, state.spot_price), 2)
         trades_copy.append(t_dict)
     return {
         "trades": trades_copy[::-1],

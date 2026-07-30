@@ -859,6 +859,23 @@ async function fetchMarketData() {
             capitalLabelEl.textContent = hasToken ? 'Live Balance' : 'Paper Capital';
         }
 
+        // Update PAPER P&L and LIVE P&L header cards directly from market-data (every 3s tick)
+        const paperPnlMd = data.paper_floating_pnl !== undefined ? data.paper_floating_pnl : null;
+        const livePnlMd  = data.live_floating_pnl  !== undefined ? data.live_floating_pnl  : null;
+
+        const hdrPaperPnl = document.getElementById('hdr-paper-pnl');
+        if (hdrPaperPnl && paperPnlMd !== null) {
+            hdrPaperPnl.innerText = (paperPnlMd >= 0 ? '+' : '') + '₹' + Math.abs(paperPnlMd).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            hdrPaperPnl.style.color = paperPnlMd > 0 ? 'var(--neon-bull)' : paperPnlMd < 0 ? 'var(--neon-bear)' : 'var(--text-muted)';
+        }
+
+        const hdrLivePnl = document.getElementById('hdr-live-pnl');
+        if (hdrLivePnl && livePnlMd !== null) {
+            hdrLivePnl.innerText = (livePnlMd >= 0 ? '+' : '') + '₹' + Math.abs(livePnlMd).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            hdrLivePnl.style.color = livePnlMd > 0 ? 'var(--neon-bull)' : livePnlMd < 0 ? 'var(--neon-bear)' : 'var(--text-muted)';
+            hdrLivePnl.style.textShadow = livePnlMd !== 0 ? '0 0 10px rgba(0, 229, 153, 0.3)' : 'none';
+        }
+
         const apiEl = document.getElementById('api-status-badge');
         if (apiEl) {
             const status = data.upstox_token_status || "DISCONNECTED";
