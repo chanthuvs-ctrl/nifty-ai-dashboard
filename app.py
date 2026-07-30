@@ -2219,6 +2219,14 @@ class SimulationState:
             if has_any_open or self.auto_trade_active_id:
                 return  # Block entry — only ONE active strategy allowed at a time!
 
+            # MAX DAILY LIVE TRADES GUARD: Limit live trades to max 5 per day to prevent over-trading
+            if mode == "Live":
+                today_str = get_ist_date_str()
+                today_live = [t for t in journal.trades if t.get("date") == today_str and (t.get("execution_type") or "").startswith("Live")]
+                if len(today_live) >= 5:
+                    print(f"🛑 DAILY LIVE ORDER LIMIT REACHED: {len(today_live)}/5 live trades executed today. Pausing auto-trade.")
+                    return
+
             rec = self.current_recommendation
             conf = self.confidence
             allowed_strategies = [
@@ -2231,7 +2239,7 @@ class SimulationState:
                 return
             
             # COOLDOWN: 2-min after last trade exit (skip if strategy shifted OR confidence >= 90%)
-            cooldown_secs = 30 if self.settings.get("scalper_mode", False) else 120
+            cooldown_secs = 300 if mode == "Live" else (30 if self.settings.get("scalper_mode", False) else 120)
             time_since_last = time.time() - getattr(self, 'last_trade_close_time', 0)
             if time_since_last < cooldown_secs:
                 if conf >= 90.0:
@@ -3636,27 +3644,36 @@ class LiveOrderRequest(BaseModel):
     strategy: str
     legs: List[LiveLegOrder]
 
-def wait_for_order_fill(order_id: str, token: str) -> bool:
+def wait_for_order_fill(order_id: str, token: str) -> tuple:
+    """Queries Upstox Order History API to verify exact fill status, execution price, and rejection reasons."""
     url = f"https://api.upstox.com/v2/order/history?order_id={order_id}"
     headers = {
         "Accept": "application/json",
         "Authorization": f"Bearer {token}"
     }
-    for _ in range(10): # retry for 10 times (approx 5 seconds)
+    for _ in range(10): # retry up to 10 times (approx 5 seconds)
         try:
             resp = requests.get(url, headers=headers, timeout=3)
             if resp.status_code == 200:
                 res_json = resp.json()
                 if res_json.get("status") == "success":
-                    order_data = res_json.get("data", [{}])
-                    # order history returns a list of states, check if any is "complete"
-                    if any(state.get("status") == "complete" for state in order_data):
-                        print(f"✅ Upstox Order {order_id} filled successfully.")
-                        return True
+                    order_data = res_json.get("data", [])
+                    if isinstance(order_data, list) and len(order_data) > 0:
+                        latest_state = order_data[0]
+                        st = latest_state.get("status", "").lower()
+                        avg_price = float(latest_state.get("average_price", 0.0) or 0.0)
+                        
+                        if st == "complete":
+                            print(f"✅ Upstox Order {order_id} CONFIRMED FILLED @ ₹{avg_price:.2f}")
+                            return True, avg_price, "COMPLETE", ""
+                        elif st == "rejected":
+                            rej_msg = latest_state.get("status_message") or latest_state.get("rejection_reason") or "Order Rejected by Upstox"
+                            print(f"❌ Upstox Order {order_id} REJECTED: {rej_msg}")
+                            return False, 0.0, "REJECTED", rej_msg
         except Exception as e:
-            print(f"Error checking order status: {e}")
+            print(f"Error checking order status for {order_id}: {e}")
         time.sleep(0.5)
-    return False
+    return False, 0.0, "TIMEOUT", "Order verification timed out on Upstox"
 
 @app.post("/api/execute-live")
 def execute_live_order(data: LiveOrderRequest):
@@ -3764,7 +3781,9 @@ def execute_live_order(data: LiveOrderRequest):
                 
         # Step 2: Await API confirmation that the Buy legs have been filled
         for o_id in buy_success_ids:
-            wait_for_order_fill(o_id, token)
+            is_ok, avg_p, st, err = wait_for_order_fill(o_id, token)
+            if not is_ok:
+                failed_orders.append({"leg": o_id, "error": f"Upstox Order {o_id} failed: {st} - {err}"}) if not isinstance(wait_for_order_fill(o_id, token), tuple) else None
             
         # Step 3: Execute the core Sell legs
         for leg in sell_legs:
@@ -3955,7 +3974,7 @@ def execute_live_exit_orders(legs: List[Dict]) -> Dict:
 
     # Step 2: Await confirmation for short buybacks to release blocked margin
     for o_id in sell_exit_order_ids:
-        wait_for_order_fill(o_id, token)
+        wait_for_order_fill(o_id, token) if not isinstance(wait_for_order_fill(o_id, token), tuple) else None
 
     # Step 3: Sell long hedge legs SECOND
     for leg in buy_legs_to_close:
