@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.2.4" 
+VERSION = "3.2.5" 
 import time
 import os
 import json
@@ -1341,8 +1341,7 @@ class SimulationState:
                 feed_mode = self.settings.get("feed_mode", "Simulation")
                 if feed_mode == "Upstox":
                     self.fetch_upstox_data()
-                else:
-                    # Periodically fetch live price from Google Finance
+                elif feed_mode == "Google":
                     if now - self.last_live_fetch >= 30:
                         price_data = fetch_live_index_price(preferred_index)
                         if price_data[0] is not None:
@@ -1352,35 +1351,34 @@ class SimulationState:
                             self.intraday_change_val = price_data[2]
                             self.prev_close_baseline = price_data[0] - price_data[2]
                             self.last_live_fetch = now
+                else:
+                    # Pure Simulation Drift Mode — drifts spot price continuously
+                    live_price = None
+                    drift = 0.0
+                    regime = self.market_regime
+                    if "Strong Bull" in regime:
+                        drift = 0.5
+                    elif "Strong Bear" in regime:
+                        drift = -0.5
                     
-                    if not live_price:
-                        # Normal drift simulation
-                        drift = 0.0
-                        regime = self.market_regime
-                        if "Strong Bull" in regime:
-                            drift = 0.5
-                        elif "Strong Bear" in regime:
-                            drift = -0.5
-                        
-                        # Ensure baseline exists
-                        if not getattr(self, "prev_close_baseline", None):
-                            self.prev_close_baseline = self.spot_price - self.intraday_change_val
-                        
-                        # Drift spot price
-                        self.spot_price += drift + random.uniform(-2.0, 2.0)
-                        
-                        # Update change metrics to stay in sync
-                        if self.prev_close_baseline != 0.0:
-                            self.intraday_change_val = self.spot_price - self.prev_close_baseline
-                            self.intraday_change_pct = (self.intraday_change_val / self.prev_close_baseline) * 100.0
-                        
-                        # Bound random spikes relative to starting spot price area
-                        if preferred_index.lower() == "sensex":
-                            if self.spot_price > 110000: self.spot_price -= 100.0
-                            if self.spot_price < 50000: self.spot_price += 100.0
-                        else:
-                            if self.spot_price > 35000: self.spot_price -= 25.0
-                            if self.spot_price < 15000: self.spot_price += 25.0
+                    if not getattr(self, "prev_close_baseline", None):
+                        self.prev_close_baseline = self.spot_price - getattr(self, "intraday_change_val", 0.0)
+                    
+                    # Drift spot price continuously on every poll
+                    self.spot_price += drift + random.uniform(-1.5, 1.5)
+                    
+                    # Update change metrics to stay in sync
+                    if self.prev_close_baseline != 0.0:
+                        self.intraday_change_val = self.spot_price - self.prev_close_baseline
+                        self.intraday_change_pct = (self.intraday_change_val / self.prev_close_baseline) * 100.0
+                    
+                    # Bound random spikes relative to starting spot price area
+                    if preferred_index.lower() == "sensex":
+                        if self.spot_price > 110000: self.spot_price -= 100.0
+                        if self.spot_price < 50000: self.spot_price += 100.0
+                    else:
+                        if self.spot_price > 35000: self.spot_price -= 25.0
+                        if self.spot_price < 15000: self.spot_price += 25.0
 
         # Update source and timestamps
         if override_type:
