@@ -1794,6 +1794,17 @@ class SimulationState:
 
         feed_mode = self.settings.get("feed_mode", "Simulation")
         
+        # MARGIN CIRCUIT BREAKER — checked before anything else, uses persisted flag
+        if mode == "Live":
+            # Load persisted flag from settings (survives server restarts)
+            if self.settings.get("margin_insufficient", False):
+                self.margin_insufficient = True
+                self.margin_shortfall_amount = float(self.settings.get("margin_shortfall_amount", 0.0))
+            if getattr(self, "margin_insufficient", False):
+                high_margin_strategies = ["Short Strangle", "Short Straddle", "Iron Condor"]
+                if self.current_recommendation in high_margin_strategies:
+                    return  # Silently block — dashboard banner already shows the warning
+
         # Guard/Self-Healing: Live Real requires Upstox feed for real prices
         if mode == "Live" and feed_mode != "Upstox":
             # Force validation of the token
@@ -3375,6 +3386,10 @@ def reset_margin_flag():
     """User has added funds to broker — clear the margin insufficient flag so Strangle/IC can trade again."""
     state.margin_insufficient = False
     state.margin_shortfall_amount = 0.0
+    # Also clear from settings.json so flag does not come back on next server restart
+    state.settings.pop("margin_insufficient", None)
+    state.settings.pop("margin_shortfall_amount", None)
+    state.save_settings()
     print("✅ MARGIN FLAG RESET by user — Strangle/Iron Condor strategies re-enabled.")
     return {"status": "OK", "message": "Margin flag cleared. Strangle and Iron Condor strategies re-enabled."}
 
@@ -3865,7 +3880,11 @@ def execute_live_order(data: LiveOrderRequest):
             import re as _re
             shortfall_match = _re.search(r'Rs\.?\s*([\d,]+\.?\d*)', first_err, _re.IGNORECASE)
             state.margin_shortfall_amount = float(shortfall_match.group(1).replace(',','')) if shortfall_match else 0.0
-            print(f"🔴 MARGIN INSUFFICIENT FLAG SET: System will only allow low-margin strategies (Buy CE/PE, Spreads) going forward this session.")
+            # PERSIST to settings.json so flag survives server restarts
+            state.settings["margin_insufficient"] = True
+            state.settings["margin_shortfall_amount"] = state.margin_shortfall_amount
+            state.save_settings()
+            print(f"🔴 MARGIN INSUFFICIENT FLAG SET & PERSISTED: shortfall=₹{state.margin_shortfall_amount:.2f}. Strangle/IC blocked until user resets.")
 
         # Log to live_trade_errors for dashboard alert banner
         state.live_trade_errors = getattr(state, 'live_trade_errors', [])
@@ -3873,27 +3892,35 @@ def execute_live_order(data: LiveOrderRequest):
         state.live_trade_errors = state.live_trade_errors[-10:]
 
         if placed_orders:
-            # Square off any legs that were placed — but do NOT retry entry
-            print(f"🚨 PARTIAL FILL EXIT: {len(placed_orders)} legs placed, {len(failed_orders)} legs failed. Exiting placed legs on Upstox...")
-            placed_leg_details = []
-            for p in placed_orders:
-                inst = p["leg"]
-                for l_logged in legs_logged:
-                    if l_logged["instrument_key"] == inst:
-                        placed_leg_details.append(l_logged)
-                        break
-
-            if placed_leg_details:
-                try:
-                    rollback_res = execute_live_exit_orders(placed_leg_details)
-                    print(f"⚡ PARTIAL EXIT EXECUTED: {rollback_res}")
-                except Exception as rollback_err:
-                    print(f"❌ PARTIAL EXIT ERROR: {rollback_err}")
-
-            journal.close_trade(trade["id"], state.spot_price)
-            trade["reason"] = f"❌ Partial Fill Exit: {len(placed_orders)} placed / {len(failed_orders)} rejected | {'⚠️ Margin Insufficient — switching to low-margin strategies only' if is_margin_error else first_err}"
-            journal.save_journal()
-            state.auto_trade_active_id = None
+            if is_margin_error:
+                # MARGIN ERROR: Do NOT place any rollback orders — that restarts the loop.
+                # BUY hedge legs placed are small-premium OTM options. Log them for user awareness.
+                placed_syms = [p["leg"] for p in placed_orders]
+                print(f"⚠️ MARGIN ERROR — Skipping rollback to prevent re-entry loop. Placed legs (user must close manually if needed): {placed_syms}")
+                journal.close_trade(trade["id"], state.spot_price)
+                trade["reason"] = f"⚠️ Margin Insufficient: SELL legs rejected. BUY hedge legs placed: {placed_syms}. Strangle/IC blocked. Please close hedges manually if open, then reset margin flag after adding funds."
+                journal.save_journal()
+                state.auto_trade_active_id = None
+            else:
+                # Non-margin partial fail: exit placed legs normally
+                print(f"🚨 PARTIAL FILL EXIT: {len(placed_orders)} legs placed, {len(failed_orders)} legs failed. Exiting placed legs on Upstox...")
+                placed_leg_details = []
+                for p in placed_orders:
+                    inst = p["leg"]
+                    for l_logged in legs_logged:
+                        if l_logged["instrument_key"] == inst:
+                            placed_leg_details.append(l_logged)
+                            break
+                if placed_leg_details:
+                    try:
+                        rollback_res = execute_live_exit_orders(placed_leg_details)
+                        print(f"⚡ PARTIAL EXIT EXECUTED: {rollback_res}")
+                    except Exception as rollback_err:
+                        print(f"❌ PARTIAL EXIT ERROR: {rollback_err}")
+                journal.close_trade(trade["id"], state.spot_price)
+                trade["reason"] = f"❌ Partial Fill Exit: {len(placed_orders)} placed / {len(failed_orders)} rejected | {first_err}"
+                journal.save_journal()
+                state.auto_trade_active_id = None
         else:
             # No legs placed — just close the trade record and unlock
             journal.close_trade(trade["id"], state.spot_price)
