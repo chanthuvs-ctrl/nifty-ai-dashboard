@@ -2306,12 +2306,23 @@ class SimulationState:
                         act = leg["action"]
                         
                         instrument_key = None
-                        for item in self.option_chain:
-                            if item["strike"] == k:
-                                instrument_key = item["call_instrument_key"] if ot == "CE" else item["put_instrument_key"]
+                        chain_to_search = self.upstox_option_chain if getattr(self, "upstox_option_chain", None) else self.option_chain
+                        for item in chain_to_search:
+                            if item.get("strike") == k:
+                                instrument_key = item.get("call_instrument_key") if ot == "CE" else item.get("put_instrument_key")
                                 break
-                        if not instrument_key:
-                            instrument_key = f"SIM_{ot.upper()}_{k}"
+                        
+                        if not instrument_key or str(instrument_key).startswith("SIM_"):
+                            valid_items = [x for x in self.option_chain if (x.get("call_instrument_key") if ot == "CE" else x.get("put_instrument_key")) and not str(x.get("call_instrument_key") if ot == "CE" else x.get("put_instrument_key")).startswith("SIM_")]
+                            if valid_items:
+                                if ot == "CE":
+                                    best_item = max(valid_items, key=lambda x: x["strike"])
+                                else:
+                                    best_item = min(valid_items, key=lambda x: x["strike"])
+                                instrument_key = best_item.get("call_instrument_key") if ot == "CE" else best_item.get("put_instrument_key")
+                                print(f"⚠️ Live Order instrument key for {ot} strike {k} fallback to real key {instrument_key} (strike {best_item['strike']})")
+                            else:
+                                instrument_key = f"SIM_{ot.upper()}_{k}"
                             
                         live_legs.append(LiveLegOrder(
                             instrument_key=instrument_key,
