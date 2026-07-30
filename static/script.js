@@ -1117,6 +1117,8 @@ async function fetchJournal() {
                 list.forEach(pos => {
                     const tr = document.createElement('tr');
                     
+                    const spot = parseFloat(document.getElementById('hdr-nifty-spot').innerText.replace(/,/g, '')) || pos.entry_spot;
+                    const currentSpot = spot;
                     const entry = pos.entry_spot;
                     const size = pos.size;
                     const lotSize = pos.lot_size || 65;
@@ -1129,7 +1131,7 @@ async function fetchJournal() {
                     } else {
                         const legs = ensureLegs(pos, globalOptionChain);
                         legs.forEach(leg => {
-                            const legLtp = getLegLtp(globalOptionChain, leg.instrument_key, leg.option_type, leg.strike) || leg.entry_price;
+                            const legLtp = getLegLtp(globalOptionChain, leg.instrument_key, leg.option_type, leg.strike, leg.entry_price, spot, pos.entry_spot) || leg.entry_price;
                             const legDiff = legLtp - leg.entry_price;
                             if (leg.action === 'BUY') {
                                 totalPnl += legDiff * leg.quantity;
@@ -1200,7 +1202,7 @@ async function fetchJournal() {
                     
                     // Append detail row for each option leg!
                     legs.forEach(leg => {
-                        const legLtp = getLegLtp(globalOptionChain, leg.instrument_key, leg.option_type, leg.strike) || leg.entry_price;
+                        const legLtp = getLegLtp(globalOptionChain, leg.instrument_key, leg.option_type, leg.strike, leg.entry_price, spot, pos.entry_spot) || leg.entry_price;
                         const legDiff = legLtp - leg.entry_price;
                         let legPnl = 0.0;
                         if (leg.action === 'BUY') {
@@ -2651,26 +2653,46 @@ function calculateTradePnlPoints(strategy, diff) {
     }
 }
 
-// Helper to search Option LTP from global option chain
-function getLegLtp(optionChain, instrumentKey, optType, strike) {
-    if (!optionChain || optionChain.length === 0) return null;
-    
-    // 1. Match by exact instrument key
-    for (let i = 0; i < optionChain.length; i++) {
-        const item = optionChain[i];
-        if (item.call_instrument_key === instrumentKey) return item.call_price;
-        if (item.put_instrument_key === instrumentKey) return item.put_price;
+// Helper to search Option LTP from global option chain with dynamic spot delta fallback
+function getLegLtp(optionChain, instrumentKey, optType, strike, entryPrice, spot, entrySpot) {
+    let targetStrike = strike;
+    let targetType = optType;
+
+    // Parse strike & type from instrumentKey if missing (e.g. SIM_CE_24350 or NIFTY2680424300CE)
+    if (!targetStrike && instrumentKey) {
+        const match = instrumentKey.match(/(\d{4,5})/);
+        if (match) targetStrike = parseInt(match[1]);
+        if (!targetType) targetType = instrumentKey.includes("PE") ? "PE" : "CE";
     }
-    
-    // 2. Fallback to strike & type search
-    for (let i = 0; i < optionChain.length; i++) {
-        const item = optionChain[i];
-        if (parseInt(item.strike) === parseInt(strike)) {
-            if (optType === 'CE') return item.call_price;
-            if (optType === 'PE') return item.put_price;
+
+    if (optionChain && optionChain.length > 0) {
+        // 1. Match by exact instrument key
+        for (let i = 0; i < optionChain.length; i++) {
+            const item = optionChain[i];
+            if (item.call_instrument_key === instrumentKey) return item.call_price;
+            if (item.put_instrument_key === instrumentKey) return item.put_price;
+        }
+        // 2. Fallback to strike & type search
+        for (let i = 0; i < optionChain.length; i++) {
+            const item = optionChain[i];
+            if (parseInt(item.strike) === parseInt(targetStrike)) {
+                if (targetType === 'CE' && item.call_price > 0) return item.call_price;
+                if (targetType === 'PE' && item.put_price > 0) return item.put_price;
+            }
         }
     }
-    return null;
+
+    // 3. Dynamic Delta Fallback (Delta ~= 0.50) when option chain is offline/closed
+    if (entryPrice && spot && entrySpot) {
+        const diff = spot - entrySpot;
+        if (targetType === 'CE') {
+            return Math.max(0.05, entryPrice + 0.50 * diff);
+        } else {
+            return Math.max(0.05, entryPrice - 0.50 * diff);
+        }
+    }
+
+    return entryPrice || null;
 }
 
 // Generate or parse strategy legs

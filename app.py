@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.2.2" 
+VERSION = "3.2.3" 
 import time
 import os
 import json
@@ -1680,46 +1680,61 @@ class SimulationState:
             return "Strong Bear Trend" if self.rsi < 40 else "Weak Bear Trend"
 
     def calculate_trade_pnl(self, t, spot):
-        """Calculates current floating P&L of a trade based on option Greeks or Spot price."""
+        """Calculates current floating P&L of a trade based on live option LTP, Greeks, or Spot price move."""
         pnl = 0.0
-        entry = t["entry_spot"]
+        entry = t.get("entry_spot", spot)
         legs = t.get("legs", [])
         strat = t.get("strategy", "")
         chain = self.upstox_option_chain if (self.settings.get("feed_mode") == "Upstox" and self.upstox_option_chain) else self.option_chain
-        
+
         if legs:
             for leg in legs:
                 leg_ltp = None
-                if chain:
-                    for chain_item in chain:
-                        if chain_item.get("strike") == leg.get("strike"):
-                            if leg.get("option_type") == "CE":
-                                leg_ltp = chain_item.get("call_price")
-                            else:
-                                leg_ltp = chain_item.get("put_price")
-                            break
-                if leg_ltp is None or leg_ltp <= 0:
-                    t_years = 4.0 / 365.0
-                    r = 0.07
-                    is_call = leg["option_type"].upper() == "CE"
-                    opt_res = calculate_greeks(spot, leg["strike"], t_years, self.vix / 100.0, r, is_call)
-                    leg_ltp = opt_res["price"]
-                    
-                leg_diff = leg_ltp - leg["entry_price"]
-                if leg["action"] == "BUY":
-                    pnl += leg_diff * leg["quantity"]
-                else:
-                    pnl -= leg_diff * leg["quantity"]
-        else:
+                strike_val = leg.get("strike", 0.0)
+                opt_type = leg.get("option_type", "CE")
+                act = leg.get("action", "BUY")
+                qty = leg.get("quantity", 65)
+                entry_px = leg.get("entry_price", 0.0)
 
+                # Match from live option chain
+                if chain:
+                    for item in chain:
+                        if item.get("call_instrument_key") == leg.get("instrument_key") or item.get("put_instrument_key") == leg.get("instrument_key"):
+                            leg_ltp = item.get("call_price") if opt_type == "CE" else item.get("put_price")
+                            break
+                        elif item.get("strike") == strike_val:
+                            leg_ltp = item.get("call_price") if opt_type == "CE" else item.get("put_price")
+                            break
+
+                # Fallback if chain is closed or item missing
+                if leg_ltp is None or leg_ltp <= 0:
+                    if strike_val > 0 and getattr(self, "vix", 12.0) > 0:
+                        t_years = 4.0 / 365.0
+                        r = 0.07
+                        is_call = opt_type.upper() == "CE"
+                        opt_res = calculate_greeks(spot, strike_val, t_years, self.vix / 100.0, r, is_call)
+                        leg_ltp = opt_res["price"]
+                    else:
+                        diff = spot - entry
+                        if opt_type.upper() == "CE":
+                            leg_ltp = max(0.05, entry_px + 0.50 * diff)
+                        else:
+                            leg_ltp = max(0.05, entry_px - 0.50 * diff)
+
+                leg_diff = leg_ltp - entry_px
+                if act == "BUY":
+                    pnl += leg_diff * qty
+                else:
+                    pnl -= leg_diff * qty
+        else:
             diff = spot - entry
-            multiplier = t.get("lot_size", 65) * t["size"]
+            multiplier = t.get("lot_size", 65) * t.get("size", 1)
             if "CE" in strat or "Bull" in strat:
                 pnl += diff * multiplier
             else:
                 pnl -= diff * multiplier
-        return pnl + t.get("booked_pnl", 0.0)
 
+        return pnl + t.get("booked_pnl", 0.0)
     def update_option_chain(self):
         spot = self.spot_price
         preferred_index = self.settings.get("preferred_index", "Nifty")
@@ -3434,6 +3449,14 @@ def get_upstox_live_positions(token: str) -> List[Dict]:
                 if avg_price <= 0:
                     avg_price = float(pos.get("last_price", 100.0))
 
+                last_px = float(pos.get("last_price", 0.0) or avg_price)
+                unrealised_pnl = float(pos.get("unrealised", 0.0) or pos.get("pnl", 0.0))
+                if unrealised_pnl == 0.0 and avg_price > 0 and last_px > 0:
+                    if action == "BUY":
+                        unrealised_pnl = (last_px - avg_price) * abs(qty)
+                    else:
+                        unrealised_pnl = (avg_price - last_px) * abs(qty)
+
                 live_legs.append({
                     "tradingsymbol": sym,
                     "instrument_key": pos.get("instrument_token", ""),
@@ -3442,8 +3465,8 @@ def get_upstox_live_positions(token: str) -> List[Dict]:
                     "action": action,
                     "quantity": abs(qty),
                     "entry_price": avg_price,
-                    "current_price": float(pos.get("last_price", avg_price)),
-                    "pnl": float(pos.get("unrealised", 0.0) or pos.get("pnl", 0.0))
+                    "current_price": last_px,
+                    "pnl": round(unrealised_pnl, 2)
                 })
             return live_legs
     except Exception as e:
@@ -3486,10 +3509,16 @@ def get_payoff_data():
     else:
         # Fall back to Journal OPEN trade
         open_trade = None
-        for t in journal.trades:
-            if t.get("status") == "OPEN":
-                open_trade = t
-                break
+        # Check active trade ID first, else pick latest open trade
+        active_id = getattr(state, "auto_trade_active_id", None)
+        if active_id:
+            open_trade = next((t for t in journal.trades if str(t.get("id")) == str(active_id) and t.get("status") == "OPEN"), None)
+
+        if not open_trade:
+            for t in reversed(journal.trades):
+                if t.get("status") == "OPEN":
+                    open_trade = t
+                    break
         if open_trade and open_trade.get("legs"):
             legs = open_trade.get("legs", [])
             strat_name = open_trade.get("strategy", "Open Trade")
