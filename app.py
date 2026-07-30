@@ -1794,7 +1794,17 @@ class SimulationState:
 
         feed_mode = self.settings.get("feed_mode", "Simulation")
         
-        # MARGIN CIRCUIT BREAKER — checked before anything else, uses persisted flag
+        # ── CIRCUIT BREAKER 1: Live order cooldown ─────────────────────────
+        # After ANY live order attempt (success or fail), block re-entry for 60s.
+        # This is the primary guard against order loops on every 3s poll.
+        if mode == "Live":
+            last_attempt = getattr(self, "last_live_order_attempt_time", 0.0)
+            cooldown = 60.0  # minimum 60 seconds between any live order attempts
+            since_last = time.time() - last_attempt
+            if last_attempt > 0 and since_last < cooldown:
+                return  # Silent — wait for cooldown before allowing next entry
+
+        # ── CIRCUIT BREAKER 2: Margin flag (persisted across restarts) ────
         if mode == "Live":
             # Load persisted flag from settings (survives server restarts)
             if self.settings.get("margin_insufficient", False):
@@ -2341,6 +2351,7 @@ class SimulationState:
                     
                     try:
                         print(f"🚀 AUTO-TRADE REAL: Placing {rec} orders on Upstox...")
+                        self.last_live_order_attempt_time = time.time()  # STAMP before attempt
                         order_req = LiveOrderRequest(strategy=rec, legs=live_legs)
                         res = execute_live_order(order_req)
                         if isinstance(res, dict) and res.get("status") == "SUCCESS":
@@ -3377,7 +3388,8 @@ def get_market_data():
         "live_trade_errors": getattr(state, "live_trade_errors", []),
         "lock_remaining_seconds": max(0, int(60.0 - (time.time() - state.last_strategy_change_time))),
         "margin_insufficient": getattr(state, "margin_insufficient", False),
-        "margin_shortfall": getattr(state, "margin_shortfall_amount", 0.0)
+        "margin_shortfall": getattr(state, "margin_shortfall_amount", 0.0),
+        "live_order_cooldown_remaining": max(0, int(60.0 - (time.time() - getattr(state, "last_live_order_attempt_time", 0.0))))
     }
 
 
@@ -3684,7 +3696,30 @@ def wait_for_order_fill(order_id: str, token: str) -> bool:
 def execute_live_order(data: LiveOrderRequest):
     token = state.settings.get("upstox_access_token")
     mode = state.settings.get("feed_mode")
-    
+
+    # ── HARD DAILY ORDER LIMIT ───────────────────────────────────────────
+    # Refuse all new live orders if today's Upstox order count >= 20.
+    # This is the absolute safety net against runaway loops.
+    MAX_DAILY_ORDERS = 20
+    if token and mode == "Upstox":
+        try:
+            chk_headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+            chk_resp = requests.get("https://api.upstox.com/v2/order/retrieve-all", headers=chk_headers, timeout=5)
+            if chk_resp.status_code == 200:
+                today_count = len(chk_resp.json().get("data", []))
+                if today_count >= MAX_DAILY_ORDERS:
+                    err = f"🛑 DAILY ORDER LIMIT: {today_count}/{MAX_DAILY_ORDERS} orders today. Auto-trading disabled."
+                    print(err)
+                    state.live_trade_errors = getattr(state, 'live_trade_errors', [])
+                    state.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
+                    state.live_trade_errors = state.live_trade_errors[-10:]
+                    state.settings["auto_trade_mode"] = "OFF"
+                    state.save_settings()
+                    return {"status": "BLOCKED", "message": err}
+        except Exception as _limit_err:
+            print(f"⚠️ Could not check daily order count: {_limit_err}")
+    # ────────────────────────────────────────────────────────────────────
+
     preferred_index = state.settings.get("preferred_index", "Nifty")
     lot_size = 20 if preferred_index.lower() == "sensex" else 65
     
@@ -3870,6 +3905,8 @@ def execute_live_order(data: LiveOrderRequest):
         first_err = failed_orders[0].get("error", "Unknown error")
         err_msg = f"❌ Live Order Placement Failed ({data.strategy}): {first_err}"
         print(f"🚨 UPSTOX LIVE ERROR: {err_msg}")
+        # Stamp attempt time — enforces 60s cooldown even after failure
+        state.last_live_order_attempt_time = time.time()
 
         # Detect margin-related rejection from Upstox
         margin_keywords = ["add rs", "insufficient", "margin", "funds", "balance"]
@@ -3902,23 +3939,12 @@ def execute_live_order(data: LiveOrderRequest):
                 journal.save_journal()
                 state.auto_trade_active_id = None
             else:
-                # Non-margin partial fail: exit placed legs normally
-                print(f"🚨 PARTIAL FILL EXIT: {len(placed_orders)} legs placed, {len(failed_orders)} legs failed. Exiting placed legs on Upstox...")
-                placed_leg_details = []
-                for p in placed_orders:
-                    inst = p["leg"]
-                    for l_logged in legs_logged:
-                        if l_logged["instrument_key"] == inst:
-                            placed_leg_details.append(l_logged)
-                            break
-                if placed_leg_details:
-                    try:
-                        rollback_res = execute_live_exit_orders(placed_leg_details)
-                        print(f"⚡ PARTIAL EXIT EXECUTED: {rollback_res}")
-                    except Exception as rollback_err:
-                        print(f"❌ PARTIAL EXIT ERROR: {rollback_err}")
+                # Non-margin partial fail: log placed legs for manual close, do NOT auto-rollback
+                # (auto-rollback creates a SELL that completes → system re-enters immediately)
+                placed_syms = [p["leg"] for p in placed_orders]
+                print(f"⚠️ PARTIAL FILL: {len(placed_orders)} placed, {len(failed_orders)} failed. Placed legs (close manually if needed): {placed_syms}")
                 journal.close_trade(trade["id"], state.spot_price)
-                trade["reason"] = f"❌ Partial Fill Exit: {len(placed_orders)} placed / {len(failed_orders)} rejected | {first_err}"
+                trade["reason"] = f"❌ Partial Fill — {len(placed_orders)} placed / {len(failed_orders)} rejected | {first_err} | Placed: {placed_syms}"
                 journal.save_journal()
                 state.auto_trade_active_id = None
         else:
