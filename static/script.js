@@ -4579,7 +4579,7 @@ async function updatePayoffGraph() {
         const titleEl = document.getElementById('payoff-title');
         if (titleEl) titleEl.textContent = data.strategy + ' — Trade #' + data.trade_id;
 
-        const fmtINR = v => (v >= 0 ? '+' : '') + '₹' + Math.abs(v).toLocaleString('en-IN', {maximumFractionDigits: 0});
+        const fmtINR = v => (v > 0 ? '+' : (v < 0 ? '-' : '')) + '₹' + Math.abs(v).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
         const maxProfitEl = document.getElementById('payoff-max-profit');
         if (maxProfitEl) {
