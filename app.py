@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.2.0" 
+VERSION = "3.2.1" 
 import time
 import os
 import json
@@ -3409,25 +3409,94 @@ def reset_margin_flag():
 def get_logs():
     return state.change_log
 
+def get_upstox_live_positions(token: str) -> List[Dict]:
+    """Fetches real-time open positions directly from Upstox portfolio API."""
+    if not token or not token.strip():
+        return []
+    import re as _re
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    try:
+        url = "https://api.upstox.com/v2/portfolio/short-term-positions"
+        r = requests.get(url, headers=headers, timeout=5)
+        if r.status_code == 200 and r.json().get("status") == "success":
+            data = r.json().get("data", [])
+            live_legs = []
+            for pos in data:
+                qty = pos.get("quantity", 0)
+                if qty == 0:
+                    continue  # closed position
+                sym = pos.get("tradingsymbol") or pos.get("trading_symbol") or ""
+                match = _re.search(r'(\d{5})(CE|PE)$', sym)
+                strike = float(match.group(1)) if match else 0.0
+                opt_type = match.group(2) if match else ('CE' if 'CE' in sym else 'PE')
+                action = "BUY" if qty > 0 else "SELL"
+                avg_price = float(pos.get("buy_price", 0.0) if qty > 0 else pos.get("sell_price", 0.0))
+                if avg_price <= 0:
+                    avg_price = float(pos.get("last_price", 100.0))
+
+                live_legs.append({
+                    "tradingsymbol": sym,
+                    "instrument_key": pos.get("instrument_token", ""),
+                    "strike": strike,
+                    "option_type": opt_type,
+                    "action": action,
+                    "quantity": abs(qty),
+                    "entry_price": avg_price,
+                    "current_price": float(pos.get("last_price", avg_price)),
+                    "pnl": float(pos.get("unrealised", 0.0) or pos.get("pnl", 0.0))
+                })
+            return live_legs
+    except Exception as e:
+        print(f"⚠️ Error fetching Upstox positions: {e}")
+    return []
+
+@app.get("/api/positions")
+def get_live_positions_endpoint():
+    token = state.settings.get("upstox_access_token")
+    upstox_legs = get_upstox_live_positions(token)
+    return {"status": "success", "positions": upstox_legs, "count": len(upstox_legs)}
+
+
 @app.get("/api/payoff")
 def get_payoff_data():
     """
-    Compute payoff diagram points for the currently OPEN trade.
+    Compute payoff diagram points for the currently OPEN trade or live Upstox positions.
     Returns P&L at expiry across a range of spot prices ±8% from current spot.
-    Also includes the current floating P&L point (marked with current_spot).
+    Priority 1: Upstox Live Portfolio Positions (when Upstox token is active)
+    Priority 2: Journal Open Trade
     """
     spot = state.spot_price
     preferred_index = state.settings.get("preferred_index", "Nifty")
     lot_size = 20 if preferred_index.lower() == "sensex" else 65
 
-    # Find the currently OPEN trade
-    open_trade = None
-    for t in journal.trades:
-        if t.get("status") == "OPEN":
-            open_trade = t
-            break
+    token = state.settings.get("upstox_access_token")
+    mode = state.settings.get("feed_mode", "Simulation")
 
-    if not open_trade or not open_trade.get("legs"):
+    legs = []
+    strat_name = "No Open Position"
+    trade_id = "LIVE"
+    size = 1
+
+    # Check Upstox Live Positions first if token exists
+    upstox_legs = get_upstox_live_positions(token) if token else []
+    if upstox_legs:
+        legs = upstox_legs
+        strat_name = "Upstox Live Position"
+        trade_id = "Upstox"
+    else:
+        # Fall back to Journal OPEN trade
+        open_trade = None
+        for t in journal.trades:
+            if t.get("status") == "OPEN":
+                open_trade = t
+                break
+        if open_trade and open_trade.get("legs"):
+            legs = open_trade.get("legs", [])
+            strat_name = open_trade.get("strategy", "Open Trade")
+            trade_id = str(open_trade.get("id", "Journal"))
+            size = open_trade.get("size", 1)
+
+    if not legs:
         return {
             "has_position": False,
             "labels": [],
@@ -3439,9 +3508,6 @@ def get_payoff_data():
             "max_loss": 0.0,
             "strategy": "No Open Position"
         }
-
-    legs = open_trade.get("legs", [])
-    size = open_trade.get("size", 1)
 
     # Build spot range: ±8% from current spot in 80 steps
     range_pct = 0.08
@@ -3485,13 +3551,20 @@ def get_payoff_data():
             be = spot_range[i] - payoff_points[i] * (spot_range[i+1] - spot_range[i]) / (payoff_points[i+1] - payoff_points[i])
             breakevens.append(round(be, 0))
 
-    # Current floating P&L (from entry prices vs live LTP approximation)
-    current_pnl = round(state.calculate_trade_pnl(open_trade, spot), 2)
+    # Compute live floating P&L
+    if upstox_legs:
+        current_pnl = round(sum(leg.get("pnl", 0.0) for leg in upstox_legs), 2)
+        entry_spot = spot
+    elif open_trade:
+        current_pnl = round(state.calculate_trade_pnl(open_trade, spot), 2)
+        entry_spot = open_trade.get("entry_spot", spot)
+    else:
+        current_pnl = 0.0
+        entry_spot = spot
 
     max_profit = max(payoff_points)
     max_loss = min(payoff_points)
 
-    # Cap max_loss display for naked selling strategies (theoretical infinite loss)
     if max_loss < -1000000:
         max_loss = -999999.0
 
@@ -3504,9 +3577,9 @@ def get_payoff_data():
         "current_pnl": current_pnl,
         "max_profit": round(max_profit, 2),
         "max_loss": round(max_loss, 2),
-        "strategy": open_trade.get("strategy", "Unknown"),
-        "trade_id": open_trade.get("id"),
-        "entry_spot": open_trade.get("entry_spot", spot),
+        "strategy": strat_name,
+        "trade_id": trade_id,
+        "entry_spot": entry_spot,
         "size": size
     }
 
