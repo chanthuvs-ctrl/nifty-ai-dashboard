@@ -522,8 +522,8 @@ async function fetchMarketData() {
         const activeIndex = activeIndexSelect ? activeIndexSelect.value : 'Nifty';
         const isSensex = activeIndex.toLowerCase() === 'sensex';
         
-        const changePctVal = data.change_pct !== undefined ? data.change_pct : ((data.spot_price - (isSensex ? 79996.60 : 24270.85)) / (isSensex ? 79996.60 : 24270.85)) * 100;
-        const changeAmtVal = data.change_val !== undefined ? data.change_val : data.spot_price - (isSensex ? 79996.60 : 24270.85);
+        const changePctVal = data.change_pct !== undefined ? data.change_pct : 0.0;
+        const changeAmtVal = data.change_val !== undefined ? data.change_val : 0.0;
         const changeHdr = document.getElementById('hdr-nifty-change');
         
         // Update header ticker label and option chain title dynamically
