@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.2.9" 
+VERSION = "3.3.0" 
 import time
 import os
 import json
@@ -184,7 +184,7 @@ class SimulationState:
     def __init__(self):
         # Fetch live price or fallback to current typical price
         price_data = fetch_live_index_price("Nifty")
-        live_price = price_data[0] if price_data[0] is not None else 24270.85
+        live_price = price_data[0] if price_data[0] is not None else 24317.15
         self.spot_price = live_price
         self.intraday_change_pct = price_data[1]
         self.intraday_change_val = price_data[2]
@@ -1324,14 +1324,14 @@ class SimulationState:
             
             if self.market_session == "Pre-Market (Order Entry)":
                 self.premarket_open_price = None
-                baseline = 79996.60 if preferred_index.lower() == "sensex" else 24270.85
+                baseline = 79996.60 if preferred_index.lower() == "sensex" else 24317.15
                 # Pre-market order book equilibrium build-up fluctuations (±0.15% max)
                 self.spot_price = baseline + random.uniform(-35.0, 35.0) if preferred_index.lower() == "sensex" else baseline + random.uniform(-10.0, 10.0)
                 self.price_source = "BSE Pre-Market Equilibrium" if preferred_index.lower() == "sensex" else "NSE Pre-Market Equilibrium"
                 self.recalculation_trigger = "Pre-Market Order Building"
                 
             elif self.market_session == "Pre-Market (Matching)":
-                baseline = 79996.60 if preferred_index.lower() == "sensex" else 24270.85
+                baseline = 79996.60 if preferred_index.lower() == "sensex" else 24317.15
                 if self.premarket_open_price is None:
                     self.premarket_open_price = baseline + (random.uniform(-45.0, 60.0) if preferred_index.lower() == "sensex" else random.uniform(-15.0, 20.0))
                 self.spot_price = self.premarket_open_price
