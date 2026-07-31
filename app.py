@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.3.1" 
+VERSION = "3.3.2" 
 import time
 import os
 import json
@@ -1492,15 +1492,28 @@ class SimulationState:
             # Upstox API call succeeded — mark token as VALID!
             self.upstox_token_status = "VALID"
 
-            # Ensure valid prev_close_baseline for 100% accurate change val and %
-            if not getattr(self, "prev_close_baseline", None) or self.prev_close_baseline == 0.0:
-                price_data = fetch_live_index_price(preferred_index)
-                if price_data[0] is not None and price_data[2] is not None:
-                    self.prev_close_baseline = price_data[0] - price_data[2]
-                else:
-                    self.prev_close_baseline = 79996.60 if preferred_index.lower() == "sensex" else 24317.15
+            # Fetch official Upstox market quote for 100% accurate net_change & change_pct matching Upstox Pro app
+            try:
+                q_url = "https://api.upstox.com/v2/market-quote/quotes"
+                q_resp = requests.get(q_url, headers=headers, params={"instrument_key": instrument_key}, timeout=3)
+                if q_resp.status_code == 200 and q_resp.json().get("status") == "success":
+                    q_data = q_resp.json().get("data", {})
+                    key_alt = instrument_key.replace("|", ":")
+                    q_info = q_data.get(instrument_key) or q_data.get(key_alt)
+                    if q_info:
+                        upstox_last = float(q_info.get("last_price", self.spot_price))
+                        upstox_change = float(q_info.get("net_change", 0.0))
+                        if upstox_last > 0:
+                            self.spot_price = upstox_last
+                            self.intraday_change_val = round(upstox_change, 2)
+                            self.prev_close_baseline = round(upstox_last - upstox_change, 2)
+                            if self.prev_close_baseline > 0:
+                                self.intraday_change_pct = round((self.intraday_change_val / self.prev_close_baseline) * 100.0, 2)
+            except Exception as _q_err:
+                print(f"⚠️ Upstox market quote fetch warning: {_q_err}")
 
-            if self.prev_close_baseline != 0.0:
+            if getattr(self, "prev_close_baseline", 0.0) == 0.0:
+                self.prev_close_baseline = 79996.60 if preferred_index.lower() == "sensex" else 24317.15
                 self.intraday_change_val = round(self.spot_price - self.prev_close_baseline, 2)
                 self.intraday_change_pct = round((self.intraday_change_val / self.prev_close_baseline) * 100.0, 2)
             
