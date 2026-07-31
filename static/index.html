@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3.3.5">
+    <link rel="stylesheet" href="style.css?v=3.4.0">
     <script src="chart.umd.js"></script>
     <script src="chartjs-plugin-annotation.js"></script>
 </head>
@@ -20,7 +20,7 @@
         <div class="header-brand">
             <div class="pulse-indicator" id="refresh-indicator"></div>
             <h1>INTRADAY <span class="glow-text">DECISION ENGINE</span></h1>
-            <span class="badge-pro" id="version-badge">PRODUCTION v3.3.5</span>
+            <span class="badge-pro" id="version-badge">PRODUCTION v3.4.0</span>
             <span class="badge-pro" id="api-status-badge" style="font-size: 0.58rem; padding: 2px 5px; margin-left: 6px; background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border-color: var(--border-color);">API Checking...</span>
         </div>
         
@@ -535,24 +535,50 @@
             <div id="fallback-warning-banner" style="display: none; background: rgba(235, 94, 85, 0.08); border: 1px solid var(--neon-bear); border-radius: 4px; padding: 8px 12px; margin: 10px 20px 0 20px; font-size: 0.75rem; font-weight: 600; color: var(--neon-bear); align-items: center; gap: 8px;">
                 <span>⚠️ Upstox API feed returned no active chain data. Showing Simulated Fallback option prices.</span>
             </div>
+            <!-- HFT Arbitrage Stats Box -->
+            <div id="hft-arbitrage-stats-box" style="display: flex; gap: 15px; margin: 10px 20px; padding: 12px; background: rgba(13, 27, 42, 0.75); border: 1px solid rgba(0, 229, 255, 0.25); border-radius: 6px;">
+                <div style="flex: 1;">
+                    <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; display: flex; align-items: center; gap: 5px;">
+                        <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #00e5ff; box-shadow: 0 0 6px #00e5ff;"></span>
+                        ⚡ Top Undervalued Options (Arbitrage BUY Discount)
+                    </div>
+                    <div id="hft-undervalued-list" style="display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap;">
+                        <span style="font-size: 0.72rem; color: var(--text-muted);">Scanning option chain for pricing anomalies...</span>
+                    </div>
+                </div>
+                <div style="width: 1px; background: rgba(255, 255, 255, 0.1); align-self: stretch;"></div>
+                <div style="flex: 1;">
+                    <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; display: flex; align-items: center; gap: 5px;">
+                        <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #ffab40; box-shadow: 0 0 6px #ffab40;"></span>
+                        ⚡ Top Overvalued Options (Premium SELL Inflation)
+                    </div>
+                    <div id="hft-overvalued-list" style="display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap;">
+                        <span style="font-size: 0.72rem; color: var(--text-muted);">Scanning option chain for pricing anomalies...</span>
+                    </div>
+                </div>
+            </div>
             <div class="table-scroll-container">
                 <table class="option-chain-table" id="option-chain-table">
                 <thead>
                     <tr>
-                        <th colspan="6" class="col-group call-header">CALL OPTIONS</th>
+                        <th colspan="8" class="col-group call-header">CALL OPTIONS</th>
                         <th class="col-strike">STRIKE</th>
-                        <th colspan="6" class="col-group put-header">PUT OPTIONS</th>
+                        <th colspan="8" class="col-group put-header">PUT OPTIONS</th>
                     </tr>
                     <tr>
                         <th>OI (Lakhs)</th>
                         <th>Chg OI</th>
                         <th>IV</th>
                         <th>Delta</th>
+                        <th>Fair Price</th>
+                        <th>Imbalance</th>
                         <th>LTP</th>
                         <th>Bid/Ask</th>
                         <th class="strike-col-hdr">Strike Price</th>
                         <th>Bid/Ask</th>
                         <th>LTP</th>
+                        <th>Imbalance</th>
+                        <th>Fair Price</th>
                         <th>Delta</th>
                         <th>IV</th>
                         <th>Chg OI</th>
@@ -1369,6 +1395,6 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=3.3.5"></script>
+    <script src="script.js?v=3.4.0"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.3.5" 
+VERSION = "3.4.0" 
 import time
 import os
 import json
@@ -1825,6 +1825,23 @@ class SimulationState:
                     "put_oi": put_oi,
                     "put_instrument_key": f"SIM_PUT_{strike}"
                 })
+        # Dynamic HFT option arbitrage calculations
+        try:
+            import hft_arbitrage
+            expiry_date_str = self.get_active_expiry_date()
+            days_to_expiry = 1.0
+            if expiry_date_str:
+                import datetime
+                try:
+                    expiry_date = datetime.date.fromisoformat(expiry_date_str)
+                    today = datetime.date.today()
+                    days_to_expiry = max(1.0, float((expiry_date - today).days))
+                except:
+                    pass
+            option_chain = hft_arbitrage.compute_option_chain_arbitrage(option_chain, spot, days_to_expiry)
+        except Exception as _e:
+            print("⚠️ Dynamic HFT option arbitrage calculation warning:", _e)
+
         self.option_chain = option_chain
 
     def _auto_trade_tick(self):
@@ -3308,6 +3325,14 @@ def get_market_data():
     candles_1m_temp = state.candles_1m + [state.candle_1m]
     candles_5m_temp = state.candles_5m + [state.candle_5m]
     candles_15m_temp = state.candles_15m + [state.candle_15m]
+    
+    # Dynamic HFT Arbitrage Scan
+    hft_opps = {"undervalued": [], "overvalued": []}
+    try:
+        import hft_arbitrage
+        hft_opps = hft_arbitrage.scan_top_arbitrage_opportunities(option_chain)
+    except Exception as _e:
+        print("⚠️ Scan top arbitrage opportunities error:", _e)
 
     # Calculate dynamic decision components values & descriptions for UI component transparency
     decision_components = {
@@ -3455,7 +3480,8 @@ def get_market_data():
         "lock_remaining_seconds": max(0, int(60.0 - (time.time() - state.last_strategy_change_time))),
         "margin_insufficient": getattr(state, "margin_insufficient", False),
         "margin_shortfall": getattr(state, "margin_shortfall_amount", 0.0),
-        "live_order_cooldown_remaining": max(0, int(60.0 - (time.time() - getattr(state, "last_live_order_attempt_time", 0.0))))
+        "live_order_cooldown_remaining": max(0, int(60.0 - (time.time() - getattr(state, "last_live_order_attempt_time", 0.0)))),
+        "hft_arbitrage": hft_opps
     }
 
 

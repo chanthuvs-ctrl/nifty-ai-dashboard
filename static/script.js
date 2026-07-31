@@ -823,6 +823,38 @@ async function fetchMarketData() {
         
         // 7. Bind Option Chain Table
         renderOptionChain(data.option_chain, data.spot_price, data.indicators.max_pain);
+        
+        // Render HFT Arbitrage Stats Box
+        if (data.hft_arbitrage) {
+            const undList = document.getElementById('hft-undervalued-list');
+            const oveList = document.getElementById('hft-overvalued-list');
+            
+            if (undList) {
+                if (data.hft_arbitrage.undervalued && data.hft_arbitrage.undervalued.length > 0) {
+                    undList.innerHTML = data.hft_arbitrage.undervalued.map(opp => {
+                        return `<span class="badge-pro btn-glow-green" style="font-size: 0.68rem; padding: 4px 8px; border: 1px solid rgba(0,229,255,0.3); border-radius: 4px; background: rgba(0,229,255,0.05); margin-bottom: 4px;">
+                            ${opp.strike} ${opp.type} (LTP: ₹${opp.price.toFixed(2)} vs Fair: ₹${opp.fair_price.toFixed(2)}) 
+                            <strong style="color: #00e5ff; margin-left: 4px;">${opp.imbalance_pct.toFixed(1)}%</strong>
+                        </span>`;
+                    }).join('');
+                } else {
+                    undList.innerHTML = `<span style="font-size: 0.72rem; color: var(--text-muted);">No undervalued arbitrage opportunities detected.</span>`;
+                }
+            }
+            
+            if (oveList) {
+                if (data.hft_arbitrage.overvalued && data.hft_arbitrage.overvalued.length > 0) {
+                    oveList.innerHTML = data.hft_arbitrage.overvalued.map(opp => {
+                        return `<span class="badge-pro btn-glow-red" style="font-size: 0.68rem; padding: 4px 8px; border: 1px solid rgba(255,171,64,0.3); border-radius: 4px; background: rgba(255,171,64,0.05); margin-bottom: 4px;">
+                            ${opp.strike} ${opp.type} (LTP: ₹${opp.price.toFixed(2)} vs Fair: ₹${opp.fair_price.toFixed(2)}) 
+                            <strong style="color: #ffab40; margin-left: 4px;">+${opp.imbalance_pct.toFixed(1)}%</strong>
+                        </span>`;
+                    }).join('');
+                } else {
+                    oveList.innerHTML = `<span style="font-size: 0.72rem; color: var(--text-muted);">No overvalued options detected.</span>`;
+                }
+            }
+        }
         globalOptionChain = data.option_chain;
         
         // Refresh journal list & logs
@@ -941,11 +973,25 @@ function renderOptionChain(chain, spot, maxPain) {
         const callChgOi = (opt.call_change_oi / 1000.0).toFixed(1);
         const callChgClass = opt.call_change_oi >= 0 ? "text-bull" : "text-bear";
         
+        // Fair value calculations and formatting
+        const callImbalance = opt.call_imbalance_pct !== undefined ? opt.call_imbalance_pct : 0.0;
+        const callImbalanceClass = callImbalance < -5.0 ? "text-bull font-bold" : (callImbalance > 5.0 ? "text-gold font-bold" : "text-muted");
+        const callImbalanceText = callImbalance > 0 ? `+${callImbalance.toFixed(1)}%` : `${callImbalance.toFixed(1)}%`;
+        
+        const putImbalance = opt.put_imbalance_pct !== undefined ? opt.put_imbalance_pct : 0.0;
+        const putImbalanceClass = putImbalance < -5.0 ? "text-bull font-bold" : (putImbalance > 5.0 ? "text-gold font-bold" : "text-muted");
+        const putImbalanceText = putImbalance > 0 ? `+${putImbalance.toFixed(1)}%` : `${putImbalance.toFixed(1)}%`;
+        
+        const fairCall = opt.fair_call_price !== undefined ? opt.fair_call_price : opt.call_price;
+        const fairPut = opt.fair_put_price !== undefined ? opt.fair_put_price : opt.put_price;
+
         tr.innerHTML = `
             <td class="${isCallITM ? 'itm-call' : ''}">${callOiLakhs}L</td>
             <td class="${isCallITM ? 'itm-call' : ''} ${callChgClass}">${callChgOi}k</td>
             <td class="${isCallITM ? 'itm-call' : ''} text-secondary">${opt.call_iv}</td>
             <td class="${isCallITM ? 'itm-call' : ''} ${opt.call_delta >= 0 ? 'text-bull' : 'text-bear'}">${opt.call_delta.toFixed(2)}</td>
+            <td class="${isCallITM ? 'itm-call' : ''} text-secondary">₹${fairCall.toFixed(2)}</td>
+            <td class="${isCallITM ? 'itm-call' : ''} ${callImbalanceClass}">${callImbalanceText}</td>
             <td class="${isCallITM ? 'itm-call' : ''} text-bull font-bold">₹${opt.call_price.toFixed(2)}</td>
             <td class="${isCallITM ? 'itm-call' : ''} text-muted">${opt.call_bid.toFixed(2)} / ${opt.call_ask.toFixed(2)}</td>
             
@@ -953,6 +999,8 @@ function renderOptionChain(chain, spot, maxPain) {
             
             <td class="${isPutITM ? 'itm-put' : ''} text-muted">${opt.put_bid.toFixed(2)} / ${opt.put_ask.toFixed(2)}</td>
             <td class="${isPutITM ? 'itm-put' : ''} text-bear font-bold">₹${opt.put_price.toFixed(2)}</td>
+            <td class="${isPutITM ? 'itm-put' : ''} ${putImbalanceClass}">${putImbalanceText}</td>
+            <td class="${isPutITM ? 'itm-put' : ''} text-secondary">₹${fairPut.toFixed(2)}</td>
             <td class="${isPutITM ? 'itm-put' : ''} ${opt.put_delta >= 0 ? 'text-bull' : 'text-bear'}">${opt.put_delta.toFixed(2)}</td>
             <td class="${isPutITM ? 'itm-put' : ''} text-secondary">${opt.put_iv}</td>
             <td class="${isPutITM ? 'itm-put' : ''} ${opt.put_change_oi >= 0 ? 'text-bull' : 'text-bear'}">${(opt.put_change_oi/1000).toFixed(1)}k</td>
