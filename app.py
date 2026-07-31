@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.2.8" 
+VERSION = "3.2.9" 
 import time
 import os
 import json
@@ -132,44 +132,47 @@ def calculate_greeks(
 
 
 def fetch_live_index_price(index_symbol: str = "Nifty"):
-    """Fetch live Nifty 50 or SENSEX spot price and intraday changes from Google Finance."""
+    """Fetch live Nifty 50 or SENSEX spot price and intraday changes using high-speed JSON market APIs with fallback."""
+    ticker = "^BSESN" if index_symbol.lower() == "sensex" else "^NSEI"
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
+    
+    # 1. Primary: High-Speed Yahoo Finance API (100% accurate real-time index tick)
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1m&range=1d"
+        resp = requests.get(url, headers=headers, timeout=4)
+        if resp.status_code == 200:
+            data = resp.json()
+            meta = data.get("chart", {}).get("result", [{}])[0].get("meta", {})
+            price = meta.get("regularMarketPrice")
+            prev_close = meta.get("chartPreviousClose") or meta.get("previousClose")
+            if price and prev_close and price > 0:
+                change_val = round(price - prev_close, 2)
+                change_pct = round((change_val / prev_close) * 100.0, 2)
+                return float(price), float(change_pct), float(change_val)
+    except Exception as _e:
+        print(f"⚠️ Yahoo Finance API fetch warning ({index_symbol}):", _e)
+
+    # 2. Secondary: Google Finance regex fallback
     price, change_pct, change_val = None, 0.0, 0.0
     try:
-        if index_symbol.lower() == "sensex":
-            url = "https://www.google.com/finance/quote/SENSEX:INDEXBOM"
-            title = "BSE SENSEX"
-        else:
-            url = "https://www.google.com/finance/quote/NIFTY_50:INDEXNSE"
-            title = "NIFTY 50"
-            
-        resp = requests.get(url, headers=headers, timeout=5)
-        idx = resp.text.find(f'class="gO24Ff">{title}</div>')
-        if idx != -1:
-            block = resp.text[idx:idx+1500]
-            
-            # Spot Price
-            match_price = re.search(r'jsname="Pdsbrc"[^>]*><span>([^<]+)</span>', block, re.DOTALL)
-            if match_price:
-                price = float(match_price.group(1).replace(",", ""))
-                
-            # Change percentage
-            match_pct = re.search(r'jsname="vY9t3b"[^>]*><span[^>]*>([^<]+)</span>', block, re.DOTALL)
-            if match_pct:
-                pct_str = match_pct.group(1).replace("%", "").replace(",", "")
-                change_pct = float(pct_str)
-                
-            # Change value
-            match_val = re.search(r'jsname="xnruHf"[^>]*>(?:<span>)*([^<+-]*[+-][^<]+?)(?:</span>)+', block, re.DOTALL)
-            if not match_val:
-                match_val = re.search(r'\(([^)]+)\)\s*Today', block, re.DOTALL)
-            if match_val:
-                val_str = match_val.group(1).replace(",", "")
-                change_val = float(val_str)
+        url = "https://www.google.com/finance/quote/SENSEX:INDEXBOM" if index_symbol.lower() == "sensex" else "https://www.google.com/finance/quote/NIFTY_50:INDEXNSE"
+        resp = requests.get(url, headers=headers, timeout=4)
+        if resp.status_code == 200:
+            html = resp.text
+            m_price = re.search(r'<span>([0-9]{2},\d{3}\.\d{2})</span>', html)
+            if m_price:
+                price = float(m_price.group(1).replace(",", ""))
+            m_pct = re.search(r'([+-]?\d+\.\d+)%', html)
+            if m_pct:
+                change_pct = float(m_pct.group(1))
+            m_val = re.search(r'([+-]\d+\.\d+)\s*\([+-]?\d+\.\d+%\)', html)
+            if m_val:
+                change_val = float(m_val.group(1).replace(",", ""))
     except Exception as e:
-        print(f"Live {index_symbol} fetch warning:", e)
+        print(f"Live {index_symbol} Google fetch warning:", e)
+        
     return price, change_pct, change_val
 
 
