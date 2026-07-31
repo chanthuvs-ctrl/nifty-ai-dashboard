@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.3.3" 
+VERSION = "3.3.4" 
 import time
 import os
 import json
@@ -3156,6 +3156,15 @@ def get_market_data():
         if not success:
             time.sleep(0.3)
             success = state.fetch_upstox_data()
+
+        if success:
+            # Clear old transient connection warnings immediately once healthy
+            state.live_trade_errors = [
+                e for e in getattr(state, "live_trade_errors", [])
+                if "Upstox Feed Error" not in e["error"] 
+                and "Upstox Live Feed Delay" not in e["error"] 
+                and "Upstox Token Expired" not in e["error"]
+            ]
 
         if not success:
             if mode == "Live":
