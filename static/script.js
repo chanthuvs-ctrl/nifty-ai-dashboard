@@ -35,23 +35,27 @@ function syncAutoTradeButtonVisuals(containerId, activeMode) {
             btn.classList.add('active');
             // Custom styling for active button
             if (activeMode === 'OFF') {
-                btn.style.color = 'var(--text-primary)';
-                btn.style.background = 'rgba(148, 163, 184, 0.15)';
+                btn.style.color = '#f0f4f9';
+                btn.style.background = 'rgba(148, 163, 184, 0.22)';
                 btn.style.boxShadow = 'none';
+                btn.style.border = '1px solid rgba(148, 163, 184, 0.4)';
             } else if (activeMode === 'Paper') {
-                btn.style.color = 'var(--neon-cyan)';
-                btn.style.background = 'rgba(0, 229, 255, 0.08)';
-                btn.style.boxShadow = '0 0 8px rgba(0, 229, 255, 0.2)';
+                btn.style.color = '#00d9f5';
+                btn.style.background = 'rgba(0, 217, 245, 0.15)';
+                btn.style.boxShadow = '0 0 10px rgba(0, 217, 245, 0.3)';
+                btn.style.border = '1px solid rgba(0, 217, 245, 0.5)';
             } else if (activeMode === 'Live') {
-                btn.style.color = 'var(--neon-bear)';
-                btn.style.background = 'rgba(235, 94, 85, 0.08)';
-                btn.style.boxShadow = '0 0 10px rgba(235, 94, 85, 0.3)';
+                btn.style.color = '#ff6b6b';
+                btn.style.background = 'rgba(255, 77, 77, 0.15)';
+                btn.style.boxShadow = '0 0 12px rgba(255, 77, 77, 0.4)';
+                btn.style.border = '1px solid rgba(255, 77, 77, 0.5)';
             }
         } else {
             btn.classList.remove('active');
-            btn.style.color = 'var(--text-muted)';
-            btn.style.background = 'none';
+            btn.style.color = '#94a3b8';
+            btn.style.background = 'rgba(148, 163, 184, 0.06)';
             btn.style.boxShadow = 'none';
+            btn.style.border = '1px solid rgba(148, 163, 184, 0.15)';
         }
     });
 }
