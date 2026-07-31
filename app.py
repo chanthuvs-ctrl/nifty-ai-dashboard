@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.3.4" 
+VERSION = "3.3.5" 
 import time
 import os
 import json
@@ -809,11 +809,22 @@ class SimulationState:
             rs = avg_gain / avg_loss
             rsi = 100.0 - (100.0 / (1.0 + rs))
             
-        # Classify Trend
-        if ema20 > ema50:
-            trend = "Bullish" if rsi > 50.0 else "Neutral-Bullish"
-        elif ema20 < ema50:
-            trend = "Bearish" if rsi < 50.0 else "Neutral-Bearish"
+        # Classify Trend using Price-Action Overlay + EMAs (Responsive to sharp V-reversals)
+        current_price = closes[-1]
+        if current_price > ema20:
+            # Price is above EMA20 (Bullish momentum)
+            if ema20 > ema50:
+                trend = "Bullish"
+            else:
+                # Reversal / Recovery: Price crossed above EMA20 but lagging EMA crossover hasn't happened yet
+                trend = "Neutral-Bullish"
+        elif current_price < ema20:
+            # Price is below EMA20 (Bearish momentum)
+            if ema20 < ema50:
+                trend = "Bearish"
+            else:
+                # Pullback: Price crossed below EMA20 but lagging EMA crossover hasn't happened yet
+                trend = "Neutral-Bearish"
         else:
             trend = "Neutral"
             
