@@ -4,7 +4,7 @@ import random
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.3.2" 
+VERSION = "3.3.3" 
 import time
 import os
 import json
@@ -3151,12 +3151,18 @@ def get_market_data():
     feed_mode = state.settings.get("feed_mode", "Simulation")
 
     if mode == "Live" or feed_mode == "Upstox":
-        # Force Upstox fetch. No simulation fallback allowed for Live Auto Real!
+        # Force Upstox fetch. Resilience micro-retry for network latency
         success = state.fetch_upstox_data()
         if not success:
+            time.sleep(0.3)
+            success = state.fetch_upstox_data()
+
+        if not success:
             if mode == "Live":
-                # Halt/Raise error, do not tick simulation!
-                err = "❌ Upstox Feed Error: Failed to fetch live contract data from Upstox. Google Finance simulation fallback blocked in Auto Real mode."
+                if getattr(state, "upstox_token_status", "VALID") != "VALID":
+                    err = "❌ Upstox Token Expired: Please re-authenticate your Upstox account in Settings."
+                else:
+                    err = "⚠️ Upstox Live Feed Delay: Temporary network delay fetching Upstox ticks. Retrying..."
                 state.live_trade_errors = getattr(state, 'live_trade_errors', [])
                 if not state.live_trade_errors or state.live_trade_errors[-1]["error"] != err:
                     state.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
