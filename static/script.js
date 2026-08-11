@@ -4858,9 +4858,10 @@ async function updatePayoffGraph() {
 
 
 
-// ── AUTOMATED STRATEGY SUITE UI UPDATES & EVENT LISTENERS ──
 
-// ── AUTOMATED STRATEGY SUITE & AI SIGNAL BANNER UI UPDATER ──
+// ── OPTIMISTIC USER TOGGLE LOCK (PREVENTS 3S POLLING RACE CONDITIONS) ──
+const pendingUserToggles = {};
+
 function updateStrategySuiteUI(suite) {
     if (!suite) return;
 
@@ -4869,20 +4870,43 @@ function updateStrategySuiteUI(suite) {
 
     let topSignalStrat = null;
     let maxConf = 0.0;
+    const now = Date.now();
 
     for (const [key, s] of Object.entries(suite)) {
         if (s.is_enabled !== false) enabledCount++;
 
-        // Sync Enable Checkbox
+        const pending = pendingUserToggles[key];
+        const isRecentUserAction = pending && (now - pending.timestamp < 4000);
+
+        // Sync Enable Checkbox (only if user didn't just click it)
         const chkEnable = document.querySelector(`.strat-enable-checkbox[data-strat="${key}"]`);
         if (chkEnable && document.activeElement !== chkEnable) {
-            chkEnable.checked = s.is_enabled !== false;
+            if (isRecentUserAction && pending.enabled !== undefined) {
+                chkEnable.checked = pending.enabled;
+            } else {
+                chkEnable.checked = s.is_enabled !== false;
+            }
         }
 
-        // Sync Live Deploy Checkbox
+        // Sync Live Deploy Checkbox (only if user didn't just click it)
         const chkLive = document.querySelector(`.strat-live-checkbox[data-strat="${key}"]`);
+        const cardEl = document.getElementById(`card-strat-${key}`);
+
         if (chkLive && document.activeElement !== chkLive) {
-            chkLive.checked = s.is_live_deployed === true;
+            let activeLiveState = s.is_live_deployed === true;
+            if (isRecentUserAction && pending.live !== undefined) {
+                activeLiveState = pending.live;
+            }
+            chkLive.checked = activeLiveState;
+
+            // Visual feedback on strategy card
+            if (cardEl) {
+                if (activeLiveState) {
+                    cardEl.classList.add('live-active-card');
+                } else {
+                    cardEl.classList.remove('live-active-card');
+                }
+            }
         }
 
         // Update Signal Badge
@@ -4909,7 +4933,6 @@ function updateStrategySuiteUI(suite) {
             reasonEl.innerText = s.reason || "Evaluating market conditions...";
         }
 
-        // Update 15m Range indicator
         if (key === "first_15m_breakout") {
             const elHigh = document.getElementById("val-15m-high");
             const elLow = document.getElementById("val-15m-low");
@@ -4917,7 +4940,6 @@ function updateStrategySuiteUI(suite) {
             if (elLow && s.range_low) elLow.innerText = `₹${s.range_low}`;
         }
 
-        // Track highest conviction active trade signal for Top AI Banner
         const sig = s.signal || "No Trade";
         const conf = s.confidence || 50.0;
         if (sig !== "No Trade" && conf >= maxConf) {
@@ -4926,15 +4948,68 @@ function updateStrategySuiteUI(suite) {
         }
     }
 
-    // Update Top Active Strategy Count
     const cntEl = document.getElementById("active-strat-count");
     if (cntEl) {
         cntEl.innerText = `${enabledCount} / ${totalCount} Enabled`;
     }
 
-    # Update AI Intelligence Top Banner with Strategy Name, Signal, Confidence Score & Reason
     updateTopAISignalBanner(topSignalStrat, suite);
 }
+
+function initStrategySuiteListeners() {
+    document.addEventListener('change', async (e) => {
+        if (e.target.classList.contains('strat-enable-checkbox')) {
+            const stratKey = e.target.getAttribute('data-strat');
+            const enabled = e.target.checked;
+            
+            pendingUserToggles[stratKey] = {
+                ...(pendingUserToggles[stratKey] || {}),
+                enabled: enabled,
+                timestamp: Date.now()
+            };
+
+            try {
+                await fetch('/api/strategies/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy_key: stratKey, enabled: enabled })
+                });
+                if (typeof showToast === 'function') showToast(`Strategy ${stratKey} ${enabled ? 'ENABLED' : 'Disabled'}`);
+            } catch (err) {
+                console.error("Failed to toggle strategy enabled:", err);
+            }
+        }
+
+        if (e.target.classList.contains('strat-live-checkbox')) {
+            const stratKey = e.target.getAttribute('data-strat');
+            const liveDeploy = e.target.checked;
+            
+            pendingUserToggles[stratKey] = {
+                ...(pendingUserToggles[stratKey] || {}),
+                live: liveDeploy,
+                timestamp: Date.now()
+            };
+
+            const cardEl = document.getElementById(`card-strat-${stratKey}`);
+            if (cardEl) {
+                if (liveDeploy) cardEl.classList.add('live-active-card');
+                else cardEl.classList.remove('live-active-card');
+            }
+
+            try {
+                await fetch('/api/strategies/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy_key: stratKey, live_deploy: liveDeploy })
+                });
+                if (typeof showToast === 'function') showToast(`🚀 Live Deploy for ${stratKey} ${liveDeploy ? 'ACTIVATED' : 'Deactivated'}`);
+            } catch (err) {
+                console.error("Failed to toggle strategy live deployment:", err);
+            }
+        }
+    });
+}
+
 
 function updateTopAISignalBanner(topStrat, suite) {
     const bannerRec = document.getElementById('banner-rec-text');

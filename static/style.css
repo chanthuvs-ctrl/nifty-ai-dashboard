@@ -2612,3 +2612,16 @@ body {
   border: 1px solid rgba(30, 41, 59, 0.8);
   line-height: 1.35;
 }
+
+/* ── LIVE DEPLOYED ACTIVE CARD GLOW ── */
+.live-active-card {
+  border-color: rgba(56, 189, 248, 0.8) !important;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.3) !important;
+  background: rgba(14, 30, 55, 0.9) !important;
+}
+
+.live-active-card .live-deploy-toggle {
+  background: rgba(16, 185, 129, 0.25) !important;
+  color: #34d399 !important;
+  border-color: rgba(16, 185, 129, 0.6) !important;
+}
