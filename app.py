@@ -2275,6 +2275,26 @@ class SimulationState:
             else:
                 s["active_position"] = None
             res[key] = s
+        
+        # Apply 3-Minute Signal Lock Hysteresis (prevents tick-by-tick signal flipping)
+        if not hasattr(self, "strategy_signal_locks"):
+            self.strategy_signal_locks = {}
+            
+        now_ts = time.time()
+        for key, s in res.items():
+            locked = self.strategy_signal_locks.get(key)
+            if locked is not None and (now_ts - locked["timestamp"] < 180.0):
+                # Lock confirmed signal for minimum 3 minutes
+                s["signal"] = locked["signal"]
+                s["confidence"] = locked["confidence"]
+                s["reason"] = f"[CONFIRMED 3M LOCK] {s['reason']}"
+            else:
+                if s.get("signal") != "No Trade":
+                    self.strategy_signal_locks[key] = {
+                        "signal": s["signal"],
+                        "timestamp": now_ts,
+                        "confidence": s.get("confidence", 90.0)
+                    }
         return res
 
     def evaluate_first_15m_breakout_strategy(self) -> dict:
