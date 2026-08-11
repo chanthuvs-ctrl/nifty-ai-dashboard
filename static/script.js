@@ -4907,7 +4907,7 @@ function updateTopAISignalBanner(topStrat, suite) {
                 bannerRec.innerText = "NO TRADE";
                 bannerRec.className = "banner-value badge-neutral";
             }
-            if (bannerStrat) bannerStrat.innerText = "🎯 Strategy Suite: Evaluating 15 Strategies";
+            if (bannerStrat) bannerStrat.innerText = "🎯 Strategy Suite: Evaluating 14 Strategies";
             if (bannerConf) bannerConf.innerText = "⚡ 50.0% Confidence";
             if (bannerReason) bannerReason.innerText = "Market in consolidation range. Waiting for strategy breakout or level trigger.";
             if (bannerEntry) bannerEntry.innerText = "--";
@@ -5081,14 +5081,14 @@ async function initStrategySuiteListeners() {
                 document.querySelectorAll('.strat-live-checkbox').forEach(c => c.checked = true);
                 document.querySelectorAll('.strat-card').forEach(c => c.classList.add('live-active-card'));
 
-                if (typeof showToast === 'function') showToast(`✓ ${res.message || 'Deployed All 15 Strategies!'}`);
+                if (typeof showToast === 'function') showToast(`✓ ${res.message || 'Deployed All 14 Strategies!'}`);
                 fetchJournal();
                 fetchMarketData();
             } catch (err) {
                 console.error("Failed to enable all strategies:", err);
             } finally {
                 btnSelectAll.disabled = false;
-                btnSelectAll.innerText = "✓ SELECT & DEPLOY ALL 15 STRATEGIES";
+                btnSelectAll.innerText = "✓ SELECT & DEPLOY ALL 14 STRATEGIES";
             }
         });
     }

@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WealthPulse AI - Financial Health, Debt Optimization & FIRE Engine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-slate-950 text-slate-100 font-['Plus_Jakarta_Sans'] antialiased min-h-screen selection:bg-emerald-500 selection:text-slate-950 pb-16">
+
+  <!-- TOP HEADER -->
+  <header class="sticky top-0 z-50 backdrop-blur-xl bg-slate-950/80 border-b border-slate-800/80 px-4 lg:px-8 py-3.5">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 via-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 font-['Outfit'] font-extrabold text-slate-950 text-xl">
+            WP
+          </div>
+          <div>
+            <h1 class="text-xl font-extrabold font-['Outfit'] tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-slate-400">
+              WealthPulse <span class="text-emerald-400 text-sm font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 ml-1">AI Brain v2.0</span>
+            </h1>
+            <p class="text-xs text-slate-400">Financial Independence, Debt Burden & Asset Intelligence</p>
+          </div>
+        </div>
+
+        <div class="md:hidden flex items-center gap-2">
+          <button id="btn-edit-header-mobile" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-500 text-slate-950">✏️ Edit</button>
+          <button id="btn-mobile-reset" class="p-2 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-300">Reset</button>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Bar in Header -->
+      <div class="flex items-center gap-4 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+        <!-- Health Score Pill -->
+        <div class="flex items-center gap-2 bg-slate-900/90 border border-slate-800 rounded-xl px-3.5 py-1.5 shrink-0">
+          <div class="text-right">
+            <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Health Score</div>
+            <div id="header-health-score" class="text-sm font-extrabold text-emerald-400">70 / 100</div>
+          </div>
+          <div class="w-2 h-8 rounded-full bg-slate-800 overflow-hidden relative">
+            <div id="header-health-bar" class="w-full bg-emerald-500 absolute bottom-0 transition-all duration-500" style="height: 70%;"></div>
+          </div>
+        </div>
+
+        <!-- FIRE Counter Pill -->
+        <div class="flex items-center gap-2.5 bg-gradient-to-r from-emerald-950/40 to-slate-900/90 border border-emerald-500/30 rounded-xl px-4 py-1.5 shrink-0">
+          <span class="text-xl">🔥</span>
+          <div>
+            <div class="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">Days to FIRE</div>
+            <div id="header-fire-days" class="text-sm font-extrabold text-white">8,188 Days <span id="header-fire-years" class="text-xs font-normal text-slate-400">(22.4 yrs)</span></div>
+          </div>
+        </div>
+
+        <!-- DTI Meter Pill -->
+        <div class="flex items-center gap-2.5 bg-slate-900/90 border border-slate-800 rounded-xl px-3.5 py-1.5 shrink-0">
+          <div>
+            <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">DTI Ratio</div>
+            <div id="header-dti-val" class="text-sm font-extrabold text-emerald-400">28.6% <span class="text-[10px] text-slate-400 font-normal">(Healthy)</span></div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="hidden md:flex items-center gap-2 pl-2 border-l border-slate-800">
+          <button id="btn-open-profile-editor" class="px-3.5 py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 shadow-md shadow-emerald-500/20 transition-all">
+            ✏️ Edit All Details
+          </button>
+          <button id="btn-export-json" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors">
+            Export JSON
+          </button>
+          <button id="btn-blank-data" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-colors">
+            🧹 Start Blank
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN NAVIGATION TABS -->
+  <nav class="max-w-7xl mx-auto px-4 lg:px-8 mt-4">
+    <div class="flex items-center justify-between gap-2 overflow-x-auto p-1.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-md">
+      <div class="flex items-center gap-2 shrink-0">
+        <button data-tab="tab-overview" class="tab-btn active px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 shrink-0 transition-all">
+          <span>📊</span> Current Snapshot
+        </button>
+        <button data-tab="tab-assets" class="tab-btn px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 shrink-0 transition-all">
+          <span>📝</span> Assets & Debt Portfolio
+        </button>
+        <button data-tab="tab-projections" class="tab-btn px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 shrink-0 transition-all">
+          <span>📈</span> Days to FIRE & Timeline
+        </button>
+        <button data-tab="tab-optimizer" class="tab-btn px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 shrink-0 transition-all">
+          <span>⚡</span> Loan Burden Optimizer
+        </button>
+        <button data-tab="tab-aibrain" class="tab-btn px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 shrink-0 transition-all bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
+          <span>🧠</span> AI Brain Chatbot
+        </button>
+      </div>
+
+      <button id="btn-tab-quick-edit" class="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-xs font-bold hover:bg-emerald-500/20 transition-all shrink-0">
+        <span>⚙️</span> Edit Profile Data
+      </button>
+    </div>
+  </nav>
+
+  <!-- CONTENT CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 lg:px-8 mt-6">
+
+    <!-- TAB 1: CURRENT SNAPSHOT -->
+    <section id="tab-overview" class="tab-content block space-y-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-card p-5 rounded-2xl border border-slate-800/80 bg-slate-900/40 relative overflow-hidden group hover:border-emerald-500/30 transition-all">
+          <div class="absolute -right-4 -bottom-4 w-24 h-24 rounded-full bg-emerald-500/10 blur-xl group-hover:bg-emerald-500/20 transition-all"></div>
+          <span class="text-xs uppercase font-bold tracking-wider text-slate-400 block mb-1">Total Net Worth</span>
+          <div id="kpi-net-worth" class="text-2xl lg:text-3xl font-extrabold text-white font-['Outfit']">₹99,12,500</div>
+          <div class="flex items-center gap-2 mt-2 text-xs text-slate-400">
+            <span class="text-emerald-400 font-semibold">Liquid:</span> <span id="kpi-liquid-networth">₹59.0L</span>
+          </div>
+        </div>
+
+        <div class="glass-card p-5 rounded-2xl border border-slate-800/80 bg-slate-900/40 relative overflow-hidden group hover:border-cyan-500/30 transition-all">
+          <div class="absolute -right-4 -bottom-4 w-24 h-24 rounded-full bg-cyan-500/10 blur-xl group-hover:bg-cyan-500/20 transition-all"></div>
+          <span class="text-xs uppercase font-bold tracking-wider text-slate-400 block mb-1">Gross Monthly Income</span>
+          <div id="kpi-monthly-income" class="text-2xl lg:text-3xl font-extrabold text-white font-['Outfit']">₹2,60,000</div>
+          <div class="flex items-center gap-2 mt-2 text-xs text-slate-400">
+            <span class="text-cyan-400 font-semibold">Surplus Cash:</span> <span id="kpi-monthly-surplus">₹55,500/mo</span>
+          </div>
+        </div>
+
+        <div class="glass-card p-5 rounded-2xl border border-slate-800/80 bg-slate-900/40 relative overflow-hidden group hover:border-amber-500/30 transition-all">
+          <div class="absolute -right-4 -bottom-4 w-24 h-24 rounded-full bg-amber-500/10 blur-xl group-hover:bg-amber-500/20 transition-all"></div>
+          <span class="text-xs uppercase font-bold tracking-wider text-slate-400 block mb-1">Monthly EMIs + Chits</span>
+          <div id="kpi-monthly-debt" class="text-2xl lg:text-3xl font-extrabold text-white font-['Outfit']">₹74,500</div>
+          <div class="flex items-center gap-2 mt-2 text-xs text-slate-400">
+            <span class="text-amber-400 font-semibold">DTI Ratio:</span> <span id="kpi-dti-ratio">28.6%</span>
+          </div>
+        </div>
+
+        <div class="glass-card p-5 rounded-2xl border border-slate-800/80 bg-slate-900/40 relative overflow-hidden group hover:border-indigo-500/30 transition-all">
+          <div class="absolute -right-4 -bottom-4 w-24 h-24 rounded-full bg-indigo-500/10 blur-xl group-hover:bg-indigo-500/20 transition-all"></div>
+          <span class="text-xs uppercase font-bold tracking-wider text-slate-400 block mb-1">Assets vs Liabilities</span>
+          <div class="text-lg font-bold text-white"><span id="kpi-total-assets" class="text-emerald-400">₹1.39 Cr</span> / <span id="kpi-total-liabilities" class="text-rose-400">₹39.9L</span></div>
+          <div class="flex items-center gap-2 mt-2 text-xs text-slate-400">
+            <span class="text-indigo-400 font-semibold">Chit Fund Liability:</span> <span id="kpi-chit-liability">₹2.8L</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="glass-card p-6 rounded-2xl border border-slate-800/80 bg-slate-900/40 lg:col-span-2">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-base font-bold text-white">Asset & Property Breakdown</h3>
+              <p class="text-xs text-slate-400">Distribution across MFs, Gold, House/Plots, ULIP & Cash</p>
+            </div>
+            <span class="text-xs px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300">Live Valuation</span>
+          </div>
+          <div class="h-64 sm:h-72 relative">
+            <canvas id="chart-asset-allocation"></canvas>
+          </div>
+        </div>
+
+        <div class="glass-card p-6 rounded-2xl border border-slate-800/80 bg-slate-900/40 space-y-4">
+          <h3 class="text-base font-bold text-white flex items-center justify-between">
+            <span>🛡️ Financial Health Audit</span>
+            <span id="audit-score-badge" class="text-sm font-extrabold text-emerald-400 px-3 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20">70 / 100</span>
+          </h3>
+
+          <div class="space-y-3 text-xs">
+            <div class="p-3 rounded-xl bg-slate-850 border border-slate-800">
+              <div class="flex justify-between font-semibold mb-1">
+                <span class="text-slate-300">Debt-to-Income (DTI)</span>
+                <span id="audit-dti-status" class="text-emerald-400">28.6% (Healthy)</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Monthly debt commitments consume under 35% of income.</p>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-850 border border-slate-800">
+              <div class="flex justify-between font-semibold mb-1">
+                <span class="text-slate-300">Emergency Fund</span>
+                <span id="audit-emergency-status" class="text-amber-400">₹4.5L (4.5 Mos)</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Target is 6 months essential expenses (₹6.0 Lakhs).</p>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-850 border border-slate-800">
+              <div class="flex justify-between font-semibold mb-1">
+                <span class="text-slate-300">Term Insurance Cover</span>
+                <span id="audit-term-status" class="text-emerald-400">₹1.50 Cr (Adequate)</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Pure life cover exceeds required threshold.</p>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-850 border border-slate-800">
+              <div class="flex justify-between font-semibold mb-1">
+                <span class="text-slate-300">ULIP/Endowment Audit</span>
+                <span id="audit-ulip-status" class="text-rose-400">1 Low Yield Policy</span>
+              </div>
+              <p class="text-[11px] text-slate-400">LIC endowment yields ~5.2% p.a. - consider re-allocation.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: ASSETS & DEBT PORTFOLIO -->
+    <section id="tab-assets" class="tab-content hidden space-y-6">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-white">Asset & Liability Portfolio Manager</h2>
+          <p class="text-xs text-slate-400">View, add, edit or delete any loan, chit fund, property, insurance policy or gold asset.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btn-open-full-editor-tab" class="px-4 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 transition-all shadow-md shadow-emerald-500/20">
+            ✏️ Open Full Profile Editor
+          </button>
+          <button id="btn-add-asset-item" class="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-200 transition-colors">
+            + Quick Add Item
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+        <!-- 1. Salary & Income Form Card -->
+        <div class="glass-card p-5 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">
+          <h3 class="font-bold text-sm text-emerald-400 flex items-center justify-between border-b border-slate-800 pb-2">
+            <span class="flex items-center gap-2"><span>💵</span> Salary & Monthly Income</span>
+            <span class="text-[10px] text-slate-400">Editable</span>
+          </h3>
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1">Monthly Base Salary (₹)</label>
+              <input type="number" id="inp-salary" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold focus:border-emerald-500 focus:outline-none" value="180000">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Monthly Bonus / Incentives (₹)</label>
+              <input type="number" id="inp-bonus" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold focus:border-emerald-500 focus:outline-none" value="15000">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Side Income / Freelancing (₹)</label>
+              <input type="number" id="inp-sideincome" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold focus:border-emerald-500 focus:outline-none" value="25000">
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Expenses Form Card -->
+        <div class="glass-card p-5 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">
+          <h3 class="font-bold text-sm text-cyan-400 flex items-center justify-between border-b border-slate-800 pb-2">
+            <span class="flex items-center gap-2"><span>🛒</span> Monthly Expenses</span>
+            <span class="text-[10px] text-slate-400">Editable</span>
+          </h3>
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1">Essential Expenses (Rent, Food, Medical) (₹)</label>
+              <input type="number" id="inp-essential-exp" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold focus:border-cyan-500 focus:outline-none" value="65000">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Discretionary Expenses (Shopping, Travel) (₹)</label>
+              <input type="number" id="inp-discretionary-exp" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold focus:border-cyan-500 focus:outline-none" value="30000">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Monthly Mutual Fund SIP (₹)</label>
+              <input type="number" id="inp-mf-sip" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold focus:border-cyan-500 focus:outline-none" value="35000">
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Active Loans Card -->
+        <div class="glass-card p-5 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">
+          <h3 class="font-bold text-sm text-rose-400 flex items-center justify-between border-b border-slate-800 pb-2">
+            <span class="flex items-center gap-2"><span>🏦</span> Active Loans</span>
+            <button id="btn-add-loan-inline" class="text-[10px] px-2 py-0.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/30">+ Add Loan</button>
+          </h3>
+          <div id="loans-list-container" class="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+          </div>
+        </div>
+
+        <!-- 4. Chit Funds Card (Treated as Loans/Liabilities) -->
+        <div class="glass-card p-5 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">
+          <h3 class="font-bold text-sm text-amber-400 flex items-center justify-between border-b border-slate-800 pb-2">
+            <span class="flex items-center gap-2"><span>📜</span> Chit Funds (Loan Liabilities)</span>
+            <button id="btn-add-chit-inline" class="text-[10px] px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30">+ Add Chit</button>
+          </h3>
+          <div id="chits-list-container" class="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+          </div>
+        </div>
+
+        <!-- 5. Real Estate & Non-Tangible Assets Card -->
+        <div class="glass-card p-5 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">
+          <h3 class="font-bold text-sm text-indigo-400 flex items-center justify-between border-b border-slate-800 pb-2">
+            <span class="flex items-center gap-2"><span>🏡</span> House & Land Properties</span>
+            <button id="btn-add-prop-inline" class="text-[10px] px-2 py-0.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30">+ Add Property</button>
+          </h3>
+          <div id="props-list-container" class="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+          </div>
+        </div>
+
+        <!-- 6. Gold Assets & Trading PnL Card -->
+        <div class="glass-card p-5 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">
+          <h3 class="font-bold text-sm text-yellow-400 flex items-center justify-between border-b border-slate-800 pb-2">
+            <span class="flex items-center gap-2"><span>🥇</span> Gold Assets & Investments</span>
+            <button id="btn-edit-gold-inline" class="text-[10px] px-2 py-0.5 rounded-lg bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 hover:bg-yellow-500/30">Edit Gold</button>
+          </h3>
+          <div class="space-y-3 text-xs">
+            <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+              <div class="flex justify-between font-semibold">
+                <span class="text-slate-300">Gold Assets</span>
+                <span id="gold-total-val" class="text-yellow-400">₹13.77 Lakhs</span>
+              </div>
+              <div id="gold-grams-breakdown" class="text-[11px] text-slate-400">Physical (120g) + SGB (50g) + Digital (20g) @ ₹7,250/g</div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+              <div class="flex justify-between font-semibold">
+                <span class="text-slate-300">Mutual Funds & Trading</span>
+                <span id="mf-total-val" class="text-emerald-400">₹14.5L MFs | +₹18k PnL</span>
+              </div>
+              <div class="text-[11px] text-slate-400">SIP: ₹35,000/mo | Trading Capital: ₹3.5L</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Save & Apply Changes Button -->
+      <div class="flex justify-between items-center pt-2">
+        <button id="btn-start-blank-portfolio" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 text-xs font-semibold border border-slate-700">
+          🧹 Clear All & Start Blank Profile
+        </button>
+        <button id="btn-save-portfolio" class="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20">
+          💾 Save & Update All Calculations
+        </button>
+      </div>
+    </section>
+
+    <!-- TAB 3: PROJECTIONS & DAYS TO FIRE -->
+    <section id="tab-projections" class="tab-content hidden space-y-6">
+      <div class="glass-card p-6 rounded-3xl border border-emerald-500/30 bg-gradient-to-r from-emerald-950/30 via-slate-900/60 to-slate-900/80 relative overflow-hidden">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+          <div class="space-y-2 text-center md:text-left">
+            <span class="text-xs uppercase font-extrabold tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+              🔥 Financial Independence Target
+            </span>
+            <div class="text-4xl lg:text-5xl font-extrabold text-white font-['Outfit']">
+              <span id="proj-fire-days">8,188</span> <span class="text-2xl text-emerald-400 font-semibold">Days</span>
+            </div>
+            <p class="text-xs text-slate-300">
+              Estimated <strong id="proj-fire-years">22.4 Years</strong> to achieve target corpus of <strong id="proj-fire-target" class="text-emerald-300">₹3.50 Crores</strong> (Target Year: <span id="proj-fire-year">2048</span>).
+            </p>
+          </div>
+
+          <div class="w-full md:w-80 p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs">
+            <div class="flex justify-between font-semibold">
+              <span class="text-slate-300">Annual Salary Hike Rate:</span>
+              <span id="slider-hike-val" class="text-emerald-400 font-bold">8.0%</span>
+            </div>
+            <input type="range" id="slider-hike" min="0" max="25" step="0.5" value="8" class="w-full accent-emerald-500 bg-slate-800 rounded-lg cursor-pointer">
+
+            <div class="flex justify-between font-semibold pt-1">
+              <span class="text-slate-300">Expected MF CAGR (%):</span>
+              <span id="slider-cagr-val" class="text-cyan-400 font-bold">12.0%</span>
+            </div>
+            <input type="range" id="slider-cagr" min="5" max="20" step="0.5" value="12" class="w-full accent-cyan-500 bg-slate-800 rounded-lg cursor-pointer">
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="glass-card p-6 rounded-2xl border border-slate-800 bg-slate-900/40">
+          <h3 class="text-sm font-bold text-white mb-1">Net Worth & FIRE Target Trajectory</h3>
+          <p class="text-xs text-slate-400 mb-4">Projected growth curve considering annual salary hikes & SIP compounding</p>
+          <div class="h-64 relative">
+            <canvas id="chart-fire-projection"></canvas>
+          </div>
+        </div>
+
+        <div class="glass-card p-6 rounded-2xl border border-slate-800 bg-slate-900/40">
+          <h3 class="text-sm font-bold text-white mb-1">Loan & Chit Fund Payoff Timeline</h3>
+          <p class="text-xs text-slate-400 mb-4">Exact completion month for each outstanding loan commitment</p>
+          <div class="h-64 relative">
+            <canvas id="chart-loan-timeline"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: LOAN BURDEN OPTIMIZER -->
+    <section id="tab-optimizer" class="tab-content hidden space-y-6">
+      <div class="glass-card p-6 rounded-3xl border border-indigo-500/30 bg-slate-900/50 space-y-4">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <span>⚡</span> Debt Burden Elimination Engine
+            </h2>
+            <p class="text-xs text-slate-400">Compare Debt Avalanche (Highest Interest) vs Debt Snowball (Smallest Balance) payoff strategies.</p>
+          </div>
+
+          <div class="flex items-center gap-3 bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl text-xs">
+            <span class="text-slate-300 font-semibold">Extra Prepayment / Month:</span>
+            <input type="range" id="slider-prepayment" min="0" max="30000" step="1000" value="5000" class="w-32 accent-indigo-500 cursor-pointer">
+            <span id="slider-prepay-val" class="font-bold text-indigo-400 text-sm">₹5,000</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="text-xs uppercase font-extrabold tracking-wider text-slate-400">Smart Debt Clearance Recommendations</h3>
+        <div id="debt-suggestions-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="glass-card p-6 rounded-2xl border border-emerald-500/30 bg-emerald-950/10 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div>
+              <h4 class="font-bold text-base text-emerald-400">🏔️ Debt Avalanche (Recommended)</h4>
+              <p class="text-xs text-slate-400">Target highest interest debt first (18% Credit Card -> 14.5% Personal)</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Save Max Interest</span>
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+              <span class="text-slate-400 block">Total Interest Saved:</span>
+              <span id="opt-avalanche-saved" class="text-lg font-extrabold text-emerald-400">₹4,75,490</span>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+              <span class="text-slate-400 block">Debt-Free Faster by:</span>
+              <span id="opt-avalanche-months" class="text-lg font-extrabold text-white">34 Months</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card p-6 rounded-2xl border border-slate-800 bg-slate-900/40 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div>
+              <h4 class="font-bold text-base text-cyan-400">❄️ Debt Snowball</h4>
+              <p class="text-xs text-slate-400">Target smallest balance first for quick psychological wins</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">Quick Wins</span>
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+              <span class="text-slate-400 block">Total Interest Saved:</span>
+              <span id="opt-snowball-saved" class="text-lg font-extrabold text-cyan-400">₹4,12,000</span>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+              <span class="text-slate-400 block">Debt-Free Faster by:</span>
+              <span id="opt-snowball-months" class="text-lg font-extrabold text-white">30 Months</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: AI BRAIN CHATBOT -->
+    <section id="tab-aibrain" class="tab-content hidden space-y-6">
+      <div class="glass-card p-6 rounded-3xl border border-indigo-500/30 bg-slate-900/50 flex flex-col h-[640px]">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-lg">
+              🧠
+            </div>
+            <div>
+              <h3 class="font-bold text-white text-base">WealthPulse AI Chat Assistant</h3>
+              <p class="text-xs text-slate-400">Answers "Can I take a new loan?", loan consolidation & debt optimization queries</p>
+            </div>
+          </div>
+          <span class="text-xs px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+            ● AI Ready
+          </span>
+        </div>
+
+        <div class="flex items-center gap-2 overflow-x-auto py-3 border-b border-slate-800/60 scrollbar-none">
+          <span class="text-[11px] font-bold text-slate-400 shrink-0 uppercase tracking-wider">Quick Prompts:</span>
+          <button data-prompt="Can I take a new loan of 10 Lakhs at 11% for 5 years?" class="btn-quick-prompt text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 shrink-0 transition-colors">
+            "Can I take a new loan of ₹10L at 11%?"
+          </button>
+          <button data-prompt="Should I take a loan to close my credit card debt?" class="btn-quick-prompt text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 shrink-0 transition-colors">
+            "Should I take loan to close credit card?"
+          </button>
+          <button data-prompt="How can I overcome my loan burden faster?" class="btn-quick-prompt text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 shrink-0 transition-colors">
+            "How to overcome loan burden?"
+          </button>
+          <button data-prompt="What is my exact Days to Financial Independence?" class="btn-quick-prompt text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 shrink-0 transition-colors">
+            "What is my Days to FIRE calculation?"
+          </button>
+        </div>
+
+        <div id="chat-messages-container" class="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
+          <div class="flex items-start gap-3">
+            <div class="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0 text-sm">🧠</div>
+            <div class="glass-card p-4 rounded-2xl rounded-tl-none border border-slate-800 bg-slate-900/80 max-w-2xl text-xs space-y-2 text-slate-200">
+              <div class="font-bold text-white">Hello! I am your AI Financial Decision Assistant.</div>
+              <p class="leading-relaxed">I have analyzed your salary, loans, Chit Funds, insurance, properties, gold assets, and FIRE target calculation.</p>
+              <p class="text-indigo-300 font-medium">Ask me anything, like whether you are in a position to take a new loan, how to consolidate debt, or how to reduce loan burden!</p>
+            </div>
+          </div>
+        </div>
+
+        <form id="chat-input-form" class="pt-3 border-t border-slate-800 flex items-center gap-2">
+          <input type="text" id="chat-input-field" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none" placeholder="Ask AI: 'Can I take a new ₹5 Lakh personal loan?' or 'How to clear loan burden?'...">
+          <button type="submit" class="px-5 py-3 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs transition-colors flex items-center gap-1">
+            Send <span>➔</span>
+          </button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- QUICK ADD ITEM MODAL -->
+  <div id="modal-add-item" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-md p-6 rounded-3xl border border-slate-800 bg-slate-900 space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-white text-base">Add Financial Item</h3>
+        <button id="modal-btn-close" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">Item Category</label>
+          <select id="modal-item-type" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white">
+            <option value="LOAN">Loan / Liability</option>
+            <option value="CHIT">Chit Fund Scheme</option>
+            <option value="PROPERTY">House or Land Property</option>
+            <option value="TERM_INSURANCE">Term Insurance</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Name / Description</label>
+          <input type="text" id="modal-item-name" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white" placeholder="e.g. Car Loan (SBI)">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Amount / Principal (₹)</label>
+          <input type="number" id="modal-item-amount" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white" placeholder="350000">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Monthly Payment / EMI (₹)</label>
+          <input type="number" id="modal-item-emi" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white" placeholder="9200">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button id="modal-btn-cancel" class="px-4 py-2 text-xs rounded-xl bg-slate-800 text-slate-300">Cancel</button>
+        <button id="modal-btn-save" class="px-5 py-2 text-xs font-bold rounded-xl bg-emerald-500 text-slate-950">Add Item</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPREHENSIVE FULL PROFILE EDITOR MODAL -->
+  <div id="modal-full-editor" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-4xl max-h-[90vh] flex flex-col p-6 rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="font-bold text-white text-lg flex items-center gap-2">
+            <span>✏️</span> Complete Financial Profile Editor
+          </h3>
+          <p class="text-xs text-slate-400">Update your salary, loans, chit funds, properties, gold, and investments all in one place.</p>
+        </div>
+        <button id="editor-btn-close" class="text-slate-400 hover:text-white text-xl font-bold p-1">✕</button>
+      </div>
+
+      <!-- Editor Tabs -->
+      <div class="flex items-center gap-2 overflow-x-auto border-b border-slate-800/80 pb-2 text-xs font-semibold">
+        <button data-editor-tab="ed-tab-income" class="ed-tab-btn active px-3 py-1.5 rounded-lg bg-slate-800 text-emerald-400">💵 Income & Expenses</button>
+        <button data-editor-tab="ed-tab-loans" class="ed-tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white">🏦 Loans & Chits</button>
+        <button data-editor-tab="ed-tab-investments" class="ed-tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white">📈 MFs, Trading & Insurance</button>
+        <button data-editor-tab="ed-tab-assets" class="ed-tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white">🏡 Real Estate & Gold</button>
+      </div>
+
+      <!-- Editor Body Content -->
+      <div class="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+
+        <!-- EDITOR TAB 1: INCOME & EXPENSES -->
+        <div id="ed-tab-income" class="ed-tab-content block space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-slate-400 mb-1">Base Monthly Salary (₹)</label>
+              <input type="number" id="ed-inp-salary" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-bold">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Monthly Bonus (₹)</label>
+              <input type="number" id="ed-inp-bonus" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Side Income (₹)</label>
+              <input type="number" id="ed-inp-sideincome" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-slate-400 mb-1">Essential Expenses (₹/mo)</label>
+              <input type="number" id="ed-inp-essential" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-bold">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Discretionary Expenses (₹/mo)</label>
+              <input type="number" id="ed-inp-discretionary" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Expected Salary Hike (%)</label>
+              <input type="number" id="ed-inp-hike" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white" value="8">
+            </div>
+          </div>
+        </div>
+
+        <!-- EDITOR TAB 2: LOANS & CHITS -->
+        <div id="ed-tab-loans" class="ed-tab-content hidden space-y-4">
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <h4 class="font-bold text-rose-400">Active Loans</h4>
+              <button id="ed-btn-add-loan" class="px-2.5 py-1 text-[11px] rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30">+ Add Loan</button>
+            </div>
+            <div id="ed-loans-table-container" class="space-y-2">
+            </div>
+          </div>
+
+          <div class="border-t border-slate-800 pt-3">
+            <div class="flex justify-between items-center mb-2">
+              <h4 class="font-bold text-amber-400">Active Chit Funds (Treated as Debt Commitment)</h4>
+              <button id="ed-btn-add-chit" class="px-2.5 py-1 text-[11px] rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30">+ Add Chit</button>
+            </div>
+            <div id="ed-chits-table-container" class="space-y-2">
+            </div>
+          </div>
+        </div>
+
+        <!-- EDITOR TAB 3: INVESTMENTS & INSURANCE -->
+        <div id="ed-tab-investments" class="ed-tab-content hidden space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-slate-400 mb-1">Mutual Fund Corpus (₹)</label>
+              <input type="number" id="ed-inp-mf-corpus" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-bold">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Monthly SIP Amount (₹)</label>
+              <input type="number" id="ed-inp-mf-sip" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-bold">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Expected MF CAGR (%)</label>
+              <input type="number" id="ed-inp-mf-cagr" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white" value="12">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-slate-800 pt-3">
+            <div>
+              <label class="block text-slate-400 mb-1">Trading Capital Allocated (₹)</label>
+              <input type="number" id="ed-inp-trading-cap" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Avg Monthly Trading PnL (₹)</label>
+              <input type="number" id="ed-inp-trading-pnl" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Term Insurance Cover Sum (₹)</label>
+              <input type="number" id="ed-inp-term-cover" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white">
+            </div>
+          </div>
+        </div>
+
+        <!-- EDITOR TAB 4: REAL ESTATE & GOLD -->
+        <div id="ed-tab-assets" class="ed-tab-content hidden space-y-4">
+          <div>
+            <h4 class="font-bold text-yellow-400 mb-2">Gold Assets Breakdown</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <label class="block text-slate-400 mb-1">Physical Gold (Grams)</label>
+                <input type="number" id="ed-inp-gold-physical" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white">
+              </div>
+              <div>
+                <label class="block text-slate-400 mb-1">SGB Gold (Grams)</label>
+                <input type="number" id="ed-inp-gold-sgb" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white">
+              </div>
+              <div>
+                <label class="block text-slate-400 mb-1">Digital Gold (Grams)</label>
+                <input type="number" id="ed-inp-gold-digital" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white">
+              </div>
+              <div>
+                <label class="block text-slate-400 mb-1">Gold Price / Gram (₹)</label>
+                <input type="number" id="ed-inp-gold-rate" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white" value="7250">
+              </div>
+            </div>
+          </div>
+
+          <div class="border-t border-slate-800 pt-3">
+            <div class="flex justify-between items-center mb-2">
+              <h4 class="font-bold text-indigo-400">House & Land Properties</h4>
+              <button id="ed-btn-add-prop" class="px-2.5 py-1 text-[11px] rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">+ Add Property</button>
+            </div>
+            <div id="ed-props-table-container" class="space-y-2">
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Editor Modal Footer Actions -->
+      <div class="flex justify-between items-center border-t border-slate-800 pt-3">
+        <button id="editor-btn-blank" class="px-4 py-2 text-xs rounded-xl bg-rose-500/10 text-rose-300 border border-rose-500/30">
+          🧹 Clear All Data & Start Fresh
+        </button>
+        <div class="flex gap-2">
+          <button id="editor-btn-cancel" class="px-4 py-2 text-xs rounded-xl bg-slate-800 text-slate-300">Cancel</button>
+          <button id="editor-btn-save-all" class="px-6 py-2 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20">
+            💾 Save All Profile Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

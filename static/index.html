@@ -23,7 +23,7 @@
         <div class="header-brand">
             <div class="pulse-indicator" id="refresh-indicator"></div>
             <h1>INTRADAY <span class="glow-text">DECISION ENGINE</span></h1>
-            <span class="badge-pro" id="version-badge">PRODUCTION v4.0.3</span>
+            <span class="badge-pro" id="version-badge">PRODUCTION v4.1.0</span>
             <span class="badge-pro" id="api-status-badge" style="font-size: 0.58rem; padding: 2px 5px; margin-left: 6px; background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border-color: var(--border-color);">API Checking...</span>
         </div>
         
@@ -260,7 +260,7 @@
       <span style="color: var(--text-muted); font-size: 0.8rem;">Select strategies via checkbox & deploy live trading</span>
     </div>
     <div style="font-size: 0.75rem; color: #a0aec0;">
-      <span>Active Strategies: <strong id="active-strat-count" style="color: #10b981;">5 / 5 Enabled</strong></span>
+      <span>Active Strategies: <strong id="active-strat-count" style="color: #10b981;">14 / 14 Enabled</strong></span>
     </div>
   </div>
 
@@ -274,7 +274,7 @@
       </div>
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         <button id="btn-select-all-strats" class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; font-weight: 800; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.78rem;">
-          ✓ SELECT & DEPLOY ALL 15 STRATEGIES
+          ✓ SELECT & DEPLOY ALL 14 STRATEGIES
         </button>
         <button id="btn-force-paper-trades" class="btn-action" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; border: none; font-weight: 800; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.78rem;">
           🚀 INITIATE ALL PAPER TRADES NOW
@@ -365,12 +365,7 @@
       </div>
 
       <!-- CARD 11: IT Jegan Strategy -->
-      <div class="strat-card" id="card-strat-it_jegan">
-        <div class="strat-card-header"><label class="strat-checkbox-label"><input type="checkbox" class="strat-enable-checkbox" data-strat="it_jegan" checked><span class="strat-title">IT Jegan Strategy (Capital Zone)</span></label></div>
-        <div class="strat-desc">VWAP + 9/20 EMA + Supertrend & Strangle</div>
-        <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-it_jegan">SHORT STRANGLE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="it_jegan"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
-        <div class="strat-reason" id="reason-it_jegan">Rangebound near VWAP. Strangle active.</div>
-      </div>
+      
 
       <!-- CARD 12: Linda Raschke 80-20 & Holy Grail -->
       <div class="strat-card" id="card-strat-linda_raschke">
@@ -1583,7 +1578,7 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=4.0.3_FINAL_FINAL"></script>
+    <script src="script.js?v=4.1.0_LIVE_FINAL"></script>
 
 <!-- 📊 STRATEGY BACKTESTING LAB MODAL -->
 <div id="modal-backtest" class="modal-overlay" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(5, 10, 20, 0.85); backdrop-filter: blur(12px); padding: 20px; overflow-y: auto;">
@@ -1682,7 +1677,7 @@ Weekly Review: Week ____ (P&L: _________)
       <div style="display: flex; justify-between: space-between; align-items: center; margin-bottom: 8px;">
         <h3 style="font-size: 0.85rem; font-weight: 700; color: #e2e8f0; margin: 0;">📜 Detailed Historical Trade Log</h3>
         <select id="bt-trade-log-filter" style="background: #0f172a; color: #fff; border: 1px solid #334155; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">
-          <option value="ALL">All 15 Strategies</option>
+          <option value="ALL">All 14 Strategies</option>
           <option value="power_of_stocks">Power of Stocks (5 EMA)</option>
           <option value="smc_ict_fvg">Smart Money Concepts (SMC FVG)</option>
           <option value="larry_williams">Larry Williams Expansion</option>

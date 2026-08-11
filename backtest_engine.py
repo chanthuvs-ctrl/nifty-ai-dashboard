@@ -104,7 +104,6 @@ class StrategyBacktester:
         strategies = [
             "first_15m_breakout",
             "power_of_stocks",
-            "it_jegan",
             "booming_bulls",
             "trading_legend",
             "larry_williams",
@@ -207,23 +206,7 @@ class StrategyBacktester:
                             target_p = close_p - abs(sl_p - close_p) * rr_ratio
                             reason = "Power of Stocks 5 EMA Sell Alert & Breakdown."
 
-                    # 3. IT Jegan Strategy (VWAP + Supertrend & Strangle)
-                    elif strat_key == "it_jegan":
-                        if close_p > vwap * 1.002:
-                            signal = "Buy CE"
-                            sl_p = vwap
-                            target_p = close_p + abs(close_p - vwap) * rr_ratio
-                            reason = "IT Jegan VWAP + Supertrend Bullish Momentum."
-                        elif close_p < vwap * 0.998:
-                            signal = "Buy PE"
-                            sl_p = vwap
-                            target_p = close_p - abs(vwap - close_p) * rr_ratio
-                            reason = "IT Jegan VWAP + Supertrend Bearish Momentum."
-                        else:
-                            signal = "Short Strangle"
-                            sl_p = close_p + 35.0
-                            target_p = close_p
-                            reason = "IT Jegan Strangle Theta Decay Mode."
+                    
 
                     # 4. Booming Bulls Strategy (15m ORB + Price Action)
                     elif strat_key == "booming_bulls":
@@ -477,7 +460,6 @@ class StrategyBacktester:
         name_map = {
             "first_15m_breakout": "15-Min Breakout & Close (Custom)",
             "power_of_stocks": "Power of Stocks (5 EMA & Inside Bar)",
-            "it_jegan": "IT Jegan Strategy (VWAP + Strangle)",
             "booming_bulls": "Booming Bulls (15m ORB + Price Action)",
             "trading_legend": "Trading Legend (CPR + VWAP)",
             "larry_williams": "Larry Williams Volatility Expansion",

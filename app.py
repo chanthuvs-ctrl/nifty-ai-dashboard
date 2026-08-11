@@ -371,9 +371,9 @@ class SimulationState:
         
     
     def sync_settings_strategies(self):
-        """Auto-migrates and ensures ALL 15 strategies exist in settings."""
+        """Auto-migrates and ensures ALL 14 strategies exist in settings."""
         all_keys = [
-            "first_15m_breakout", "power_of_stocks", "it_jegan", "booming_bulls", "trading_legend",
+            "first_15m_breakout", "power_of_stocks", "booming_bulls", "trading_legend",
             "larry_williams", "turtle_trading", "minervini_vcp", "oliver_velez", "elder_triple_screen",
             "demark_td9", "darvas_box", "linda_raschke", "smc_ict_fvg", "gamma_squeeze"
         ]
@@ -2219,7 +2219,6 @@ class SimulationState:
         """Evaluates all 15 specialized trading strategies independently."""
         strat_15m = self.evaluate_first_15m_breakout_strategy()
         strat_pos = self.evaluate_power_of_stocks_strategy()
-        strat_jegan = self.evaluate_it_jegan_strategy()
         strat_booming = self.evaluate_booming_bulls_strategy()
         strat_legend = self.evaluate_trading_legend_strategy()
         strat_larry = self.evaluate_larry_williams_strategy()
@@ -2239,7 +2238,6 @@ class SimulationState:
         all_strats = [
             ("first_15m_breakout", strat_15m),
             ("power_of_stocks", strat_pos),
-            ("it_jegan", strat_jegan),
             ("booming_bulls", strat_booming),
             ("trading_legend", strat_legend),
             ("larry_williams", strat_larry),
@@ -2294,17 +2292,6 @@ class SimulationState:
             return {"name": "Power of Stocks Strategy (Subasish Pani)", "key": "power_of_stocks", "signal": "Buy CE", "status": "5 EMA BUY ALERT TRIGGERED", "confidence": 88.0, "ema_5": round(ema_5, 2), "reason": f"Power of Stocks 5 EMA Buy Triggered: Spot (₹{spot:.1f}) broke above alert candle high."}
         else:
             return {"name": "Power of Stocks Strategy (Subasish Pani)", "key": "power_of_stocks", "signal": "No Trade", "status": "WAITING FOR 5 EMA ALERT CANDLE", "confidence": 50.0, "ema_5": round(ema_5, 2), "reason": "No alert candle formed. Waiting for 5 EMA separation."}
-
-    def evaluate_it_jegan_strategy(self) -> dict:
-        vwap_val = self.get_vwap()
-        spot = self.spot_price
-        diff_pct = abs(spot - vwap_val) / vwap_val if vwap_val > 0 else 0
-        if spot > vwap_val and self.ema_20 > self.ema_50 and diff_pct > 0.0015:
-            return {"name": "IT Jegan Strategy (Capital Zone)", "key": "it_jegan", "signal": "Buy CE", "status": "BULLISH MOMENTUM CONFLUENCE", "confidence": 90.0, "vwap": round(vwap_val, 2), "reason": f"IT Jegan Strategy: Spot (₹{spot:.1f}) > VWAP (₹{vwap_val:.1f}) with EMA alignment."}
-        elif spot < vwap_val and self.ema_20 < self.ema_50 and diff_pct > 0.0015:
-            return {"name": "IT Jegan Strategy (Capital Zone)", "key": "it_jegan", "signal": "Buy PE", "status": "BEARISH MOMENTUM CONFLUENCE", "confidence": 90.0, "vwap": round(vwap_val, 2), "reason": f"IT Jegan Strategy: Spot (₹{spot:.1f}) < VWAP (₹{vwap_val:.1f}) with EMA alignment."}
-        else:
-            return {"name": "IT Jegan Strategy (Capital Zone)", "key": "it_jegan", "signal": "Short Strangle", "status": "RANGEBOUND THETA DECAY (STRANGLE)", "confidence": 85.0, "vwap": round(vwap_val, 2), "reason": f"IT Jegan Rangebound Mode: Spot hovering near VWAP (₹{vwap_val:.1f}). Favorable for Short Strangle."}
 
     def evaluate_booming_bulls_strategy(self) -> dict:
         spot = self.spot_price
@@ -2461,7 +2448,7 @@ class SimulationState:
 
     def process_independent_multi_strategy_ticks(self):
         """
-        Evaluates and executes trades for ALL 15 strategies INDEPENDENTLY.
+        Evaluates and executes trades for ALL 14 strategies INDEPENDENTLY.
         Trade entries and exits in Strategy A will NEVER block or interfere with Strategy B!
         """
         self._init_multi_strategy_engine()
@@ -2505,7 +2492,6 @@ class SimulationState:
         "larry_williams": {"offset": 100, "type": "OTM2", "expiry": "CURRENT_WEEK"},
         "turtle_trading": {"offset": 0, "type": "ATM", "expiry": "CURRENT_WEEK"},
         "minervini_vcp": {"offset": 50, "type": "OTM1", "expiry": "CURRENT_WEEK"},
-        "it_jegan": {"offset": 150, "type": "OTM_STRANGLE", "expiry": "NEXT_WEEK"},
         "trading_legend": {"offset": 0, "type": "ATM", "expiry": "CURRENT_WEEK"},
         "gamma_squeeze": {"offset": 50, "type": "STRIKE_PIN", "expiry": "CURRENT_WEEK"},
         "linda_raschke": {"offset": 0, "type": "ATM", "expiry": "CURRENT_WEEK"},
@@ -2729,29 +2715,25 @@ def calculate_trade_initial_risk(trade, capital):
         """Evaluates all 5 specialized trading strategies independently."""
         strat_15m = self.evaluate_first_15m_breakout_strategy()
         strat_pos = self.evaluate_power_of_stocks_strategy()
-        strat_jegan = self.evaluate_it_jegan_strategy()
         strat_booming = self.evaluate_booming_bulls_strategy()
         strat_legend = self.evaluate_trading_legend_strategy()
 
         enabled = self.settings.get("enabled_strategies", {
             "first_15m_breakout": True,
             "power_of_stocks": True,
-            "it_jegan": True,
-            "booming_bulls": True,
+                "booming_bulls": True,
             "trading_legend": True
         })
         live_deploy = self.settings.get("live_deploy_strategies", {
             "first_15m_breakout": False,
             "power_of_stocks": False,
-            "it_jegan": False,
-            "booming_bulls": False,
+                "booming_bulls": False,
             "trading_legend": False
         })
 
         for key, s in [
             ("first_15m_breakout", strat_15m),
             ("power_of_stocks", strat_pos),
-            ("it_jegan", strat_jegan),
             ("booming_bulls", strat_booming),
             ("trading_legend", strat_legend)
         ]:
@@ -3009,7 +2991,7 @@ def calculate_trade_initial_risk(trade, capital):
 
     def process_independent_multi_strategy_ticks(self):
         """
-        Evaluates and executes trades for ALL 15 strategies INDEPENDENTLY.
+        Evaluates and executes trades for ALL 14 strategies INDEPENDENTLY.
         Trade entries and exits in Strategy A will NEVER block or interfere with Strategy B!
         """
         self._init_multi_strategy_engine()
@@ -3211,29 +3193,25 @@ def calculate_trade_initial_risk(trade, capital):
         """Evaluates all 5 specialized trading strategies independently."""
         strat_15m = self.evaluate_first_15m_breakout_strategy()
         strat_pos = self.evaluate_power_of_stocks_strategy()
-        strat_jegan = self.evaluate_it_jegan_strategy()
         strat_booming = self.evaluate_booming_bulls_strategy()
         strat_legend = self.evaluate_trading_legend_strategy()
 
         enabled = self.settings.get("enabled_strategies", {
             "first_15m_breakout": True,
             "power_of_stocks": True,
-            "it_jegan": True,
-            "booming_bulls": True,
+                "booming_bulls": True,
             "trading_legend": True
         })
         live_deploy = self.settings.get("live_deploy_strategies", {
             "first_15m_breakout": False,
             "power_of_stocks": False,
-            "it_jegan": False,
-            "booming_bulls": False,
+                "booming_bulls": False,
             "trading_legend": False
         })
 
         for key, s in [
             ("first_15m_breakout", strat_15m),
             ("power_of_stocks", strat_pos),
-            ("it_jegan", strat_jegan),
             ("booming_bulls", strat_booming),
             ("trading_legend", strat_legend)
         ]:
@@ -3815,7 +3793,7 @@ def run_backtest_simulation(req: BacktestRequest):
 @app.post("/api/strategies/enable-all")
 def enable_all_strategies_endpoint():
     all_keys = [
-        "first_15m_breakout", "power_of_stocks", "it_jegan", "booming_bulls", "trading_legend",
+        "first_15m_breakout", "power_of_stocks", "booming_bulls", "trading_legend",
         "larry_williams", "turtle_trading", "minervini_vcp", "oliver_velez", "elder_triple_screen",
         "demark_td9", "darvas_box", "linda_raschke", "smc_ict_fvg", "gamma_squeeze"
     ]
@@ -3832,7 +3810,7 @@ def enable_all_strategies_endpoint():
     count = state.force_initiate_all_paper_trades()
     return {
         "status": "success",
-        "message": f"Successfully enabled and deployed all 15 strategies! {count} paper trades active.",
+        "message": f"Successfully enabled and deployed all 14 strategies! {count} paper trades active.",
         "active_trades_count": count,
         "strategy_suite": state.evaluate_strategy_suite()
     }
@@ -3853,14 +3831,12 @@ def toggle_strategy_settings(req: StrategyToggleRequest):
     enabled = state.settings.setdefault("enabled_strategies", {
         "first_15m_breakout": True,
         "power_of_stocks": True,
-        "it_jegan": True,
         "booming_bulls": True,
         "trading_legend": True
     })
     live_deploy = state.settings.setdefault("live_deploy_strategies", {
         "first_15m_breakout": False,
         "power_of_stocks": False,
-        "it_jegan": False,
         "booming_bulls": False,
         "trading_legend": False
     })
