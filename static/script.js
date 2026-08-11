@@ -4859,25 +4859,33 @@ async function updatePayoffGraph() {
 
 
 // ── AUTOMATED STRATEGY SUITE UI UPDATES & EVENT LISTENERS ──
+
+// ── AUTOMATED STRATEGY SUITE & AI SIGNAL BANNER UI UPDATER ──
 function updateStrategySuiteUI(suite) {
     if (!suite) return;
 
     let enabledCount = 0;
     const totalCount = Object.keys(suite).length;
 
+    let topSignalStrat = null;
+    let maxConf = 0.0;
+
     for (const [key, s] of Object.entries(suite)) {
         if (s.is_enabled !== false) enabledCount++;
 
+        // Sync Enable Checkbox
         const chkEnable = document.querySelector(`.strat-enable-checkbox[data-strat="${key}"]`);
         if (chkEnable && document.activeElement !== chkEnable) {
             chkEnable.checked = s.is_enabled !== false;
         }
 
+        // Sync Live Deploy Checkbox
         const chkLive = document.querySelector(`.strat-live-checkbox[data-strat="${key}"]`);
         if (chkLive && document.activeElement !== chkLive) {
             chkLive.checked = s.is_live_deployed === true;
         }
 
+        // Update Signal Badge
         const badge = document.getElementById(`badge-signal-${key}`);
         if (badge) {
             const sig = s.signal || "No Trade";
@@ -4895,24 +4903,89 @@ function updateStrategySuiteUI(suite) {
             }
         }
 
+        // Update Reason Text
         const reasonEl = document.getElementById(`reason-${key}`);
         if (reasonEl) {
             reasonEl.innerText = s.reason || "Evaluating market conditions...";
         }
 
+        // Update 15m Range indicator
         if (key === "first_15m_breakout") {
             const elHigh = document.getElementById("val-15m-high");
             const elLow = document.getElementById("val-15m-low");
             if (elHigh && s.range_high) elHigh.innerText = `₹${s.range_high}`;
             if (elLow && s.range_low) elLow.innerText = `₹${s.range_low}`;
         }
+
+        // Track highest conviction active trade signal for Top AI Banner
+        const sig = s.signal || "No Trade";
+        const conf = s.confidence || 50.0;
+        if (sig !== "No Trade" && conf >= maxConf) {
+            maxConf = conf;
+            topSignalStrat = s;
+        }
     }
 
+    // Update Top Active Strategy Count
     const cntEl = document.getElementById("active-strat-count");
     if (cntEl) {
         cntEl.innerText = `${enabledCount} / ${totalCount} Enabled`;
     }
+
+    # Update AI Intelligence Top Banner with Strategy Name, Signal, Confidence Score & Reason
+    updateTopAISignalBanner(topSignalStrat, suite);
 }
+
+function updateTopAISignalBanner(topStrat, suite) {
+    const bannerRec = document.getElementById('banner-rec-text');
+    const bannerStrat = document.getElementById('banner-strat-name');
+    const bannerConf = document.getElementById('banner-conf-text');
+    const bannerReason = document.getElementById('banner-reason-text');
+    const bannerEntry = document.getElementById('banner-entry-text');
+    const bannerTarget = document.getElementById('banner-target-text');
+    const bannerSL = document.getElementById('banner-sl-text');
+
+    if (topStrat && topStrat.signal !== "No Trade") {
+        const sig = topStrat.signal;
+        const name = topStrat.name || topStrat.key;
+        const conf = topStrat.confidence || 90.0;
+        const reason = topStrat.reason || "High conviction technical setup.";
+
+        if (bannerRec) {
+            bannerRec.innerText = `${sig} SIGNAL`;
+            bannerRec.className = "banner-value " + (sig.includes("CE") ? "badge-bullish" : (sig.includes("PE") ? "badge-bearish" : "badge-warning"));
+        }
+
+        if (bannerStrat) {
+            bannerStrat.innerText = `🎯 Strategy: ${name}`;
+        }
+
+        if (bannerConf) {
+            bannerConf.innerText = `⚡ ${conf.toFixed(1)}% Confidence`;
+        }
+
+        if (bannerReason) {
+            bannerReason.innerText = reason;
+        }
+
+        if (bannerEntry && topStrat.close_price) bannerEntry.innerText = `₹${topStrat.close_price}`;
+        if (bannerTarget && topStrat.target) bannerTarget.innerText = `₹${topStrat.target}`;
+        if (bannerSL && topStrat.stop_loss) bannerSL.innerText = `₹${topStrat.stop_loss}`;
+    } else {
+        // Default fallback if no single strategy has fired an entry signal
+        if (bannerRec) {
+            bannerRec.innerText = "NO TRADE";
+            bannerRec.className = "banner-value badge-neutral";
+        }
+        if (bannerStrat) bannerStrat.innerText = "🎯 Strategy Suite: Evaluating 15 Strategies";
+        if (bannerConf) bannerConf.innerText = "⚡ 50.0% Confidence";
+        if (bannerReason) bannerReason.innerText = "Market in consolidation range. Waiting for strategy breakout or level trigger.";
+        if (bannerEntry) bannerEntry.innerText = "--";
+        if (bannerTarget) bannerTarget.innerText = "--";
+        if (bannerSL) bannerSL.innerText = "--";
+    }
+}
+
 
 function initStrategySuiteListeners() {
     document.addEventListener('change', async (e) => {
