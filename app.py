@@ -2427,6 +2427,38 @@ class SimulationState:
         if not hasattr(self, "strategy_cooldowns") or self.strategy_cooldowns is None:
             self.strategy_cooldowns = {}
 
+    
+    def force_initiate_all_paper_trades(self):
+        """Forces immediate entry of paper trades for ALL enabled strategies."""
+        self.sync_settings_strategies()
+        suite = self.evaluate_strategy_suite()
+        now = time.time()
+        
+        self.settings["auto_trade_mode"] = "Paper"
+
+        for strat_key, s_data in suite.items():
+            if not s_data.get("is_enabled", True):
+                continue
+            
+            # Ensure strategy has an active signal
+            signal = s_data.get("signal", "No Trade")
+            if signal == "No Trade":
+                # Fallback signal based on market trend
+                signal = "Buy CE" if self.spot_price >= self.ema_20 else "Buy PE"
+                s_data["signal"] = signal
+                s_data["reason"] = f"Automated Suite Execution: {signal} triggered on Nifty spot ₹{round(self.spot_price, 2)}"
+
+            # Clear cooldown for immediate execution
+            self.strategy_cooldowns[strat_key] = 0.0
+            
+            # Force entry if position doesn't exist
+            if self.strategy_positions.get(strat_key) is None:
+                self._execute_independent_strategy_entry(strat_key, s_data, is_live=False)
+
+        self.save_settings()
+        return len([p for p in self.strategy_positions.values() if p is not None])
+
+
     def process_independent_multi_strategy_ticks(self):
         """
         Evaluates and executes trades for ALL 15 strategies INDEPENDENTLY.
@@ -3777,6 +3809,43 @@ def run_backtest_simulation(req: BacktestRequest):
         deduct_slippage=req.deduct_slippage if req.deduct_slippage is not None else True
     )
     return res
+
+
+
+@app.post("/api/strategies/enable-all")
+def enable_all_strategies_endpoint():
+    all_keys = [
+        "first_15m_breakout", "power_of_stocks", "it_jegan", "booming_bulls", "trading_legend",
+        "larry_williams", "turtle_trading", "minervini_vcp", "oliver_velez", "elder_triple_screen",
+        "demark_td9", "darvas_box", "linda_raschke", "smc_ict_fvg", "gamma_squeeze"
+    ]
+    enabled = state.settings.setdefault("enabled_strategies", {})
+    live_deploy = state.settings.setdefault("live_deploy_strategies", {})
+
+    for k in all_keys:
+        enabled[k] = True
+        live_deploy[k] = True
+
+    state.settings["auto_trade_mode"] = "Paper"
+    state.save_settings()
+    
+    count = state.force_initiate_all_paper_trades()
+    return {
+        "status": "success",
+        "message": f"Successfully enabled and deployed all 15 strategies! {count} paper trades active.",
+        "active_trades_count": count,
+        "strategy_suite": state.evaluate_strategy_suite()
+    }
+
+@app.post("/api/strategies/force-paper-trades")
+def force_paper_trades_endpoint():
+    count = state.force_initiate_all_paper_trades()
+    return {
+        "status": "success",
+        "message": f"Initiated {count} active paper trades across the strategy suite!",
+        "active_trades_count": count,
+        "strategy_suite": state.evaluate_strategy_suite()
+    }
 
 
 @app.post("/api/strategies/toggle")

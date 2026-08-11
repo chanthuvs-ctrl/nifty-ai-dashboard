@@ -4963,7 +4963,55 @@ function initStrategySuiteListeners() {
             const enabled = e.target.checked;
             
             pendingUserToggles[stratKey] = {
-                ...(pendingUserToggles[stratKey] || {}),
+                ...(pendingUserToggles[stratKey] || {
+    // Master Strategy Suite Action Buttons
+    const btnSelectAll = document.getElementById('btn-select-all-strats');
+    if (btnSelectAll) {
+        btnSelectAll.addEventListener('click', async () => {
+            btnSelectAll.disabled = true;
+            btnSelectAll.innerText = "⏳ Deploying Suite...";
+            try {
+                const resp = await fetch('/api/strategies/enable-all', { method: 'POST' });
+                const res = await resp.json();
+                
+                // Check all checkboxes in UI
+                document.querySelectorAll('.strat-enable-checkbox').forEach(c => c.checked = true);
+                document.querySelectorAll('.strat-live-checkbox').forEach(c => c.checked = true);
+                document.querySelectorAll('.strat-card').forEach(c => c.classList.add('live-active-card'));
+
+                if (typeof showToast === 'function') showToast(`✓ ${res.message || 'Deployed All 15 Strategies!'}`);
+                fetchJournal();
+                fetchMarketData();
+            } catch (err) {
+                console.error("Failed to enable all strategies:", err);
+            } finally {
+                btnSelectAll.disabled = false;
+                btnSelectAll.innerText = "✓ SELECT & DEPLOY ALL 15 STRATEGIES";
+            }
+        });
+    }
+
+    const btnForceTrades = document.getElementById('btn-force-paper-trades');
+    if (btnForceTrades) {
+        btnForceTrades.addEventListener('click', async () => {
+            btnForceTrades.disabled = true;
+            btnForceTrades.innerText = "⏳ Initiating Trades...";
+            try {
+                const resp = await fetch('/api/strategies/force-paper-trades', { method: 'POST' });
+                const res = await resp.json();
+                if (typeof showToast === 'function') showToast(`🚀 ${res.message || 'Paper Trades Initiated!'}`);
+                fetchJournal();
+                fetchMarketData();
+            } catch (err) {
+                console.error("Failed to force paper trades:", err);
+            } finally {
+                btnForceTrades.disabled = false;
+                btnForceTrades.innerText = "🚀 INITIATE ALL PAPER TRADES NOW";
+            }
+        });
+    }
+
+}),
                 enabled: enabled,
                 timestamp: Date.now()
             };
