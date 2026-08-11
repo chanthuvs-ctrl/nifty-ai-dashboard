@@ -364,6 +364,30 @@ class SimulationState:
         # Initializing historical candles for technical analysis
         self._init_history()
         
+    
+    def sync_settings_strategies(self):
+        """Auto-migrates and ensures ALL 15 strategies exist in settings."""
+        all_keys = [
+            "first_15m_breakout", "power_of_stocks", "it_jegan", "booming_bulls", "trading_legend",
+            "larry_williams", "turtle_trading", "minervini_vcp", "oliver_velez", "elder_triple_screen",
+            "demark_td9", "darvas_box", "linda_raschke", "smc_ict_fvg", "gamma_squeeze"
+        ]
+        enabled = self.settings.setdefault("enabled_strategies", {})
+        live_deploy = self.settings.setdefault("live_deploy_strategies", {})
+
+        changed = False
+        for k in all_keys:
+            if k not in enabled:
+                enabled[k] = True
+                changed = True
+            if k not in live_deploy:
+                live_deploy[k] = True
+                changed = True
+
+        if changed and hasattr(self, "save_settings"):
+            self.save_settings()
+
+
     def _init_history(self):
         """Pre-populate 20 completed candles for each timeframe so EMAs/RSI work immediately."""
         now_ts = time.time()
@@ -2227,8 +2251,8 @@ class SimulationState:
 
         res = {}
         for key, s in all_strats:
-            s["is_enabled"] = enabled.get(key, True)
-            s["is_live_deployed"] = live_deploy.get(key, False)
+            s["is_enabled"] = enabled.get(key, True) if key in enabled else True
+            s["is_live_deployed"] = live_deploy.get(key, True) if key in live_deploy else True
             res[key] = s
 
         return res
