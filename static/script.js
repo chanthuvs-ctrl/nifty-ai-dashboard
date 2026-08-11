@@ -2079,6 +2079,8 @@ function initDashboardToggles() {
 
 // Initialize application listeners
 document.addEventListener('DOMContentLoaded', async () => {
+    initHeaderAutoTradeModeListeners();
+
     // Check if reset query parameter is present (v2.7.1)
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('reset') === 'true') {
@@ -5322,3 +5324,60 @@ function renderBacktestTradeLog(data) {
 
 // Initialize listener
 initBacktestListeners();
+
+
+// ── HEADER AUTO-TRADE MODE TOGGLE BUTTON LISTENERS (OFF / PAPER / LIVE) ──
+function initHeaderAutoTradeModeListeners() {
+    const modes = [
+        { id: 'btn-autotrade-off', mode: 'OFF' },
+        { id: 'btn-autotrade-paper', mode: 'Paper' },
+        { id: 'btn-autotrade-live', mode: 'Live' }
+    ];
+
+    modes.forEach(item => {
+        const btn = document.getElementById(item.id);
+        if (btn) {
+            btn.addEventListener('click', async () => {
+                const targetMode = item.mode;
+                
+                // Optimistic visual highlight
+                modes.forEach(m => {
+                    const b = document.getElementById(m.id);
+                    if (b) {
+                        if (m.id === item.id) {
+                            b.classList.add('active');
+                            b.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                            b.style.color = '#ffffff';
+                        } else {
+                            b.classList.remove('active');
+                            b.style.background = '';
+                            b.style.color = '';
+                        }
+                    }
+                });
+
+                try {
+                    await fetch('/api/settings/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ auto_trade_mode: targetMode })
+                    });
+
+                    if (targetMode === "Paper") {
+                        await fetch('/api/strategies/enable-all', { method: 'POST' });
+                    }
+
+                    if (typeof showToast === 'function') {
+                        showToast(`✓ Trading Mode Switched to: ${targetMode.toUpperCase()}`);
+                    }
+
+                    fetchMarketData();
+                    fetchJournal();
+                } catch (err) {
+                    console.error("Failed to update auto_trade_mode:", err);
+                }
+            });
+        }
+    });
+}
+
