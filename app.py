@@ -206,8 +206,12 @@ class SimulationState:
         self.candles_1m: List[Dict] = []
         self.candles_5m: List[Dict] = []
         self.candles_15m: List[Dict] = []
-        self.completed_candles = self.candles_5m  # Backwards compatibility alias
-        
+        self.completed_candles = self.candles_5m  # Backward
+
+        # Independent Multi-Strategy Execution Slots & Cooldown Maps
+        self.strategy_positions = {}
+        self.strategy_cooldowns = {}
+                
         # Price history for live chart (capped at 360 points ≈ 30 min at 5s intervals)
         self.price_history: List[Dict] = []
         
@@ -322,7 +326,8 @@ class SimulationState:
                 days_ahead = (target_weekday - datetime.date.today().weekday()) % 7
                 next_expiry = datetime.date.today() + datetime.timedelta(days=days_ahead)
                 self.settings["upstox_expiry_date"] = next_expiry.strftime("%Y-%m-%d")
-            self.save_settings()
+        self.sync_settings_strategies()
+        self.save_settings()
         
         self.upstox_option_chain = []
         self.option_chain = []
@@ -3874,6 +3879,7 @@ def get_market_data():
                 state._auto_trade_tick()
     else:
         state.tick_5s()
+        state.process_independent_multi_strategy_ticks()
     
     spot = state.spot_price
     
