@@ -5112,7 +5112,7 @@ def get_journal():
 
     for strat_key, pos in state.strategy_positions.items():
         if pos is not None and pos.get("status") == "OPEN":
-            t_id = pos.get("trade_id") or f"TRADE_{strat_key.upper()}"
+            t_id = f"TRADE_{strat_key.upper()}"
             seen_ids.add(t_id)
             diff = (state.spot_price - pos["entry_spot"]) if pos.get("signal") == "Buy CE" else (pos["entry_spot"] - state.spot_price)
             pnl = round(diff * pos.get("lot_size", 65) * pos.get("lots", 1), 2)
