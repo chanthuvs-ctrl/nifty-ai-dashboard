@@ -1,0 +1,41 @@
+[
+  {
+    "rawText": "Rs 3555.00 debited from Axis Bank A/C XX5678 on 03-AUG-26 by CRED App.",
+    "amount": 3555,
+    "type": "debit",
+    "bank": "Axis Bank",
+    "account": "XX5678",
+    "merchant": "Credit Card Bill",
+    "category": "Credit Cards",
+    "timestamp": "2026-08-11T18:54:17.440Z",
+    "parsedSuccessfully": true,
+    "id": "sms_1786474457440_g49b",
+    "source": "Auto-Capture Ingest"
+  },
+  {
+    "rawText": "Paid Rs 18750.00 to KSFE Chitty Account via GPay UPI/67891234 on 17-AUG-26.",
+    "amount": 18750,
+    "type": "debit",
+    "bank": "Google Pay",
+    "account": "",
+    "merchant": "KSFE Chitty / Vatti",
+    "category": "KSFE Chitty",
+    "timestamp": "2026-08-11T18:54:17.437Z",
+    "parsedSuccessfully": true,
+    "id": "sms_1786474457437_i1vy",
+    "source": "Auto-Capture Ingest"
+  },
+  {
+    "rawText": "Rs 22579.00 debited from A/C XX1234 on 10-AUG-26 for Home Loan EMI payment",
+    "amount": 22579,
+    "type": "debit",
+    "bank": "Bank SMS",
+    "account": "XX1234",
+    "merchant": "Home Loan EMI",
+    "category": "Loans & EMIs",
+    "timestamp": "2026-08-11T18:52:38.719Z",
+    "parsedSuccessfully": true,
+    "id": "sms_1786474358719_0ic5",
+    "source": "Auto-Capture Ingest"
+  }
+]

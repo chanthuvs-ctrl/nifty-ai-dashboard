@@ -1,12 +1,12 @@
 services:
   - type: web
-    name: nifty-ai-dashboard
-    env: python
-    region: singapore
+    name: de-natura-finance-admin
+    env: node
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
-    autoDeploy: true
+    buildCommand: cd finance-admin-app && npm install && npx vite build
+    startCommand: cd finance-admin-app && node server.cjs
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: PORT
+        value: 10000

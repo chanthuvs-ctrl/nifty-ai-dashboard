@@ -1,0 +1,35 @@
+[
+  {
+    "id": "sms_1786475652901_xhvu",
+    "rawText": "Alert: Rs 5324.00 debited from Credit Card ending 9012 for Bill Payment",
+    "amount": 5324,
+    "type": "debit",
+    "bank": "Bank SMS",
+    "merchant": "Bank Transaction",
+    "category": "Auto Captured",
+    "timestamp": "2026-08-11T19:14:12.902Z",
+    "reconciled": true
+  },
+  {
+    "id": "sms_1786475550977_pk7g",
+    "rawText": "Rs 1000 debited for test",
+    "amount": 1000,
+    "type": "debit",
+    "bank": "Bank SMS",
+    "merchant": "Bank Transaction",
+    "category": "Auto Captured",
+    "timestamp": "2026-08-11T19:12:30.977Z",
+    "reconciled": true
+  },
+  {
+    "id": "sms_1786475359049_9emy",
+    "rawText": "Alert: Rs 4552.00 debited from A/C XX7890 on 07-AUG-26 for KSFE Vatti Payment #1",
+    "amount": 4552,
+    "type": "debit",
+    "bank": "Bank SMS",
+    "merchant": "Bank Transaction",
+    "category": "Auto Captured",
+    "timestamp": "2026-08-11T19:09:19.049Z",
+    "reconciled": true
+  }
+]

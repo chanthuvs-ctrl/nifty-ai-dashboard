@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinPulse AI - Personal Finance Assistant & SMS Auto-Capture</title>
+  <!-- Google Fonts & Chart.js -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation Header -->
+    <header class="main-header">
+      <div class="brand-section">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div>
+          <h1 class="app-title">FinPulse <span class="badge-ai">AI Assistant</span></h1>
+          <p class="app-subtitle">Screenshot Budget Baseline &amp; Live Bank SMS Auto-Capture</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="status-indicator" title="Live REST Webhook & SMS Parser Engine Active">
+          <span class="pulse-dot"></span>
+          <span class="status-text">SMS Sync Active</span>
+        </div>
+        
+        <!-- User Profile Badge -->
+        <div class="user-badge" id="user-badge-display">
+          <span class="user-avatar">👤</span>
+          <span class="user-name" id="user-display-name">chanthuvs</span>
+        </div>
+
+        <button class="btn btn-primary" id="btn-open-sms-modal">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Simulate SMS
+        </button>
+        <button class="btn btn-secondary" id="btn-open-webhook-guide">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Phone Setup
+        </button>
+        <button class="btn btn-ghost" id="btn-logout" title="Sign Out">
+          🚪 Logout
+        </button>
+      </div>
+    </header>
+
+    <!-- Cashflow & Summary Metrics Cards -->
+    <section class="metrics-grid">
+      <div class="metric-card card-income">
+        <div class="card-header">
+          <span class="card-label">Monthly Salary</span>
+          <span class="icon-bubble green">💵</span>
+        </div>
+        <div class="card-value" id="val-salary">₹1,16,000</div>
+        <div class="card-subtext">Base monthly income credit</div>
+      </div>
+
+      <div class="metric-card card-commitments">
+        <div class="card-header">
+          <span class="card-label">Fixed Commitments</span>
+          <span class="icon-bubble red">📌</span>
+        </div>
+        <div class="card-value" id="val-obligations">₹1,13,186</div>
+        <div class="card-subtext" id="val-paid-count">0 of 17 Paid (100% Pending)</div>
+      </div>
+
+      <div class="metric-card card-buffer">
+        <div class="card-header">
+          <span class="card-label">Unallocated Cash Buffer</span>
+          <span class="icon-bubble blue">⚖️</span>
+        </div>
+        <div class="card-value" id="val-buffer">₹2,814</div>
+        <div class="card-subtext">Free balance after fixed bills</div>
+      </div>
+
+      <div class="metric-card card-stress">
+        <div class="card-header">
+          <span class="card-label">Commitment Ratio (DTI)</span>
+          <span class="icon-bubble orange">⚠️</span>
+        </div>
+        <div class="card-value text-warning" id="val-dti">97.6%</div>
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill fill-warning" id="bar-dti" style="width: 97.6%;"></div>
+        </div>
+        <div class="card-subtext">High commitment alert</div>
+      </div>
+    </section>
+
+    <!-- Main Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="tab-ledger">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></button>
+        Screenshot Budget Ledger
+      </button>
+      <button class="tab-btn" data-tab="tab-sms">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Bank SMS Auto-Capture (<span id="sms-count-badge">0</span>)
+      </button>
+      <button class="tab-btn" data-tab="tab-calendar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Due Date Calendar &amp; Outflow Timeline
+      </button>
+      <button class="tab-btn" data-tab="tab-analytics">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Analytics &amp; AI Health Advisor
+      </button>
+    </nav>
+
+    <!-- Tab 1: Screenshot Budget Ledger -->
+    <div class="tab-content active" id="tab-ledger">
+      <div class="content-card">
+        <div class="table-toolbar">
+          <div class="search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="ledger-search" placeholder="Search item, due date, category (e.g. KSFE, LIC, Loan)...">
+          </div>
+
+          <div class="filter-pills">
+            <button class="pill active" data-cat="all">All (17)</button>
+            <button class="pill" data-cat="Loans & EMIs">Loans &amp; EMIs</button>
+            <button class="pill" data-cat="KSFE Chitty">KSFE Chitty</button>
+            <button class="pill" data-cat="Credit Cards">Credit Cards</button>
+            <button class="pill" data-cat="Insurance">LIC Insurance</button>
+          </div>
+
+          <button class="btn btn-accent btn-sm" id="btn-add-item">
+            + Add New Obligation
+          </button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Obligation Item</th>
+                <th>Category</th>
+                <th>Due Date</th>
+                <th>Amount (₹)</th>
+                <th>Notes / Source</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="ledger-tbody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Bank SMS Auto-Capture Engine -->
+    <div class="tab-content" id="tab-sms">
+      <div class="grid-2col">
+        <!-- SMS Sandbox Panel -->
+        <div class="content-card">
+          <div class="card-title-row">
+            <h3>📱 Live SMS Capture Simulator</h3>
+            <span class="pill-sm green">Real-Time Regex Engine</span>
+          </div>
+          <p class="card-desc">Click any bank SMS preset below or paste raw SMS text from your phone to test automatic amount extraction, categorization, and bill reconciliation.</p>
+
+          <div class="preset-buttons-grid">
+            <button class="preset-btn" data-preset="hdfc_loan">
+              <span class="preset-tag">HDFC EMI</span>
+              <span class="preset-text">Home Loan ₹22,579 debited</span>
+            </button>
+            <button class="preset-btn" data-preset="ksfe_chala">
+              <span class="preset-tag">KSFE Chitty</span>
+              <span class="preset-text">KSFE Chala ₹18,750 paid</span>
+            </button>
+            <button class="preset-btn" data-preset="cred">
+              <span class="preset-tag">CRED Card</span>
+              <span class="preset-text">CRED Bill ₹3,555 debited</span>
+            </button>
+            <button class="preset-btn" data-preset="swiggy">
+              <span class="preset-tag">UPI Food</span>
+              <span class="preset-text">₹450 paid to Swiggy</span>
+            </button>
+            <button class="preset-btn" data-preset="petrol">
+              <span class="preset-tag">Card Fuel</span>
+              <span class="preset-text">₹2,000 spent at IOCL Petrol</span>
+            </button>
+            <button class="preset-btn" data-preset="lic">
+              <span class="preset-tag">LIC Premium</span>
+              <span class="preset-text">LIC Policy 1 ₹3,008 debited</span>
+            </button>
+          </div>
+
+          <div class="input-group mt-4">
+            <label class="form-label">Paste Raw SMS Message:</label>
+            <textarea id="sms-input-text" rows="4" class="form-textarea" placeholder="e.g. Rs 4552.00 debited from A/C XX7890 on 07-AUG-26 for KSFE Vatti Payment..."></textarea>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btn-parse-sms">
+              ⚡ Ingest &amp; Auto-Reconcile SMS
+            </button>
+            <button class="btn btn-ghost" id="btn-clear-sms">Clear Feed</button>
+          </div>
+
+          <!-- Parse result box -->
+          <div id="sms-parse-result" class="parse-result-box hidden"></div>
+        </div>
+
+        <!-- Live SMS Log Feed -->
+        <div class="content-card">
+          <div class="card-title-row">
+            <h3>📑 Captured Bank SMS Feed</h3>
+            <span class="badge-count" id="sms-feed-count">0 Messages</span>
+          </div>
+
+          <div class="sms-feed-list" id="sms-feed-container">
+            <div class="empty-state">
+              <div class="empty-icon">💬</div>
+              <p>No phone messages captured yet.</p>
+              <span class="sub-empty">Use presets on the left or paste an SMS to see live auto-capture in action!</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Payment Timeline & Due-Date Calendar -->
+    <div class="tab-content" id="tab-calendar">
+      <div class="grid-2col">
+        <!-- Calendar Grid -->
+        <div class="content-card">
+          <div class="card-title-row">
+            <h3>📅 Monthly Payment Calendar</h3>
+            <span class="month-indicator">July Baseline Schedule</span>
+          </div>
+
+          <div class="calendar-legend">
+            <span class="legend-item"><span class="dot paid"></span> Paid</span>
+            <span class="legend-item"><span class="dot due"></span> Due / Upcoming</span>
+            <span class="legend-item"><span class="dot peak"></span> Peak Cash Outflow Day</span>
+          </div>
+
+          <div class="calendar-grid" id="calendar-grid-container">
+            <!-- Calendar boxes generated via JS -->
+          </div>
+        </div>
+
+        <!-- Outflow Velocity Chart -->
+        <div class="content-card">
+          <div class="card-title-row">
+            <h3>📊 Daily Cash Outflow Velocity</h3>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="outflowChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: Analytics & AI Health Advisor -->
+    <div class="tab-content" id="tab-analytics">
+      <div class="grid-2col">
+        <div class="content-card">
+          <div class="card-title-row">
+            <h3>🥧 Commitment Category Breakdown</h3>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+
+        <div class="content-card">
+          <div class="card-title-row">
+            <h3>🧠 AI Financial Architect Insights</h3>
+            <span class="pill-sm purple">Smart Analysis</span>
+          </div>
+
+          <div class="advisor-cards-stack">
+            <div class="advisor-card alert-critical">
+              <div class="advisor-header">
+                <span class="advisor-icon">⚠️</span>
+                <span class="advisor-title">High Debt Commitment Stress (97.6% DTI)</span>
+              </div>
+              <p>Your fixed monthly commitments (₹1,13,186) consume nearly 98% of your monthly salary (₹1,16,000). Leaving only ₹2,814 for living &amp; emergency expenses.</p>
+            </div>
+
+            <div class="advisor-card alert-info">
+              <div class="advisor-header">
+                <span class="advisor-icon">💡</span>
+                <span class="advisor-title">KSFE Chitty Interest vs Loan Strategy</span>
+              </div>
+              <p>You have 6 KSFE Vatti instalments totalling ₹33,708/mo + KSFE Chala ₹18,750/mo. Consider bidding or closing older chits to release ₹30,000+ monthly cashflow back into savings.</p>
+            </div>
+
+            <div class="advisor-card alert-success">
+              <div class="advisor-header">
+                <span class="advisor-icon">🛡️</span>
+                <span class="advisor-title">Insurance Premium Alignment</span>
+              </div>
+              <p>3 LIC policies totalling ₹6,508/mo are scheduled on the 7th, 15th, and 28th. Auto-capture will monitor your bank balance before each debit to avoid bounce penalties.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTHENTICATION LOGIN MODAL -->
+  <div class="modal-backdrop" id="login-modal">
+    <div class="modal-content" style="max-width: 420px; text-align: center;">
+      <div class="modal-header" style="justify-content: center;">
+        <h3>🔒 FinPulse AI Authentication</h3>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom: 1.25rem;">Enter your account credentials to access your personal finance dashboard.</p>
+        <form id="login-form">
+          <div class="input-group">
+            <label class="form-label" style="text-align: left;">Username:</label>
+            <input type="text" id="login-username" class="form-input" placeholder="e.g. chanthuvs" required value="chanthuvs">
+          </div>
+          <div class="input-group mt-2">
+            <label class="form-label" style="text-align: left;">Password:</label>
+            <input type="password" id="login-password" class="form-input" placeholder="Enter password" required value="Gango4@ntm">
+          </div>
+          <div id="login-error" class="text-warning mt-2 hidden" style="font-size:0.8rem; font-weight:600;"></div>
+          <button type="submit" class="btn btn-primary mt-4" style="width: 100%; justify-content: center;">
+            🚀 Sign In to Dashboard
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SMS Simulator -->
+  <div class="modal-backdrop hidden" id="sms-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📲 Bank SMS Ingest Sandbox</h3>
+        <button class="modal-close" id="sms-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Simulate receiving a bank SMS notification on your smartphone.</p>
+        <div class="input-group">
+          <label class="form-label">Raw Bank SMS String:</label>
+          <textarea id="modal-sms-text" rows="4" class="form-textarea" placeholder="Paste SMS here..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="modal-sms-submit">Process &amp; Reconcile</button>
+        <button class="btn btn-ghost" id="modal-sms-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Phone Webhook Setup Guide -->
+  <div class="modal-backdrop hidden" id="webhook-modal">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3>🔗 Phone SMS Webhook Auto-Capture Setup</h3>
+        <button class="modal-close" id="webhook-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>You can automatically send SMSes from your Android or iPhone directly to this app in real time!</p>
+        
+        <div class="code-block-container">
+          <div class="code-header">REST API Ingest Endpoint</div>
+          <pre class="code-snippet">POST /api/sms/ingest
+Header: Content-Type: application/json
+Body: { "smsText": "Rs 22579 debited for Home Loan..." }</pre>
+        </div>
+
+        <h4 class="mt-4">Option A: Android SMS Forwarder / Tasker / Automate</h4>
+        <ol class="setup-steps">
+          <li>Install <strong>SMS Forwarder</strong> or <strong>Tasker</strong> from Google Play.</li>
+          <li>Create a trigger on <strong>Incoming SMS</strong> matching keywords like <em>"debited", "credited", "paid", "UPI", "A/C"</em>.</li>
+          <li>Set Action to <strong>HTTP POST</strong> to <code>/api/sms/ingest</code> with payload <code>{"smsText": "%SMSB"}</code>.</li>
+        </ol>
+
+        <h4 class="mt-4">Option B: iOS Shortcuts (iPhone)</h4>
+        <ol class="setup-steps">
+          <li>Open <strong>Shortcuts App</strong> &rarr; Automation &rarr; New Automation &rarr; <strong>Message</strong>.</li>
+          <li>Set Sender/Content contains: <em>"debited", "bank", "₹"</em>.</li>
+          <li>Add action <strong>"Get Contents of URL"</strong> &rarr; Method: POST, Request Body: JSON, Key: <code>smsText</code> = Shortcut Input.</li>
+        </ol>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="webhook-modal-ok">Got it!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Add/Edit Item -->
+  <div class="modal-backdrop hidden" id="item-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="item-modal-title">Add Obligation Item</h3>
+        <button class="modal-close" id="item-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="item-form">
+          <input type="hidden" id="edit-item-id">
+          <div class="input-group">
+            <label class="form-label">Item Name:</label>
+            <input type="text" id="edit-item-name" class="form-input" required placeholder="e.g. KSFE Vatti #5">
+          </div>
+          <div class="grid-2col-compact">
+            <div class="input-group">
+              <label class="form-label">Amount (₹):</label>
+              <input type="number" id="edit-item-amount" class="form-input" required step="0.01">
+            </div>
+            <div class="input-group">
+              <label class="form-label">Due Date:</label>
+              <input type="text" id="edit-item-date" class="form-input" placeholder="e.g. 7th or 15th">
+            </div>
+          </div>
+          <div class="input-group mt-2">
+            <label class="form-label">Category:</label>
+            <select id="edit-item-category" class="form-select">
+              <option value="Loans & EMIs">Loans &amp; EMIs</option>
+              <option value="KSFE Chitty">KSFE Chitty</option>
+              <option value="Credit Cards">Credit Cards</option>
+              <option value="Insurance">Insurance</option>
+              <option value="Variable & Misc">Variable &amp; Misc</option>
+            </select>
+          </div>
+          <div class="input-group mt-2">
+            <label class="form-label">Notes:</label>
+            <input type="text" id="edit-item-notes" class="form-input" placeholder="Optional notes">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="item-modal-save">Save Item</button>
+        <button class="btn btn-ghost" id="item-modal-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
