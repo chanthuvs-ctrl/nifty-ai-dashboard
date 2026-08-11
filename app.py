@@ -5105,18 +5105,49 @@ def get_journal():
     upstox_total_pnl = round(sum(p.get("pnl", 0.0) for p in upstox_positions), 2)
 
     trades_copy = []
+    seen_ids = set()
+
+    # Include active strategy positions
+    for strat_key, pos in state.strategy_positions.items():
+        if pos is not None and pos.get("status") == "OPEN":
+            t_id = pos.get("trade_id")
+            seen_ids.add(t_id)
+            pnl = round((state.spot_price - pos["entry_spot"]) * 2.0, 2) if "CE" in pos.get("signal", "") else round((pos["entry_spot"] - state.spot_price) * 2.0, 2)
+            trades_copy.append({
+                "id": t_id,
+                "timestamp": pos.get("entry_time", get_ist_time_str()),
+                "recommendation": pos.get("signal", "Buy CE"),
+                "strategy_name": pos.get("strategy_name", strat_key),
+                "entry_price": pos.get("entry_spot", state.spot_price),
+                "stop_loss": pos.get("stop_loss", 0.0),
+                "target": pos.get("target", 0.0),
+                "quantity": 130,
+                "status": "OPEN",
+                "execution_type": "Live (Upstox API)" if pos.get("is_live") else "Paper",
+                "reason": f"Strategy {pos.get('strategy_name')} active position",
+                "option_symbol": pos.get("symbol_name", "NIFTY CE"),
+                "strike_price": pos.get("strike_price", 24500),
+                "expiry_date": pos.get("expiry_date", ""),
+                "pnl": pnl,
+                "floating_pnl": pnl
+            })
+
     for t in journal.trades:
-        t_dict = dict(t)
-        if t_dict.get("status") == "OPEN":
-            is_live = (t_dict.get("execution_type") or "").startswith("Live")
-            if is_live and upstox_positions:
-                # Use actual Upstox unrealised PnL for live trades
-                t_dict["floating_pnl"] = upstox_total_pnl
-            else:
-                t_dict["floating_pnl"] = round(state.calculate_trade_pnl(t, state.spot_price), 2)
-        trades_copy.append(t_dict)
+        if t.get("id") not in seen_ids:
+            t_dict = dict(t)
+            if t_dict.get("status") == "OPEN":
+                is_live = (t_dict.get("execution_type") or "").startswith("Live")
+                if is_live and upstox_positions:
+                    t_dict["floating_pnl"] = upstox_total_pnl
+                else:
+                    t_dict["floating_pnl"] = round(state.calculate_trade_pnl(t, state.spot_price), 2)
+            trades_copy.append(t_dict)
+
+    active_pos_list = [t for t in trades_copy if t.get("status") == "OPEN"]
+
     return {
         "trades": trades_copy[::-1],
+        "active_positions": active_pos_list,
         "analytics": journal.get_analytics("Paper"),
         "live_analytics": journal.get_analytics("Live"),
         "capital": state.get_available_capital()
