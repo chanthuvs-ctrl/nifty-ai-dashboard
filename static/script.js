@@ -4878,12 +4878,12 @@ function updateTopAISignalBanner(topStrat, suite) {
 
         if (topStrat && topStrat.signal && topStrat.signal !== "No Trade") {
             const sig = topStrat.signal;
-            const name = topStrat.name || topStrat.key || "Strategy";
-            const conf = topStrat.confidence || 90.0;
+            const name = topStrat.name || topStrat.strategy_name || "Strategy";
+            const conf = topStrat.confidence || 95.0;
             const reason = topStrat.reason || "High conviction technical setup.";
 
             if (bannerRec) {
-                bannerRec.innerText = `${sig} SIGNAL`;
+                bannerRec.innerText = `${sig.toUpperCase()} SIGNAL`;
                 bannerRec.className = "banner-value " + (sig.includes("CE") ? "badge-bullish" : (sig.includes("PE") ? "badge-bearish" : "badge-warning"));
             }
 
@@ -4918,7 +4918,6 @@ function updateTopAISignalBanner(topStrat, suite) {
         console.error("Error in updateTopAISignalBanner:", err);
     }
 }
-
 
 async function updateStrategySuiteUI(suite) {
     if (!suite) return;
@@ -5000,7 +4999,7 @@ async function updateStrategySuiteUI(suite) {
 
         const sig = s.signal || "No Trade";
         const conf = s.confidence || 50.0;
-        if (sig !== "No Trade" && conf >= maxConf) {
+        if (sig !== "No Trade" && conf > maxConf) {
             maxConf = conf;
             topSignalStrat = s;
         }
