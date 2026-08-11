@@ -2295,6 +2295,15 @@ class SimulationState:
                         "timestamp": now_ts,
                         "confidence": s.get("confidence", 90.0)
                     }
+        
+        # Institutional Rule: If a strategy has an OPEN position, its signal is 100% LOCKED 
+        # to the position's direction until Target or Stop Loss is hit!
+        for key, s in res.items():
+            pos = self.strategy_positions.get(key)
+            if pos is not None and pos.get("status") == "OPEN":
+                s["signal"] = pos["signal"]
+                s["confidence"] = pos.get("confidence", 95.0)
+                s["reason"] = f"[POSITION ACTIVE] Target @ ₹{pos.get('target', 0.0):.1f} | SL @ ₹{pos.get('stop_loss', 0.0):.1f}"
         return res
 
     def evaluate_first_15m_breakout_strategy(self) -> dict:
