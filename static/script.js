@@ -4864,6 +4864,62 @@ async function updatePayoffGraph() {
 // ── OPTIMISTIC USER TOGGLE LOCK (PREVENTS 3S POLLING RACE CONDITIONS) ──
 const pendingUserToggles = {};
 
+
+// ── TOP AI SIGNAL BANNER UPDATER ──
+function updateTopAISignalBanner(topStrat, suite) {
+    try {
+        const bannerRec = document.getElementById('banner-rec-text');
+        const bannerStrat = document.getElementById('banner-strat-name');
+        const bannerConf = document.getElementById('banner-conf-text');
+        const bannerReason = document.getElementById('banner-reason-text');
+        const bannerEntry = document.getElementById('banner-entry-text');
+        const bannerTarget = document.getElementById('banner-target-text');
+        const bannerSL = document.getElementById('banner-sl-text');
+
+        if (topStrat && topStrat.signal && topStrat.signal !== "No Trade") {
+            const sig = topStrat.signal;
+            const name = topStrat.name || topStrat.key || "Strategy";
+            const conf = topStrat.confidence || 90.0;
+            const reason = topStrat.reason || "High conviction technical setup.";
+
+            if (bannerRec) {
+                bannerRec.innerText = `${sig} SIGNAL`;
+                bannerRec.className = "banner-value " + (sig.includes("CE") ? "badge-bullish" : (sig.includes("PE") ? "badge-bearish" : "badge-warning"));
+            }
+
+            if (bannerStrat) {
+                bannerStrat.innerText = `🎯 Driving Strategy: ${name}`;
+            }
+
+            if (bannerConf) {
+                bannerConf.innerText = `⚡ ${conf.toFixed(1)}% Confidence`;
+            }
+
+            if (bannerReason) {
+                bannerReason.innerText = reason;
+            }
+
+            if (bannerEntry && topStrat.close_price) bannerEntry.innerText = `₹${topStrat.close_price}`;
+            if (bannerTarget && topStrat.target) bannerTarget.innerText = `₹${topStrat.target}`;
+            if (bannerSL && topStrat.stop_loss) bannerSL.innerText = `₹${topStrat.stop_loss}`;
+        } else {
+            if (bannerRec) {
+                bannerRec.innerText = "NO TRADE";
+                bannerRec.className = "banner-value badge-neutral";
+            }
+            if (bannerStrat) bannerStrat.innerText = "🎯 Strategy Suite: Evaluating 15 Strategies";
+            if (bannerConf) bannerConf.innerText = "⚡ 50.0% Confidence";
+            if (bannerReason) bannerReason.innerText = "Market in consolidation range. Waiting for strategy breakout or level trigger.";
+            if (bannerEntry) bannerEntry.innerText = "--";
+            if (bannerTarget) bannerTarget.innerText = "--";
+            if (bannerSL) bannerSL.innerText = "--";
+        }
+    } catch (err) {
+        console.error("Error in updateTopAISignalBanner:", err);
+    }
+}
+
+
 async function updateStrategySuiteUI(suite) {
     if (!suite) return;
 
