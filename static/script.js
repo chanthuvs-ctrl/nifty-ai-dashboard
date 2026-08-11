@@ -909,7 +909,7 @@ async function fetchMarketData() {
 
         const hdrLivePnl = document.getElementById('hdr-live-pnl');
         if (hdrLivePnl && livePnlMd !== null) {
-            hdrLivePnl.innerText = (livePnlMd >= 0 ? '+' : '') + '₹' + Math.abs(livePnlMd).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            hdrLivePnl.innerText = (livePnlMd >= 0 ? '+' : '') + '₹' + Math.abs(livePnlMd || 0.0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
             hdrLivePnl.style.color = livePnlMd > 0 ? 'var(--neon-bull)' : livePnlMd < 0 ? 'var(--neon-bear)' : 'var(--text-muted)';
             hdrLivePnl.style.textShadow = livePnlMd !== 0 ? '0 0 10px rgba(0, 229, 153, 0.3)' : 'none';
         }
