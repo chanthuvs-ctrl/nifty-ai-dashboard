@@ -173,7 +173,7 @@ function showDiagnosticError(message) {
         <span class="toast-close" style="color: #ff1744;">&times;</span>
     `;
     container.appendChild(toast);
-    toast.querySelector('.toast-close').addEventListener('click', () => toast.remove());
+    toast.querySelector('.toast-close').addEventListener('click', async () => toast.remove());
 }
 window.showDiagnosticError = showDiagnosticError;
 
@@ -333,7 +333,7 @@ function showToast(strategy, confidence, type = "neutral", title = "STRATEGY SHI
         setTimeout(() => toast.remove(), 300);
     }, 6000);
     
-    toast.querySelector('.toast-close').addEventListener('click', () => toast.remove());
+    toast.querySelector('.toast-close').addEventListener('click', async () => toast.remove());
 }
 
 // Helper to extract strike LTP from option chain
@@ -1983,12 +1983,12 @@ async function reloadExpiries(settings = null) {
 
 // Initialize Mobile Overlay Panels & Home Dock Click Listeners
 // Initialize In-Place Dashboard Panel Toggles
-function initDashboardToggles() {
+async function initDashboardToggles() {
     const backdrop = document.getElementById('modal-backdrop');
     
     // Click listeners for menu buttons
     document.querySelectorAll('.menu-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const panelId = btn.getAttribute('data-panel');
             const panel = document.getElementById(panelId);
             if (!panel) return;
@@ -2038,7 +2038,7 @@ function initDashboardToggles() {
 
     // Close button click listener inside panel headers
     document.querySelectorAll('.close-overlay-btn').forEach(closeBtn => {
-        closeBtn.addEventListener('click', (e) => {
+        closeBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const panel = closeBtn.closest('.panel');
             if (!panel) return;
@@ -2063,7 +2063,7 @@ function initDashboardToggles() {
 
     // Click backdrop to close active panel
     if (backdrop) {
-        backdrop.addEventListener('click', () => {
+        backdrop.addEventListener('click', async () => {
             document.querySelectorAll('.panel.active').forEach(p => {
                 p.classList.remove('active');
                 p.classList.add('hidden-panel');
@@ -2120,7 +2120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     alignActiveStates();
     // Re-align on resize if crossing the threshold
-    window.addEventListener('resize', () => {
+    window.addEventListener('resize', async () => {
         const isMobileNow = window.innerWidth < 1024;
         const chartBtn = document.querySelector('.menu-btn[data-panel="panel-chart"]');
         if (chartBtn) {
@@ -2246,7 +2246,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Hook up settings modal auto-trade button selections
     document.querySelectorAll('#modal-auto-trade-group button').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const mode = btn.getAttribute('data-mode');
             syncAutoTradeButtonVisuals('modal-auto-trade-group', mode);
         });
@@ -2284,7 +2284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Listen to feed mode selection change
     const setFeedMode = document.getElementById('set-feed-mode');
     if (setFeedMode) {
-        setFeedMode.addEventListener('change', (e) => {
+        setFeedMode.addEventListener('change', async (e) => {
             toggleUpstoxFields(e.target.value);
         });
     }
@@ -2381,7 +2381,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Copy Redirect URI button
     const btnCopyRedirectUri = document.getElementById('btn-copy-redirect-uri');
     if (btnCopyRedirectUri) {
-        btnCopyRedirectUri.addEventListener('click', () => {
+        btnCopyRedirectUri.addEventListener('click', async () => {
             const field = document.getElementById('set-redirect-uri');
             if (field && field.value) {
                 navigator.clipboard.writeText(field.value).then(() => {
@@ -2400,7 +2400,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Clear & Switch Account button
     const btnClearAccount = document.getElementById('btn-clear-upstox-account');
     if (btnClearAccount) {
-        btnClearAccount.addEventListener('click', () => {
+        btnClearAccount.addEventListener('click', async () => {
             if (!confirm('Clear all Upstox credentials?\n\nThis will remove the API Key, API Secret, and Access Token so you can enter a new account. The system will switch to Simulation mode until you re-authenticate.')) return;
             const apiKeyEl = document.getElementById('set-upstox-api-key');
             const apiSecretEl = document.getElementById('set-upstox-api-secret');
@@ -2528,7 +2528,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     const btnCloseSettings = document.getElementById('btn-close-settings');
     if (btnCloseSettings) {
-        btnCloseSettings.addEventListener('click', () => {
+        btnCloseSettings.addEventListener('click', async () => {
             document.getElementById('settings-modal').style.display = 'none';
         });
     }
@@ -2546,7 +2546,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Quick trade bindings on mobile home layout
     const quickPaper = document.getElementById('btn-quick-paper');
     if (quickPaper) {
-        quickPaper.addEventListener('click', (e) => {
+        quickPaper.addEventListener('click', async (e) => {
             e.stopPropagation();
             if (btnExecutePaper) btnExecutePaper.click();
         });
@@ -2554,7 +2554,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const quickLive = document.getElementById('btn-quick-live');
     if (quickLive) {
-        quickLive.addEventListener('click', (e) => {
+        quickLive.addEventListener('click', async (e) => {
             e.stopPropagation();
             if (btnExecuteLive) btnExecuteLive.click();
         });
@@ -2594,8 +2594,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Tab buttons event listeners
     const tabPaper = document.getElementById('tab-paper');
     const tabLive = document.getElementById('tab-live');
-    if (tabPaper) tabPaper.addEventListener('click', () => switchJournalTab('paper'));
-    if (tabLive) tabLive.addEventListener('click', () => switchJournalTab('live'));
+    if (tabPaper) tabPaper.addEventListener('click', async () => switchJournalTab('paper'));
+    if (tabLive) tabLive.addEventListener('click', async () => switchJournalTab('live'));
 
     // Core polling loop (5 seconds ticker refresh)
     try {
@@ -2613,7 +2613,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Toggle P&L Chart Type (v2.5)
     const btnTogglePnlType = document.getElementById('btn-toggle-pnl-type');
     if (btnTogglePnlType) {
-        btnTogglePnlType.addEventListener('click', () => {
+        btnTogglePnlType.addEventListener('click', async () => {
             const currentType = btnTogglePnlType.getAttribute('data-pnl-type');
             if (currentType === 'real') {
                 btnTogglePnlType.setAttribute('data-pnl-type', 'paper');
@@ -2634,7 +2634,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnToggleOptions = document.getElementById('btn-toggle-options');
     const optionsPanelContent = document.getElementById('options-panel-content');
     if (btnToggleOptions && optionsPanelContent) {
-        btnToggleOptions.addEventListener('click', () => {
+        btnToggleOptions.addEventListener('click', async () => {
             if (optionsPanelContent.style.display === 'none') {
                 optionsPanelContent.style.display = 'block';
                 btnToggleOptions.textContent = 'Hide Chain';
@@ -3533,14 +3533,14 @@ function initAcademy() {
     const viewAcademy = document.getElementById('academy-view');
     
     if (btnNavDashboard && btnNavAcademy) {
-        btnNavDashboard.addEventListener('click', () => {
+        btnNavDashboard.addEventListener('click', async () => {
             btnNavDashboard.classList.add('active');
             btnNavAcademy.classList.remove('active');
             if (viewDashboard) viewDashboard.classList.remove('hidden');
             if (viewAcademy) viewAcademy.classList.add('hidden');
         });
         
-        btnNavAcademy.addEventListener('click', () => {
+        btnNavAcademy.addEventListener('click', async () => {
             btnNavDashboard.classList.remove('active');
             btnNavAcademy.classList.add('active');
             if (viewDashboard) viewDashboard.classList.add('hidden');
@@ -3552,7 +3552,7 @@ function initAcademy() {
     
     // Hook Academy Main Header Tabs
     document.querySelectorAll('.academy-tab').forEach(tab => {
-        tab.addEventListener('click', (e) => {
+        tab.addEventListener('click', async (e) => {
             const selectedTab = e.target.getAttribute('data-tab');
             switchAcademyTab(selectedTab);
         });
@@ -3561,7 +3561,7 @@ function initAcademy() {
     // Difficulty Filter Listener
     const difficultyFilter = document.getElementById('academy-difficulty-filter');
     if (difficultyFilter) {
-        difficultyFilter.addEventListener('change', (e) => {
+        difficultyFilter.addEventListener('change', async (e) => {
             renderModuleList(e.target.value);
         });
     }
@@ -3572,7 +3572,7 @@ function initAcademy() {
     const selectScenario = document.getElementById('select-chart-scenario');
     
     if (btnPrevScenario) {
-        btnPrevScenario.addEventListener('click', () => {
+        btnPrevScenario.addEventListener('click', async () => {
             if (academyState.currentScenarioIndex > 1) {
                 academyState.currentScenarioIndex--;
                 if (selectScenario) selectScenario.value = academyState.currentScenarioIndex;
@@ -3582,7 +3582,7 @@ function initAcademy() {
     }
     
     if (btnNextScenario) {
-        btnNextScenario.addEventListener('click', () => {
+        btnNextScenario.addEventListener('click', async () => {
             if (academyState.currentScenarioIndex < 500) {
                 academyState.currentScenarioIndex++;
                 if (selectScenario) selectScenario.value = academyState.currentScenarioIndex;
@@ -3600,7 +3600,7 @@ function initAcademy() {
             opt.innerText = `Chart Setup #${i}`;
             selectScenario.appendChild(opt);
         }
-        selectScenario.addEventListener('change', (e) => {
+        selectScenario.addEventListener('change', async (e) => {
             academyState.currentScenarioIndex = parseInt(e.target.value);
             loadScenario(academyState.currentScenarioIndex);
         });
@@ -3610,7 +3610,7 @@ function initAcademy() {
     ['chk-show-profile', 'chk-show-vwap', 'chk-show-footprint', 'chk-show-sweeps'].forEach(id => {
         const chk = document.getElementById(id);
         if (chk) {
-            chk.addEventListener('change', () => {
+            chk.addEventListener('change', async () => {
                 renderSVGChart(academyState.currentScenarioIndex);
             });
         }
@@ -3623,7 +3623,7 @@ function initAcademy() {
         if (academyState.checklistStates[itemId]) {
             row.classList.add('checked');
         }
-        row.addEventListener('click', () => {
+        row.addEventListener('click', async () => {
             row.classList.toggle('checked');
             academyState.checklistStates[itemId] = row.classList.contains('checked');
             safeStorage.setItem('agy_checklist_state', JSON.stringify(academyState.checklistStates));
@@ -3633,21 +3633,21 @@ function initAcademy() {
     // Next/Proceed Buttons inside academy footer
     const btnNextRead = document.getElementById('btn-academy-next-read');
     if (btnNextRead) {
-        btnNextRead.addEventListener('click', () => {
+        btnNextRead.addEventListener('click', async () => {
             switchAcademyTab('chart');
         });
     }
     
     const btnNextChart = document.getElementById('btn-academy-next-chart');
     if (btnNextChart) {
-        btnNextChart.addEventListener('click', () => {
+        btnNextChart.addEventListener('click', async () => {
             switchAcademyTab('quiz');
         });
     }
     
     const btnNextModule = document.getElementById('btn-academy-next-module');
     if (btnNextModule) {
-        btnNextModule.addEventListener('click', () => {
+        btnNextModule.addEventListener('click', async () => {
             if (academyState.currentModuleId < window.ACADEMY_DATA.modules.length) {
                 academyState.currentModuleId++;
                 renderActiveModule();
@@ -3666,7 +3666,7 @@ function initAcademy() {
     
     const btnCopyPine = document.getElementById('btn-copy-pine-code');
     if (btnCopyPine) {
-        btnCopyPine.addEventListener('click', () => {
+        btnCopyPine.addEventListener('click', async () => {
             const codeBlock = document.getElementById('pine-code-block');
             if (codeBlock) {
                 navigator.clipboard.writeText(codeBlock.textContent);
@@ -3750,7 +3750,7 @@ function renderModuleList(difficultyFilter) {
             <div class="module-title">M${mod.id.toString().padStart(2, '0')}: ${mod.title}</div>
         `;
         
-        card.addEventListener('click', () => {
+        card.addEventListener('click', async () => {
             academyState.currentModuleId = mod.id;
             renderActiveModule();
             // Reset to read tab
@@ -3857,7 +3857,7 @@ function renderActiveQuiz(module) {
                 <span>${opt}</span>
             `;
             
-            optDiv.addEventListener('click', () => {
+            optDiv.addEventListener('click', async () => {
                 // If already checked, return
                 if (optionsList.querySelector('.correct') || optionsList.querySelector('.incorrect')) return;
                 
@@ -4114,7 +4114,7 @@ function renderScenarioQuiz(index, template) {
             }
         }
         
-        optDiv.addEventListener('click', () => {
+        optDiv.addEventListener('click', async () => {
             if (optsContainer.querySelector('.correct') || optsContainer.querySelector('.incorrect')) return;
             
             academyState.scenarioAnswers[index] = optIdx;
@@ -4864,7 +4864,7 @@ async function updatePayoffGraph() {
 // ── OPTIMISTIC USER TOGGLE LOCK (PREVENTS 3S POLLING RACE CONDITIONS) ──
 const pendingUserToggles = {};
 
-function updateStrategySuiteUI(suite) {
+async function updateStrategySuiteUI(suite) {
     if (!suite) return;
 
     let enabledCount = 0;
@@ -4958,14 +4958,59 @@ function updateStrategySuiteUI(suite) {
     updateTopAISignalBanner(topSignalStrat, suite);
 }
 
-function initStrategySuiteListeners() {
+async function initStrategySuiteListeners() {
     document.addEventListener('change', async (e) => {
         if (e.target.classList.contains('strat-enable-checkbox')) {
             const stratKey = e.target.getAttribute('data-strat');
             const enabled = e.target.checked;
-            
+
             pendingUserToggles[stratKey] = {
-                ...(pendingUserToggles[stratKey] || {
+                ...(pendingUserToggles[stratKey] || {}),
+                enabled: enabled,
+                timestamp: Date.now()
+            };
+
+            try {
+                await fetch('/api/strategies/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy_key: stratKey, enabled: enabled })
+                });
+                if (typeof showToast === 'function') showToast(`Strategy ${stratKey} ${enabled ? 'ENABLED' : 'Disabled'}`);
+            } catch (err) {
+                console.error("Failed to toggle strategy enabled:", err);
+            }
+        }
+
+        if (e.target.classList.contains('strat-live-checkbox')) {
+            const stratKey = e.target.getAttribute('data-strat');
+            const liveDeploy = e.target.checked;
+
+            pendingUserToggles[stratKey] = {
+                ...(pendingUserToggles[stratKey] || {}),
+                live: liveDeploy,
+                timestamp: Date.now()
+            };
+
+            const cardEl = document.getElementById(`card-strat-${stratKey}`);
+            if (cardEl) {
+                if (liveDeploy) cardEl.classList.add('live-active-card');
+                else cardEl.classList.remove('live-active-card');
+            }
+
+            try {
+                await fetch('/api/strategies/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy_key: stratKey, live_deploy: liveDeploy })
+                });
+                if (typeof showToast === 'function') showToast(`🚀 Live Deploy for ${stratKey} ${liveDeploy ? 'ACTIVATED' : 'Deactivated'}`);
+            } catch (err) {
+                console.error("Failed to toggle strategy live deployment:", err);
+            }
+        }
+    });
+
     // Master Strategy Suite Action Buttons
     const btnSelectAll = document.getElementById('btn-select-all-strats');
     if (btnSelectAll) {
@@ -4975,7 +5020,7 @@ function initStrategySuiteListeners() {
             try {
                 const resp = await fetch('/api/strategies/enable-all', { method: 'POST' });
                 const res = await resp.json();
-                
+
                 // Check all checkboxes in UI
                 document.querySelectorAll('.strat-enable-checkbox').forEach(c => c.checked = true);
                 document.querySelectorAll('.strat-live-checkbox').forEach(c => c.checked = true);
@@ -5012,322 +5057,10 @@ function initStrategySuiteListeners() {
             }
         });
     }
-
-}),
-                enabled: enabled,
-                timestamp: Date.now()
-            };
-
-            try {
-                await fetch('/api/strategies/toggle', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ strategy_key: stratKey, enabled: enabled })
-                });
-                if (typeof showToast === 'function') showToast(`Strategy ${stratKey} ${enabled ? 'ENABLED' : 'Disabled'}`);
-            } catch (err) {
-                console.error("Failed to toggle strategy enabled:", err);
-            }
-        }
-
-        if (e.target.classList.contains('strat-live-checkbox')) {
-            const stratKey = e.target.getAttribute('data-strat');
-            const liveDeploy = e.target.checked;
-            
-            pendingUserToggles[stratKey] = {
-                ...(pendingUserToggles[stratKey] || {}),
-                live: liveDeploy,
-                timestamp: Date.now()
-            };
-
-            const cardEl = document.getElementById(`card-strat-${stratKey}`);
-            if (cardEl) {
-                if (liveDeploy) cardEl.classList.add('live-active-card');
-                else cardEl.classList.remove('live-active-card');
-            }
-
-            try {
-                await fetch('/api/strategies/toggle', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ strategy_key: stratKey, live_deploy: liveDeploy })
-                });
-                if (typeof showToast === 'function') showToast(`🚀 Live Deploy for ${stratKey} ${liveDeploy ? 'ACTIVATED' : 'Deactivated'}`);
-            } catch (err) {
-                console.error("Failed to toggle strategy live deployment:", err);
-            }
-        }
-    });
 }
 
 
-function updateTopAISignalBanner(topStrat, suite) {
-    const bannerRec = document.getElementById('banner-rec-text');
-    const bannerStrat = document.getElementById('banner-strat-name');
-    const bannerConf = document.getElementById('banner-conf-text');
-    const bannerReason = document.getElementById('banner-reason-text');
-    const bannerEntry = document.getElementById('banner-entry-text');
-    const bannerTarget = document.getElementById('banner-target-text');
-    const bannerSL = document.getElementById('banner-sl-text');
-
-    if (topStrat && topStrat.signal !== "No Trade") {
-        const sig = topStrat.signal;
-        const name = topStrat.name || topStrat.key;
-        const conf = topStrat.confidence || 90.0;
-        const reason = topStrat.reason || "High conviction technical setup.";
-
-        if (bannerRec) {
-            bannerRec.innerText = `${sig} SIGNAL`;
-            bannerRec.className = "banner-value " + (sig.includes("CE") ? "badge-bullish" : (sig.includes("PE") ? "badge-bearish" : "badge-warning"));
-        }
-
-        if (bannerStrat) {
-            bannerStrat.innerText = `🎯 Strategy: ${name}`;
-        }
-
-        if (bannerConf) {
-            bannerConf.innerText = `⚡ ${conf.toFixed(1)}% Confidence`;
-        }
-
-        if (bannerReason) {
-            bannerReason.innerText = reason;
-        }
-
-        if (bannerEntry && topStrat.close_price) bannerEntry.innerText = `₹${topStrat.close_price}`;
-        if (bannerTarget && topStrat.target) bannerTarget.innerText = `₹${topStrat.target}`;
-        if (bannerSL && topStrat.stop_loss) bannerSL.innerText = `₹${topStrat.stop_loss}`;
-    } else {
-        // Default fallback if no single strategy has fired an entry signal
-        if (bannerRec) {
-            bannerRec.innerText = "NO TRADE";
-            bannerRec.className = "banner-value badge-neutral";
-        }
-        if (bannerStrat) bannerStrat.innerText = "🎯 Strategy Suite: Evaluating 15 Strategies";
-        if (bannerConf) bannerConf.innerText = "⚡ 50.0% Confidence";
-        if (bannerReason) bannerReason.innerText = "Market in consolidation range. Waiting for strategy breakout or level trigger.";
-        if (bannerEntry) bannerEntry.innerText = "--";
-        if (bannerTarget) bannerTarget.innerText = "--";
-        if (bannerSL) bannerSL.innerText = "--";
-    }
-}
-
-
-function initStrategySuiteListeners() {
-    document.addEventListener('change', async (e) => {
-        if (e.target.classList.contains('strat-enable-checkbox')) {
-            const stratKey = e.target.getAttribute('data-strat');
-            const enabled = e.target.checked;
-            try {
-                await fetch('/api/strategies/toggle', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ strategy_key: stratKey, enabled: enabled })
-                });
-                if (typeof showToast === 'function') showToast(`Strategy ${stratKey} ${enabled ? 'Enabled' : 'Disabled'}`);
-            } catch (err) {
-                console.error("Failed to toggle strategy enabled:", err);
-            }
-        }
-
-        if (e.target.classList.contains('strat-live-checkbox')) {
-            const stratKey = e.target.getAttribute('data-strat');
-            const liveDeploy = e.target.checked;
-            try {
-                await fetch('/api/strategies/toggle', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ strategy_key: stratKey, live_deploy: liveDeploy })
-                });
-                if (typeof showToast === 'function') showToast(`Live Deploy for ${stratKey} ${liveDeploy ? 'ACTIVATED' : 'Deactivated'}`);
-            } catch (err) {
-                console.error("Failed to toggle strategy live deployment:", err);
-            }
-        }
-    });
-}
-
-// Call listener initialization
-initStrategySuiteListeners();
-
-
-// ── BACKTESTING LAB EVENT LISTENERS & UI RENDERERS ──
-let lastBacktestData = null;
-
-function initBacktestListeners() {
-    const modal = document.getElementById('modal-backtest');
-    const openBtn = document.getElementById('btn-open-backtest-modal');
-    const closeBtn = document.getElementById('close-backtest-modal');
-    const runBtn = document.getElementById('btn-run-backtest-exec');
-    const filterSelect = document.getElementById('bt-trade-log-filter');
-
-    if (openBtn && modal) {
-        openBtn.addEventListener('click', () => {
-            modal.style.display = 'block';
-            if (!lastBacktestData) runBacktestExecution();
-        });
-    }
-
-    if (closeBtn && modal) {
-        closeBtn.addEventListener('click', () => {
-            modal.style.display = 'none';
-        });
-    }
-
-    if (runBtn) {
-        runBtn.addEventListener('click', () => {
-            runBacktestExecution();
-        });
-    }
-
-    if (filterSelect) {
-        filterSelect.addEventListener('change', () => {
-            if (lastBacktestData) renderBacktestTradeLog(lastBacktestData);
-        });
-    }
-}
-
-async function runBacktestExecution() {
-    const days = parseInt(document.getElementById('bt-param-days')?.value || 30);
-    const rr = parseFloat(document.getElementById('bt-param-rr')?.value || 2.0);
-    const lots = parseInt(document.getElementById('bt-param-lots')?.value || 1);
-    const slippage = document.getElementById('bt-param-slippage')?.checked !== false;
-
-    const runBtn = document.getElementById('btn-run-backtest-exec');
-    if (runBtn) {
-        runBtn.disabled = true;
-        runBtn.innerText = '⏳ SIMULATING...';
-    }
-
-    try {
-        const resp = await fetch('/api/backtest/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                days: days,
-                rr_ratio: rr,
-                num_lots: lots,
-                deduct_slippage: slippage
-            })
-        });
-
-        if (resp.ok) {
-            const data = await resp.json();
-            lastBacktestData = data;
-            renderBacktestResults(data);
-            if (typeof showToast === 'function') showToast(`Backtest executed for ${days} days!`);
-        }
-    } catch (err) {
-        console.error("Backtest execution error:", err);
-    } finally {
-        if (runBtn) {
-            runBtn.disabled = false;
-            runBtn.innerText = '🚀 RUN BACKTEST NOW';
-        }
-    }
-}
-
-function renderBacktestResults(data) {
-    if (!data || !data.summary) return;
-
-    const summary = data.summary;
-
-    // KPI Cards
-    if (summary.length > 0) {
-        const best = summary[0];
-        document.getElementById('bt-kpi-best-strat').innerText = `🏆 ${best.name}`;
-    }
-
-    let totPnl = 0;
-    let totWin = 0;
-    let totTrades = 0;
-
-    summary.forEach(s => {
-        totPnl += s.net_pnl_rupees;
-        totWin += s.winning_trades;
-        totTrades += s.total_trades;
-    });
-
-    const avgWinRate = totTrades > 0 ? (totWin / totTrades * 100).toFixed(1) : '0.0';
-
-    const pnlEl = document.getElementById('bt-kpi-total-pnl');
-    if (pnlEl) {
-        pnlEl.innerText = `₹${totPnl.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
-        pnlEl.style.color = totPnl >= 0 ? '#34d399' : '#f87171';
-    }
-
-    document.getElementById('bt-kpi-avg-winrate').innerText = `${avgWinRate}%`;
-    document.getElementById('bt-kpi-total-trades').innerText = totTrades.toLocaleString();
-
-    // Table matrix
-    const tableBody = document.getElementById('bt-table-body');
-    if (tableBody) {
-        tableBody.innerHTML = '';
-        summary.forEach(s => {
-            const tr = document.createElement('tr');
-            tr.style.borderBottom = '1px solid rgba(51, 65, 85, 0.4)';
-            const pnlColor = s.net_pnl_rupees >= 0 ? '#34d399' : '#f87171';
-            tr.innerHTML = `
-                <td style="padding: 8px; font-weight: 700; color: #f8fafc;">${s.name}</td>
-                <td style="padding: 8px;">${s.total_trades} (${s.winning_trades}W / ${s.losing_trades}L)</td>
-                <td style="padding: 8px; font-weight: 700; color: #fbbf24;">${s.win_rate_pct}%</td>
-                <td style="padding: 8px; font-weight: 700; color: ${pnlColor};">${s.net_pnl_pts > 0 ? '+' : ''}${s.net_pnl_pts} pts</td>
-                <td style="padding: 8px; font-weight: 800; color: ${pnlColor};">₹${s.net_pnl_rupees.toLocaleString('en-IN')}</td>
-                <td style="padding: 8px; font-weight: 700;">${s.profit_factor}</td>
-                <td style="padding: 8px; color: #f87171;">₹${s.max_drawdown_rupees.toLocaleString('en-IN')}</td>
-            `;
-            tableBody.appendChild(tr);
-        });
-    }
-
-    renderBacktestTradeLog(data);
-}
-
-function renderBacktestTradeLog(data) {
-    const filter = document.getElementById('bt-trade-log-filter')?.value || 'ALL';
-    const logBody = document.getElementById('bt-tradelog-body');
-    if (!logBody || !data || !data.details) return;
-
-    logBody.innerHTML = '';
-
-    let allTrades = [];
-    for (const [key, detail] of Object.entries(data.details)) {
-        if (filter === 'ALL' || filter === key) {
-            allTrades = allTrades.concat(detail.trades || []);
-        }
-    }
-
-    // Sort by date/time descending
-    allTrades.sort((a, b) => b.trade_id - a.trade_id);
-
-    if (allTrades.length === 0) {
-        logBody.innerHTML = '<tr><td colspan="8" style="padding: 10px; text-align: center; color: #64748b;">No trades for selected filter.</td></tr>';
-        return;
-    }
-
-    allTrades.slice(0, 50).forEach(t => {
-        const tr = document.createElement('tr');
-        tr.style.borderBottom = '1px solid rgba(30, 41, 59, 0.6)';
-        const outcomeColor = t.outcome === 'WIN' ? '#34d399' : '#f87171';
-        tr.innerHTML = `
-            <td style="padding: 6px; color: #94a3b8;">${t.date} ${t.entry_time}</td>
-            <td style="padding: 6px; font-weight: 600; color: #e2e8f0;">${t.strategy_key}</td>
-            <td style="padding: 6px; font-weight: 700; color: ${t.signal.includes('CE') ? '#34d399' : '#f87171'};">${t.signal}</td>
-            <td style="padding: 6px;">₹${t.entry_spot}</td>
-            <td style="padding: 6px;">₹${t.exit_spot}</td>
-            <td style="padding: 6px; font-weight: 700; color: ${outcomeColor};">${t.pnl_pts > 0 ? '+' : ''}${t.pnl_pts}</td>
-            <td style="padding: 6px; font-weight: 800; color: ${outcomeColor};">₹${t.pnl_rupees.toLocaleString('en-IN')}</td>
-            <td style="padding: 6px;"><span style="padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 800; background: ${t.outcome === 'WIN' ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}; color: ${outcomeColor};">${t.outcome}</span></td>
-        `;
-        logBody.appendChild(tr);
-    });
-}
-
-// Initialize listener
-initBacktestListeners();
-
-
-// ── HEADER AUTO-TRADE MODE TOGGLE BUTTON LISTENERS (OFF / PAPER / LIVE) ──
-function initHeaderAutoTradeModeListeners() {
+async function initHeaderAutoTradeModeListeners() {
     const modes = [
         { id: 'btn-autotrade-off', mode: 'OFF' },
         { id: 'btn-autotrade-paper', mode: 'Paper' },
@@ -5380,4 +5113,3 @@ function initHeaderAutoTradeModeListeners() {
         }
     });
 }
-
