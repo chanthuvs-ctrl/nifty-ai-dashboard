@@ -5101,19 +5101,26 @@ def get_journal():
             pnl = round((state.spot_price - pos["entry_spot"]) * 2.0, 2) if "CE" in pos.get("signal", "") else round((pos["entry_spot"] - state.spot_price) * 2.0, 2)
             trades_copy.append({
                 "id": t_id,
+                "date": get_ist_date_str(),
+                "time": pos.get("entry_time", get_ist_time_str()),
                 "timestamp": pos.get("entry_time", get_ist_time_str()),
                 "recommendation": pos.get("signal", "Buy CE"),
+                "strategy": pos.get("strategy_name", strat_key),
                 "strategy_name": pos.get("strategy_name", strat_key),
                 "entry_price": pos.get("entry_spot", state.spot_price),
+                "entry_spot": pos.get("entry_spot", state.spot_price),
                 "stop_loss": pos.get("stop_loss", 0.0),
                 "target": pos.get("target", 0.0),
-                "quantity": 130,
+                "size": pos.get("lots", 1),
+                "quantity": pos.get("lots", 1) * pos.get("lot_size", 65),
                 "status": "OPEN",
                 "execution_type": "Live (Upstox API)" if pos.get("is_live") else "Paper",
                 "reason": f"Strategy {pos.get('strategy_name')} active position",
                 "option_symbol": pos.get("symbol_name", "NIFTY CE"),
+                "strikes": [pos.get("symbol_name", f"NIFTY {pos.get('strike_price', 24500)} {pos.get('signal', 'CE')}")],
                 "strike_price": pos.get("strike_price", 24500),
                 "expiry_date": pos.get("expiry_date", ""),
+                "brokerage": 40.0 if pos.get("is_live") else 20.0,
                 "pnl": pnl,
                 "floating_pnl": pnl
             })
@@ -5134,12 +5141,25 @@ def get_journal():
     
     total_floating_pnl = round(sum(t.get("floating_pnl", 0.0) for t in active_pos_list), 2)
 
+    closed_trades = [t for t in trades_copy if t.get("status") == "CLOSED"]
+    booked_pnl = round(sum(t.get("pnl", 0.0) for t in closed_trades), 2)
+    daily_brokerage = round(sum(t.get("brokerage", 40.0 if (t.get("execution_type") or "").startswith("Live") else 20.0) for t in trades_copy), 2)
+    today_trades_count = len(trades_copy)
+    today_legs_count = sum(len(t.get("legs", [])) if t.get("legs") else 1 for t in active_pos_list)
+
     return {
         "trades": trades_copy[::-1],
         "active_positions": active_pos_list,
         "analytics": journal.get_analytics("Paper"),
         "live_analytics": journal.get_analytics("Live"),
-        "capital": state.get_available_capital()
+        "capital": state.get_available_capital(),
+        "today_trades": today_trades_count,
+        "today_legs": today_legs_count,
+        "booked_pnl": booked_pnl,
+        "daily_brokerage": daily_brokerage,
+        "total_brokerage": daily_brokerage,
+        "broker_capital": state.get_available_capital(),
+        "total_floating_pnl": total_floating_pnl
     }
 
 

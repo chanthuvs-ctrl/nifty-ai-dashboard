@@ -1172,14 +1172,14 @@ async function fetchJournal() {
                     </div>`;
                     
                     tr.innerHTML = `
-                        <td>${pos.time}</td>
+                        <td>${pos.time || pos.timestamp || getTodayIstTimeStr()}</td>
                         <td class="font-bold" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
-                            <div style="display:flex; align-items:center; gap:4px; width:100%;">${pos.strategy} ${typeBadge} ${alertBadge}</div>
+                            <div style="display:flex; align-items:center; gap:4px; width:100%;">${pos.strategy || pos.strategy_name || 'Strategy Trade'} ${typeBadge} ${alertBadge}</div>
                             ${stageInfo}
                         </td>
-                        <td>${pos.strikes.join(', ')}</td>
+                        <td>${Array.isArray(pos.strikes) ? pos.strikes.join(', ') : (pos.option_symbol || pos.symbol || 'NIFTY OPTION')}</td>
                         <td>₹${entry.toFixed(2)}</td>
-                        <td>${size} lot(s)</td>
+                        <td>${size || pos.lots || 1} lot(s)</td>
                         <td>₹${currentSpot.toFixed(2)}</td>
                         <td class="font-bold ${totalPnl >= 0 ? 'text-bull' : 'text-bear'}">₹${totalPnl.toFixed(2)}</td>
                         <td style="color: var(--text-muted);">₹${(pos.brokerage || 0.0).toFixed(2)}</td>
@@ -1247,7 +1247,7 @@ async function fetchJournal() {
                     tr.innerHTML = `
                         <td>${pos.date} ${pos.time}</td>
                         <td class="font-bold" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
-                            <div>${pos.strategy} ${typeBadge}</div>
+                            <div>${pos.strategy || pos.strategy_name || 'Strategy Trade'} ${typeBadge}</div>
                             ${closedInfo}
                         </td>
                         <td>₹${pos.entry_spot.toFixed(2)}</td>
