@@ -2256,10 +2256,9 @@ class SimulationState:
         for key, s in all_strats:
             s["is_enabled"] = enabled.get(key, True) if key in enabled else True
             s["is_live_deployed"] = live_deploy.get(key, True) if key in live_deploy else True
-            
-            # Attach active position details and live PnL
+
             pos = self.strategy_positions.get(key)
-            if pos is not None:
+            if pos is not None and pos.get("status") == "OPEN" and s.get("signal") != "No Trade":
                 spot_diff = (self.spot_price - pos["entry_spot"]) if pos.get("signal") == "Buy CE" else (pos["entry_spot"] - self.spot_price)
                 lot_qty = pos.get("lot_size", 65) * pos.get("lots", 1)
                 live_pnl = round(spot_diff * lot_qty, 2)
@@ -2275,35 +2274,6 @@ class SimulationState:
             else:
                 s["active_position"] = None
             res[key] = s
-        
-        # Apply 3-Minute Signal Lock Hysteresis (prevents tick-by-tick signal flipping)
-        if not hasattr(self, "strategy_signal_locks"):
-            self.strategy_signal_locks = {}
-            
-        now_ts = time.time()
-        for key, s in res.items():
-            locked = self.strategy_signal_locks.get(key)
-            if locked is not None and (now_ts - locked["timestamp"] < 180.0):
-                # Lock confirmed signal for minimum 3 minutes
-                s["signal"] = locked["signal"]
-                s["confidence"] = locked["confidence"]
-                s["reason"] = f"[CONFIRMED 3M LOCK] {s['reason']}"
-            else:
-                if s.get("signal") != "No Trade":
-                    self.strategy_signal_locks[key] = {
-                        "signal": s["signal"],
-                        "timestamp": now_ts,
-                        "confidence": s.get("confidence", 90.0)
-                    }
-        
-        # Institutional Rule: If a strategy has an OPEN position, its signal is 100% LOCKED 
-        # to the position's direction until Target or Stop Loss is hit!
-        for key, s in res.items():
-            pos = self.strategy_positions.get(key)
-            if pos is not None and pos.get("status") == "OPEN":
-                s["signal"] = pos["signal"]
-                s["confidence"] = pos.get("confidence", 95.0)
-                s["reason"] = f"[POSITION ACTIVE] Target @ ₹{pos.get('target', 0.0):.1f} | SL @ ₹{pos.get('stop_loss', 0.0):.1f}"
         return res
 
     def evaluate_first_15m_breakout_strategy(self) -> dict:
@@ -2468,35 +2438,23 @@ class SimulationState:
                 print(f"Auto-initiate paper trades on startup error: {e}")
 
     def force_initiate_all_paper_trades(self):
-        """Forces immediate entry of paper trades for ALL enabled strategies."""
+        """Forces immediate evaluation and entry for strategies with active technical signals."""
         self.sync_settings_strategies()
         suite = self.evaluate_strategy_suite()
-        now = time.time()
-        
         self.settings["auto_trade_mode"] = "Paper"
 
         for strat_key, s_data in suite.items():
             if not s_data.get("is_enabled", True):
                 continue
-            
-            # Ensure strategy has an active signal
-            signal = s_data.get("signal", "No Trade")
-            if signal == "No Trade":
-                # Fallback signal based on market trend
-                signal = "Buy CE" if self.spot_price >= self.ema_20 else "Buy PE"
-                s_data["signal"] = signal
-                s_data["reason"] = f"Automated Suite Execution: {signal} triggered on Nifty spot ₹{round(self.spot_price, 2)}"
 
-            # Clear cooldown for immediate execution
-            self.strategy_cooldowns[strat_key] = 0.0
-            
-            # Force entry if position doesn't exist
-            if self.strategy_positions.get(strat_key) is None:
-                self._execute_independent_strategy_entry(strat_key, s_data, is_live=False)
+            signal = s_data.get("signal", "No Trade")
+            if signal in ["Buy CE", "Buy PE"]:
+                self.strategy_cooldowns[strat_key] = 0.0
+                if self.strategy_positions.get(strat_key) is None:
+                    self._execute_independent_strategy_entry(strat_key, s_data, is_live=False)
 
         self.save_settings()
         return len([p for p in self.strategy_positions.values() if p is not None])
-
 
     def process_independent_multi_strategy_ticks(self):
         """
@@ -5172,6 +5130,9 @@ def get_journal():
             trades_copy.append(t_dict)
 
     active_pos_list = [t for t in trades_copy if t.get("status") == "OPEN"]
+
+    
+    total_floating_pnl = round(sum(t.get("floating_pnl", 0.0) for t in active_pos_list), 2)
 
     return {
         "trades": trades_copy[::-1],

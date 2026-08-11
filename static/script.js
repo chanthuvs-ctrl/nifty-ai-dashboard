@@ -1091,8 +1091,13 @@ async function fetchJournal() {
 
         
         // Helper to render active positions
-        let totalPaperPnl = 0.0;
-        let totalLivePnl = 0.0;
+        let totalPaperPnl = activePaper.reduce((sum, t) => sum + (t.floating_pnl || t.pnl || 0.0), 0.0);
+        let totalLivePnl = activeLive.reduce((sum, t) => sum + (t.floating_pnl || t.pnl || 0.0), 0.0);
+        
+        const hdrTradesCount = document.getElementById('hdr-trades-count');
+        if (hdrTradesCount) {
+            hdrTradesCount.innerText = (data.active_positions || []).length;
+        }
         const renderActive = (tbodyId, list, typeLabel, typeColor) => {
             const body = document.getElementById(tbodyId);
             if (!body) return;
