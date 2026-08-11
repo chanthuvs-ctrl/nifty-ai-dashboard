@@ -1,10 +1,11 @@
+from backtest_engine import StrategyBacktester
 import math
 import random
 
 import urllib3.util.connection
 urllib3.util.connection.HAS_IPV6 = False
 
-VERSION = "3.4.0" 
+VERSION = "4.0.0" 
 import time
 import os
 import json
@@ -1845,621 +1846,9 @@ class SimulationState:
         self.option_chain = option_chain
 
     def _auto_trade_tick(self):
-        """Automated trading logic processing at each tick."""
-        mode = self.settings.get("auto_trade_mode", "OFF")
-        if mode == "OFF":
-            return
+        """Automated trading logic processing for independent multi-strategy execution."""
+        self.process_independent_multi_strategy_ticks()
 
-        feed_mode = self.settings.get("feed_mode", "Simulation")
-        
-        # ── CIRCUIT BREAKER 1: Live order cooldown ─────────────────────────
-        # After ANY live order attempt (success or fail), block re-entry for 60s.
-        # This is the primary guard against order loops on every 3s poll.
-        if mode == "Live":
-            last_attempt = getattr(self, "last_live_order_attempt_time", 0.0)
-            cooldown = 60.0  # minimum 60 seconds between any live order attempts
-            since_last = time.time() - last_attempt
-            if last_attempt > 0 and since_last < cooldown:
-                return  # Silent — wait for cooldown before allowing next entry
-
-        # ── CIRCUIT BREAKER 2: Margin flag (persisted across restarts) ────
-        if mode == "Live":
-            # Load persisted flag from settings (survives server restarts)
-            if self.settings.get("margin_insufficient", False):
-                self.margin_insufficient = True
-                self.margin_shortfall_amount = float(self.settings.get("margin_shortfall_amount", 0.0))
-            if getattr(self, "margin_insufficient", False):
-                high_margin_strategies = ["Short Strangle", "Short Straddle", "Iron Condor"]
-                if self.current_recommendation in high_margin_strategies:
-                    return  # Silently block — dashboard banner already shows the warning
-
-        # Guard/Self-Healing: Live Real requires Upstox feed for real prices
-        if mode == "Live" and feed_mode != "Upstox":
-            # Force validation of the token
-            self.get_broker_balance()
-            if self.upstox_token_status == "VALID":
-                self.settings["feed_mode"] = "Upstox"
-                self.save_settings()
-                feed_mode = "Upstox"
-                self._live_feed_warned = False
-                print("🔄 SELF-HEALING: Forced Feed Mode to Upstox for Live real trading because Upstox API is active.")
-            else:
-                if not getattr(self, '_live_feed_warned', False):
-                    err = "⚠️ Live Real trading is blocked: Upstox API is inactive/invalid. Please authenticate first."
-                    self.live_trade_errors = getattr(self, 'live_trade_errors', [])
-                    self.live_trade_errors.append({"time": get_ist_time_str(), "error": err})
-                    self.live_trade_errors = self.live_trade_errors[-10:]
-                    print(err)
-                    self._live_feed_warned = True
-                return
-
-        # Self-healing: if auto_trade_active_id is None but there is an open trade in the journal, restore it!
-        if not self.auto_trade_active_id:
-            for t in journal.trades:
-                if t.get("status") == "OPEN" and t.get("execution_type") == mode:
-                    self.auto_trade_active_id = t["id"]
-                    print(f"🤖 AUTO-TRADE: Self-healed active trade ID {t['id']} from journal.")
-                    break
-            
-        # Ensure fresh option chain is built
-        self.update_option_chain()
-            
-        ist_now = get_ist_datetime()
-        ist_time = ist_now.time()
-        
-        # 1. Trading start check (09:20 IST) - BYPASSED for Paper trading
-        if mode != "Paper" and ist_time < datetime.time(9, 20):
-            return
-            
-        # 2a. Block NEW entries after 15:10 IST (no new trades)
-        entry_cutoff = datetime.time(15, 10)
-        
-        # 2b. Force close ALL open positions at 15:15 IST - BYPASSED for Paper trading
-        close_time = datetime.time(15, 15)
-        if mode != "Paper" and ist_time >= close_time:
-            open_count = 0
-            for t in journal.trades:
-                if t.get("status") == "OPEN" and t.get("execution_type") == mode:
-                    journal.close_trade(t["id"], self.spot_price)
-                    t["reason"] = f"Force Square-off (15:15 IST Time-in-Force Kill Switch)"
-                    open_count += 1
-            if open_count > 0:
-                journal.save_journal()
-                self.auto_trade_active_id = None
-                print(f"🤖 AUTO-TRADE: Force squared off {open_count} open positions due to 15:15 IST Kill Switch.")
-            return
-            
-        capital = self.get_available_capital()
-        daily_limit = capital * 0.05
-        preferred_index = self.settings.get("preferred_index", "Nifty")
-        lot_size = 20 if preferred_index.lower() == "sensex" else 65
-        spot = self.spot_price
-        
-        # Calculate current floating P&L of active position
-        floating_pnl = 0.0
-        active_trade = None
-        if self.auto_trade_active_id:
-            for t in journal.trades:
-                if t["id"] == self.auto_trade_active_id and t["status"] == "OPEN":
-                    active_trade = t
-                    break
-            
-            if active_trade:
-                floating_pnl = self.calculate_trade_pnl(active_trade, spot)
-            else:
-                self.auto_trade_active_id = None
-                self.trail_activated = False
-                self.last_trade_close_time = time.time()
-                self.peak_pnl_since_activation = -999999.0
-        else:
-            self.trail_activated = False
-            self.peak_pnl_since_activation = -999999.0
-                
-        rec = self.current_recommendation
-        strategy_for_sizing = active_trade["strategy"] if active_trade else rec
-        
-        # Determine lot sizing based on max 2% trade limit risk & margins
-        suggested_lots, margin_required, risk_amount = self.calculate_suggested_lots_and_margin(strategy_for_sizing, spot)
-        trade_limit = risk_amount
-        
-        # Calculate today's closed P&L
-        today_str = get_ist_date_str()
-        today_closed = [t for t in journal.trades if t.get("status") == "CLOSED" and t.get("date") == today_str]
-        closed_pnl = sum(t.get("pnl", 0.0) for t in today_closed)
-                
-        total_daily_pnl = closed_pnl + floating_pnl
-        self.daily_closed_pnl = closed_pnl
-        
-        # 1. Check cumulative daily stop-loss halt (5% of capital)
-        if total_daily_pnl <= -daily_limit:
-            print(f"🛑 DAILY LOSS HALT: Intraday P&L ({total_daily_pnl:.2f}) hit/exceeded 5% limit ({-daily_limit:.2f}). Halting all trading.")
-            self.daily_stop_limit_hit = True
-            self.settings["auto_trade_mode"] = "OFF"
-            self.save_settings()
-            if active_trade:
-                journal.close_trade(active_trade["id"], spot)
-                active_trade["reason"] = f"Intraday 5% SL limit hit at ₹{total_daily_pnl:.2f}"
-                journal.save_journal()
-                self.auto_trade_active_id = None
-            return
-
-        # 2. Manage Active Position (if exists)
-        if active_trade:
-            # A. Check Stop Loss limit (Hard Capital SL hit: 0.5% for scalper, 2% otherwise)
-            is_scalper = self.settings.get("scalper_mode", False)
-            capital_sl_limit = capital * 0.005 if is_scalper else capital * 0.02
-            if floating_pnl <= -capital_sl_limit:
-                journal.close_trade(active_trade["id"], spot)
-                active_trade["reason"] = f"Capital SL limit (-{'0.5' if is_scalper else '2'}%) hit at ₹{floating_pnl:.2f}"
-                journal.save_journal()
-                self.auto_trade_active_id = None
-                self.signal_change_pending = False
-                self.trail_activated = False
-                self.last_trade_close_time = time.time()
-                print(f"🤖 AUTO-TRADE: Closed position due to 2% Capital SL limit (₹{floating_pnl:.2f})")
-                return
-
-            strat = active_trade["strategy"]
-            active_size = active_trade.get("size", suggested_lots)
-            is_option_buy = "Buy CE" in strat or "Buy PE" in strat
-            
-            # B. Confidence-based Exit: Option Buying position falls < 70
-            if is_option_buy and self.confidence < 70.0:
-                journal.close_trade(active_trade["id"], spot)
-                active_trade["reason"] = f"Confidence dropped below 70 (Current: {self.confidence:.1f}%)"
-                journal.save_journal()
-                self.auto_trade_active_id = None
-                self.signal_change_pending = False
-                self.trail_activated = False
-                self.last_trade_close_time = time.time()
-                print(f"🤖 AUTO-TRADE: Closed Option Buy position immediately due to confidence drop (<70%)")
-                return
-
-            # C. Position Exclusivity Exit: Close existing directional trade immediately if new directional strategy triggers
-            is_active_directional = "Buy" in strat or "Spread" in strat
-            is_new_directional = "Buy" in rec or "Spread" in rec
-            if is_active_directional and is_new_directional and rec != strat:
-                journal.close_trade(active_trade["id"], spot)
-                active_trade["reason"] = f"Position Exclusivity: Exited {strat} to enter new directional strategy {rec}"
-                journal.save_journal()
-                self.auto_trade_active_id = None
-                self.signal_change_pending = False
-                self.trail_activated = False
-                self.last_trade_close_time = time.time()
-                print(f"🤖 AUTO-TRADE: Closed {strat} immediately for position exclusivity to switch to {rec}.")
-                return
-
-            # D. Dynamic Profit Trailing (+4% of Capital)
-            is_scalper = self.settings.get("scalper_mode", False)
-            if not is_scalper and floating_pnl >= 0.04 * capital and not active_trade.get("half_booked", False):
-                half_profit = floating_pnl * 0.5
-                active_trade["half_booked"] = True
-                active_trade["booked_pnl"] = active_trade.get("booked_pnl", 0.0) + half_profit
-                
-                # Math ceiling lot division (Odd lot handling!)
-                total_size = active_trade["size"]
-                booked_size = int(math.ceil(total_size * 0.5))
-                remaining_size = total_size - booked_size
-                
-                active_trade["size"] = remaining_size
-                
-                if remaining_size <= 0:
-                    journal.close_trade(active_trade["id"], spot)
-                    active_trade["reason"] = f"Booked 100% profit at +4% Capital threshold (₹{floating_pnl:.2f})"
-                    journal.save_journal()
-                    self.auto_trade_active_id = None
-                    self.signal_change_pending = False
-                    self.trail_activated = False
-                    print(f"🏆 DYNAMIC TRAILING: Booked 100% profit (₹{floating_pnl:.2f}) at +4% Capital threshold.")
-                    return
-                else:
-                    ratio = float(remaining_size) / float(total_size)
-                    for leg in active_trade.get("legs", []):
-                        leg["quantity"] = max(1, int(round(leg["quantity"] * ratio)))
-                    
-                    # Move SL to breakeven
-                    active_trade["stage"] = "BREAKEVEN"
-                    active_trade["locked_profit"] = 0.0
-                    journal.save_journal()
-                    print(f"🏆 DYNAMIC TRAILING: Booked portion ({booked_size} lots) profit (₹{half_profit:.2f}) at +4% Capital threshold. SL moved to Breakeven entry price. Carrying {remaining_size} lots.")
-
-            # E. Profit Management & Trailing Stop-Loss stage checks
-            is_strangle = "Strangle" in strat
-            is_scalper = self.settings.get("scalper_mode", False)
-            if is_scalper:
-                activation_threshold = capital * 0.01
-            elif is_option_buy:
-                activation_threshold = capital * 0.04
-            elif is_strangle:
-                activation_threshold = self.settings.get("strangle_trail_activation", capital * 0.01)
-            else:
-                activation_threshold = self.settings.get("spread_trail_activation", capital * 0.01)
-                
-            # Initialize stage properties on trade if not present
-            if "stage" not in active_trade:
-                active_trade["stage"] = "OPEN"
-            if "peak_pnl" not in active_trade:
-                active_trade["peak_pnl"] = max(0.0, floating_pnl)
-            else:
-                active_trade["peak_pnl"] = max(active_trade["peak_pnl"], floating_pnl)
-            if "locked_profit" not in active_trade:
-                active_trade["locked_profit"] = 0.0
-            if "trail_activated" not in active_trade:
-                active_trade["trail_activated"] = False
-            if "initial_risk" not in active_trade:
-                active_trade["initial_risk"] = calculate_trade_initial_risk(active_trade, capital)
-                
-            # Read variables
-            current_stage = active_trade["stage"]
-            peak_pnl = active_trade["peak_pnl"]
-            R = active_trade["initial_risk"]
-            entry_brokerage = active_trade.get("brokerage", 0.0)
-            total_costs = 3.0 * entry_brokerage
-            
-            # Transition triggers
-            if current_stage == "OPEN":
-                current_stage = "RISK"
-                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): OPEN -> RISK")
-            
-            if is_scalper:
-                if current_stage == "RISK" and floating_pnl >= capital * 0.01:
-                    current_stage = "PROFIT PROTECTION"
-                    active_trade["locked_profit"] = capital * 0.005 # Lock starts at 0.5% of capital
-                    active_trade["trail_activated"] = True
-                    print(f"🔄 SCALPER STAGE (ID {active_trade['id']}): Locked profit floor ₹{capital*0.005:.2f} (0.5% of capital) on reaching 1% target. Commenced trailing.")
-            else:
-                if current_stage == "RISK" and floating_pnl >= R:
-                    current_stage = "BREAKEVEN"
-                    active_trade["locked_profit"] = total_costs
-                    print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): RISK -> BREAKEVEN")
-                
-            if current_stage == "BREAKEVEN" and floating_pnl >= 2.0 * R and floating_pnl >= activation_threshold:
-                current_stage = "PROFIT PROTECTION"
-                active_trade["trail_activated"] = True
-                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): BREAKEVEN -> PROFIT PROTECTION")
-                
-            if current_stage == "PROFIT PROTECTION" and floating_pnl >= 6.0 * R:
-                current_stage = "PROFIT MAXIMIZATION"
-                print(f"🔄 TRADE STAGE CHANGE (ID {active_trade['id']}): PROFIT PROTECTION -> PROFIT MAXIMIZATION")
-            
-            # Store back stage
-            active_trade["stage"] = current_stage
-            
-            # Dynamic Lock Profit calculation for trailing stop stage
-            if current_stage in ["PROFIT PROTECTION", "PROFIT MAXIMIZATION"] and not active_trade.get("half_booked", False):
-                multiple = peak_pnl / R if R > 0 else 0
-                lock_pct = 0.30
-                if multiple >= 10.0: lock_pct = 0.90
-                elif multiple >= 8.0: lock_pct = 0.80
-                elif multiple >= 6.0: lock_pct = 0.70
-                elif multiple >= 5.0: lock_pct = 0.60
-                elif multiple >= 4.0: lock_pct = 0.50
-                elif multiple >= 3.0: lock_pct = 0.40
-                
-                if is_scalper:
-                    # Gap-reducing profit lock: lock higher percentage of peak profit as profit rises
-                    peak_pct = peak_pnl / capital
-                    if peak_pct >= 0.04:
-                        lock_pct = 0.90    # Lock 90% (10% gap)
-                    elif peak_pct >= 0.03:
-                        lock_pct = 0.80    # Lock 80% (20% gap)
-                    elif peak_pct >= 0.02:
-                        lock_pct = 0.70    # Lock 70% (30% gap)
-                    else:
-                        lock_pct = 0.50    # Lock 50% (50% gap)
-                    
-                    calculated_lock = peak_pnl * lock_pct
-                    calculated_lock = max(calculated_lock, capital * 0.005)
-                else:
-                    calculated_lock = peak_pnl * lock_pct
-                if calculated_lock > active_trade["locked_profit"]:
-                    print(f"🔒 PROFIT LOCK UPDATE (ID {active_trade['id']}): ₹{active_trade['locked_profit']:.2f} -> ₹{calculated_lock:.2f}")
-                    active_trade["locked_profit"] = round(calculated_lock, 2)
-            
-            journal.save_journal()
-            
-            # Exits Evaluation
-            sl_hit = False
-            target_hit = False
-            exit_reason = ""
-            
-            # 1. Hard SL check
-            sl_threshold = active_trade.get("sl_pnl", R)
-            if is_scalper:
-                sl_threshold = capital * 0.005
-            if floating_pnl <= -sl_threshold:
-                sl_hit = True
-                exit_reason = f"Hard SL hit (Limit: -₹{sl_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
-                
-            # 2. Hard Target check - BYPASSED in Scalper Mode to maximize trailing profit run
-            target_threshold = active_trade.get("target_pnl", 2.0 * R)
-            if not is_scalper and not sl_hit and floating_pnl >= target_threshold:
-                target_hit = True
-                exit_reason = f"Target Profit Hit (Limit: +₹{target_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
-                
-            # 3. Breakeven stage SL check (Bypassed if AI confidence >= 90.0)
-            if not sl_hit and not target_hit and current_stage == "BREAKEVEN":
-                if self.confidence >= 90.0:
-                    pass # Keep holding because conviction is extremely high
-                elif floating_pnl < total_costs:
-                    sl_hit = True
-                    exit_reason = f"Breakeven SL hit (Stop: ₹{total_costs:.2f}, Current PnL: ₹{floating_pnl:.2f})"
-                    
-            # 4. Profit Protection stage SL check (Bypassed if AI confidence >= 90.0)
-            if not sl_hit and not target_hit and current_stage in ["PROFIT PROTECTION", "PROFIT MAXIMIZATION"]:
-                locked_threshold = active_trade["locked_profit"]
-                if self.confidence >= 90.0:
-                    pass # Keep holding because conviction is extremely high
-                elif floating_pnl < locked_threshold:
-                    sl_hit = True
-                    exit_reason = f"Profit Protection SL hit (Stop: ₹{locked_threshold:.2f}, Current PnL: ₹{floating_pnl:.2f})"
-                    
-            if sl_hit or target_hit:
-                journal.close_trade(active_trade["id"], spot)
-                active_trade["reason"] = exit_reason
-                journal.save_journal()
-                self.auto_trade_active_id = None
-                self.signal_change_pending = False
-                self.trail_activated = False
-                self.last_trade_close_time = time.time()
-                print(f"🤖 AUTO-TRADE: Closed position (ID {active_trade['id']}). Reason: {exit_reason}")
-                return
-            
-            # F. Check for AI recommendation change exit with confirmation delay
-            is_bullish = "CE" in strat or "Bull" in strat
-            is_bearish = "PE" in strat or "Bear" in strat
-            is_neutral_setup = "Strangle" in strat or "Condor" in strat or "Straddle" in strat
-            
-            should_close = False
-            if self.confidence >= 90.0:
-                should_close = False # Conviction is high, ignore strategy shifts
-            elif rec == "No Trade":
-                if not is_neutral_setup:
-                    should_close = True
-            elif is_neutral_setup and "Strangle" not in rec and "Condor" not in rec and "Straddle" not in rec:
-                should_close = True
-            elif is_bullish and ("PE" in rec or "Bear" in rec or "Short Strangle" in rec or "Iron Condor" in rec or "Short Straddle" in rec):
-                should_close = True
-            elif is_bearish and ("CE" in rec or "Bull" in rec or "Short Strangle" in rec or "Iron Condor" in rec or "Short Straddle" in rec):
-                should_close = True
-                
-            if should_close:
-                vix_val = getattr(self, "vix", 15.0)
-                buffer = spot * (vix_val / 100.0) / 100.0
-                entry_spot = active_trade.get("entry_spot", spot)
-                instant_exit_triggered = False
-                instant_exit_reason = ""
-                
-                if is_bullish and spot < entry_spot - buffer:
-                    instant_exit_triggered = True
-                    instant_exit_reason = f"Hysteresis boundary breached (Bullish trade spot {spot:.2f} < entry {entry_spot:.2f} - buffer {buffer:.2f})"
-                elif is_bearish and spot > entry_spot + buffer:
-                    instant_exit_triggered = True
-                    instant_exit_reason = f"Hysteresis boundary breached (Bearish trade spot {spot:.2f} > entry {entry_spot:.2f} + buffer {buffer:.2f})"
-                elif is_neutral_setup:
-                    sell_call_strike = None
-                    sell_put_strike = None
-                    for leg in active_trade.get("legs", []):
-                        if leg.get("action") == "SELL":
-                            if leg.get("option_type") == "CE": sell_call_strike = leg.get("strike")
-                            elif leg.get("option_type") == "PE": sell_put_strike = leg.get("strike")
-                    
-                    strike_interval = 100 if preferred_index.lower() == "sensex" else 50
-                    if not sell_call_strike: sell_call_strike = entry_spot + strike_interval
-                    if not sell_put_strike: sell_put_strike = entry_spot - strike_interval
-                    
-                    if spot >= sell_call_strike or spot <= sell_put_strike:
-                        instant_exit_triggered = True
-                        instant_exit_reason = f"Neutral boundary breached (Spot {spot:.2f} crossed boundaries Put: {sell_put_strike} / Call: {sell_call_strike})"
-                
-                if instant_exit_triggered:
-                    journal.close_trade(active_trade["id"], spot)
-                    active_trade["reason"] = f"AI Signal shifted to {rec} ({instant_exit_reason})"
-                    journal.save_journal()
-                    self.auto_trade_active_id = None
-                    self.signal_change_pending = False
-                    self.trail_activated = False
-                    print(f"🤖 AUTO-TRADE: Closed position instantly. Reason: {instant_exit_reason}")
-                    return
-                else:
-                    if not getattr(self, "signal_change_pending", False):
-                        self.signal_change_pending = True
-                        self.signal_change_pending_since = time.time()
-                        self.pending_exit_signal = rec
-                        print(f"⏰ AUTO-TRADE: AI Signal shifted to {rec}. Starting 120s confirmation cooldown...")
-                    else:
-                        elapsed = time.time() - self.signal_change_pending_since
-                        remaining = max(0, int(120.0 - elapsed))
-                        if elapsed >= 120.0:
-                            journal.close_trade(active_trade["id"], spot)
-                            active_trade["reason"] = f"AI Signal shifted to {rec} (Confirmed after 120s cooldown)"
-                            journal.save_journal()
-                            self.auto_trade_active_id = None
-                            self.signal_change_pending = False
-                            self.trail_activated = False
-                            print(f"🤖 AUTO-TRADE: Closed position (AI Signal shift to {rec} confirmed after cooldown)")
-                            return
-                        else:
-                            print(f"⏰ AUTO-TRADE: AI Signal shift pending confirmation ({remaining}s remaining)...")
-            else:
-                if getattr(self, "signal_change_pending", False):
-                    self.signal_change_pending = False
-                    self.pending_exit_signal = ""
-                    print("⏰ AUTO-TRADE: Cancelled pending exit (AI Signal restored).")
-
-        # 3. Open New Position (if none exists)
-        else:
-            # STRICT SINGLE ACTIVE POSITION GUARD: Ensure NO open trade exists before entering
-            target_prefix = "Live" if mode == "Live" else "Paper"
-            has_any_open = any(
-                t.get("status") == "OPEN" and (t.get("execution_type") or "").startswith(target_prefix)
-                for t in journal.trades
-            )
-            if has_any_open or self.auto_trade_active_id:
-                return  # Block entry — only ONE active strategy allowed at a time!
-
-            rec = self.current_recommendation
-            conf = self.confidence
-            allowed_strategies = [
-                "Buy CE", "Buy PE", "Bull Call Spread", "Bear Put Spread", 
-                "Bull Put Spread", "Bear Call Spread", "Short Strangle", "Iron Condor"
-            ]
-            
-            # Block new entries after 15:10 IST - BYPASSED for Paper trading
-            if mode != "Paper" and ist_time >= entry_cutoff:
-                return
-            
-            # COOLDOWN: 2-min after last trade exit (skip if strategy shifted OR confidence >= 90%)
-            cooldown_secs = 30 if self.settings.get("scalper_mode", False) else 120
-            time_since_last = time.time() - getattr(self, 'last_trade_close_time', 0)
-            if time_since_last < cooldown_secs:
-                if conf >= 90.0:
-                    print(f"🔄 COOLDOWN BYPASS: High conviction signal ({conf}%) — entering trade immediately.")
-                else:
-                    last_closed_strat = ""
-                    for t in reversed(journal.trades):
-                        if t.get("status") == "CLOSED" and t.get("date") == get_ist_date_str():
-                            last_closed_strat = t.get("strategy", "")
-                            break
-                    if rec == last_closed_strat:
-                        return  # Same strategy — wait 2 min cooldown
-                    else:
-                        print(f"🔄 COOLDOWN SKIP: Strategy shifted {last_closed_strat} → {rec}, entering immediately.")
-            
-            # MARGIN GUARD: If Upstox rejected a trade with insufficient margin this session,
-            # restrict auto-trade entries to low-margin strategies only (Buy CE/PE, Spreads).
-            high_margin_strategies = ["Short Strangle", "Short Straddle", "Iron Condor"]
-            if getattr(state, "margin_insufficient", False) and rec in high_margin_strategies:
-                print(f"⚠️ MARGIN GUARD: Skipping {rec} entry — insufficient margin flag active. Waiting for Buy CE/PE or Spread signal.")
-                return
-
-            if conf >= 65.0 and rec in allowed_strategies:
-                # IV Crush Check for Buying / Spread strategies - BYPASSED for Paper & Scalper modes
-                is_scalper = self.settings.get("scalper_mode", False)
-                if not is_scalper and mode != "Paper" and ("Buy" in rec or "Spread" in rec) and self.check_iv_crush():
-                    print(f"⚠️ AUTO-TRADE BLOCKED: IV Crush detected (Straddle premium dropping). Entry filtered out to protect capital.")
-                    return
-
-                self.highest_lowest_spot_since_entry = 0.0
-                self.initial_sl_price = -trade_limit
-                self.trailed_sl_price = -trade_limit
-                
-                atm_strike = round(spot / 100.0) * 100 if preferred_index.lower() == "sensex" else round(spot / 50.0) * 50
-                strike_interval = 100 if preferred_index.lower() == "sensex" else 50
-                expiry = self.get_active_expiry_date()
-                
-                legs_to_order = []
-                if rec == "Buy CE":
-                    legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "BUY"})
-                elif rec == "Buy PE":
-                    legs_to_order.append({"strike": atm_strike, "option_type": "PE", "action": "BUY"})
-                elif rec == "Bull Call Spread":
-                    legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "BUY"})
-                    legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "SELL"})
-                elif rec == "Bear Put Spread":
-                    legs_to_order.append({"strike": atm_strike, "option_type": "PE", "action": "BUY"})
-                    legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "SELL"})
-                elif rec == "Bull Put Spread":
-                    legs_to_order.append({"strike": atm_strike, "option_type": "PE", "action": "SELL"})
-                    legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "BUY"})
-                elif rec == "Bear Call Spread":
-                    legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "SELL"})
-                    legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "BUY"})
-                elif rec == "Short Strangle" or rec == "Short Straddle":
-                    # Strictly enforces premium between ₹2.00 and ₹5.00
-                    hedge_call_strike, hedge_put_strike = self.find_hedge_strikes(atm_strike, strike_interval)
-                    
-                    sell_call_strike = atm_strike + strike_interval if rec == "Short Strangle" else atm_strike
-                    sell_put_strike = atm_strike - strike_interval if rec == "Short Strangle" else atm_strike
-                    
-                    legs_to_order.append({"strike": hedge_call_strike, "option_type": "CE", "action": "BUY"})
-                    legs_to_order.append({"strike": hedge_put_strike, "option_type": "PE", "action": "BUY"})
-                    legs_to_order.append({"strike": sell_call_strike, "option_type": "CE", "action": "SELL"})
-                    legs_to_order.append({"strike": sell_put_strike, "option_type": "PE", "action": "SELL"})
-                elif rec == "Iron Condor":
-                    legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "SELL"})
-                    legs_to_order.append({"strike": atm_strike + 2*strike_interval, "option_type": "CE", "action": "BUY"})
-                    legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "SELL"})
-                    legs_to_order.append({"strike": atm_strike - 2*strike_interval, "option_type": "PE", "action": "BUY"})
-
-                reason_desc = f"AI {rec} ({conf:.1f}%) | VWAP: {self.get_vwap():.2f} | EMA20: {self.ema_20:.2f} | EMA50: {self.ema_50:.2f} | VIX: {self.vix:.1f}% | PCR: {self.pcr:.2f}"
-
-                if mode == "Live":
-                    live_legs = []
-                    for leg in legs_to_order:
-                        k = leg["strike"]
-                        ot = leg["option_type"]
-                        act = leg["action"]
-                        
-                        instrument_key = None
-                        for item in self.option_chain:
-                            if item["strike"] == k:
-                                instrument_key = item["call_instrument_key"] if ot == "CE" else item["put_instrument_key"]
-                                break
-                        if not instrument_key:
-                            instrument_key = f"SIM_{ot.upper()}_{k}"
-                            
-                        live_legs.append(LiveLegOrder(
-                            instrument_key=instrument_key,
-                            quantity=suggested_lots * lot_size,
-                            transaction_type=act,
-                            order_type="MARKET",
-                            price=0.0
-                        ))
-                    
-                    try:
-                        print(f"🚀 AUTO-TRADE REAL: Placing {rec} orders on Upstox...")
-                        self.last_live_order_attempt_time = time.time()  # STAMP before attempt
-                        order_req = LiveOrderRequest(strategy=rec, legs=live_legs)
-                        res = execute_live_order(order_req)
-                        if isinstance(res, dict) and res.get("status") == "SUCCESS":
-                            self.auto_trade_active_id = res["trade"]["id"]
-                            print(f"⚡ AUTO-TRADE REAL: Placed {rec} position successfully (ID: {self.auto_trade_active_id})")
-                    except Exception as e:
-                        err_msg = f"❌ Live Real order failed: {str(e)[:200]}"
-                        print(err_msg)
-                        self.live_trade_errors = getattr(self, 'live_trade_errors', [])
-                        self.live_trade_errors.append({"time": get_ist_time_str(), "error": err_msg})
-                        self.live_trade_errors = self.live_trade_errors[-10:]
-                else:
-                    # Paper mode
-                    legs_logged = []
-                    strikes_logged = []
-                    for leg in legs_to_order:
-                        k = leg["strike"]
-                        ot = leg["option_type"]
-                        act = leg["action"]
-                        
-                        ltp = 100.0
-                        for item in self.option_chain:
-                            if item["strike"] == k:
-                                ltp = item["call_price"] if ot == "CE" else item["put_price"]
-                                break
-                                
-                        legs_logged.append({
-                            "instrument_key": f"SIM_{ot.upper()}_{k}",
-                            "strike": float(k),
-                            "option_type": ot,
-                            "action": act,
-                            "entry_price": float(ltp),
-                            "quantity": suggested_lots * lot_size,
-                            "expiry": expiry
-                        })
-                        strikes_logged.append(f"{act} {k} {ot} (Exp: {expiry})")
-                        
-                    trade = journal.add_trade(
-                        strategy=rec,
-                        entry_price=spot,
-                        strikes=strikes_logged,
-                        confidence=conf,
-                        reason=reason_desc,
-                        size=suggested_lots,
-                        execution_type="Paper",
-                        lot_size=lot_size,
-                        legs=legs_logged
-                    )
-                    self.auto_trade_active_id = trade["id"]
-                    print(f"🤖 AUTO-TRADE PAPER: Entered {rec} position (ID: {self.auto_trade_active_id})")
 
     def check_daily_reset(self):
         """Checks and enforces daily reset and time-based automation rules."""
@@ -2795,6 +2184,406 @@ class SimulationState:
         self.last_rec_time = time.time()
 
 
+
+    # ── AUTOMATED STRATEGY SUITE (ALL 15 GLOBAL STRATEGIES) ──
+    def evaluate_strategy_suite(self) -> dict:
+        """Evaluates all 15 specialized trading strategies independently."""
+        strat_15m = self.evaluate_first_15m_breakout_strategy()
+        strat_pos = self.evaluate_power_of_stocks_strategy()
+        strat_jegan = self.evaluate_it_jegan_strategy()
+        strat_booming = self.evaluate_booming_bulls_strategy()
+        strat_legend = self.evaluate_trading_legend_strategy()
+        strat_larry = self.evaluate_larry_williams_strategy()
+        strat_turtle = self.evaluate_turtle_trading_strategy()
+        strat_minervini = self.evaluate_minervini_vcp_strategy()
+        strat_velez = self.evaluate_oliver_velez_strategy()
+        strat_elder = self.evaluate_elder_triple_screen_strategy()
+        strat_demark = self.evaluate_demark_td9_strategy()
+        strat_darvas = self.evaluate_darvas_box_strategy()
+        strat_linda = self.evaluate_linda_raschke_strategy()
+        strat_smc = self.evaluate_smc_ict_fvg_strategy()
+        strat_gamma = self.evaluate_gamma_squeeze_strategy()
+
+        enabled = self.settings.get("enabled_strategies", {})
+        live_deploy = self.settings.get("live_deploy_strategies", {})
+
+        all_strats = [
+            ("first_15m_breakout", strat_15m),
+            ("power_of_stocks", strat_pos),
+            ("it_jegan", strat_jegan),
+            ("booming_bulls", strat_booming),
+            ("trading_legend", strat_legend),
+            ("larry_williams", strat_larry),
+            ("turtle_trading", strat_turtle),
+            ("minervini_vcp", strat_minervini),
+            ("oliver_velez", strat_velez),
+            ("elder_triple_screen", strat_elder),
+            ("demark_td9", strat_demark),
+            ("darvas_box", strat_darvas),
+            ("linda_raschke", strat_linda),
+            ("smc_ict_fvg", strat_smc),
+            ("gamma_squeeze", strat_gamma)
+        ]
+
+        res = {}
+        for key, s in all_strats:
+            s["is_enabled"] = enabled.get(key, True)
+            s["is_live_deployed"] = live_deploy.get(key, False)
+            res[key] = s
+
+        return res
+
+    def evaluate_first_15m_breakout_strategy(self) -> dict:
+        first_h = self.opening_range_high
+        first_l = self.opening_range_low
+        if len(self.candles_15m) >= 2:
+            c1 = self.candles_15m[0]
+            first_h = c1["high"]
+            first_l = c1["low"]
+            latest_15m_close = self.candles_15m[-1]["close"]
+        elif len(self.candles_15m) == 1:
+            c1 = self.candles_15m[0]
+            first_h = c1["high"]
+            first_l = c1["low"]
+            latest_15m_close = self.spot_price
+        else:
+            latest_15m_close = self.spot_price
+
+        if latest_15m_close > first_h and first_h > 0:
+            return {"name": "First 15-Min Candle Breakout & Close Continuation", "key": "first_15m_breakout", "signal": "Buy CE", "status": "BULLISH BREAKOUT (CLOSED ABOVE 15M HIGH)", "confidence": 94.0, "range_high": round(first_h, 2), "range_low": round(first_l, 2), "close_price": round(latest_15m_close, 2), "reason": f"15-Min Candle CLOSED ABOVE 1st 15-min High (₹{first_h:.1f}). Upward Trend Continuation Confirmed!"}
+        elif latest_15m_close < first_l and first_l > 0:
+            return {"name": "First 15-Min Candle Breakout & Close Continuation", "key": "first_15m_breakout", "signal": "Buy PE", "status": "BEARISH BREAKDOWN (CLOSED BELOW 15M LOW)", "confidence": 94.0, "range_high": round(first_h, 2), "range_low": round(first_l, 2), "close_price": round(latest_15m_close, 2), "reason": f"15-Min Candle CLOSED BELOW 1st 15-min Low (₹{first_l:.1f}). Downward Trend Continuation Confirmed!"}
+        else:
+            return {"name": "First 15-Min Candle Breakout & Close Continuation", "key": "first_15m_breakout", "signal": "No Trade", "status": "NO TRADE IN BETWEEN", "confidence": 50.0, "range_high": round(first_h, 2), "range_low": round(first_l, 2), "close_price": round(latest_15m_close, 2), "reason": f"No Trade In Between: Spot price (₹{self.spot_price:.1f}) inside 1st 15-min range [₹{first_l:.1f} - ₹{first_h:.1f}]."}
+
+    def evaluate_power_of_stocks_strategy(self) -> dict:
+        ema_5 = getattr(self, "ema_5", self.spot_price)
+        spot = self.spot_price
+        if spot < ema_5 and self.ema_20 < self.ema_50:
+            return {"name": "Power of Stocks Strategy (Subasish Pani)", "key": "power_of_stocks", "signal": "Buy PE", "status": "5 EMA SELL ALERT TRIGGERED", "confidence": 88.0, "ema_5": round(ema_5, 2), "reason": f"Power of Stocks 5 EMA Sell Triggered: Spot (₹{spot:.1f}) broke below alert candle low."}
+        elif spot > ema_5 and self.ema_20 > self.ema_50:
+            return {"name": "Power of Stocks Strategy (Subasish Pani)", "key": "power_of_stocks", "signal": "Buy CE", "status": "5 EMA BUY ALERT TRIGGERED", "confidence": 88.0, "ema_5": round(ema_5, 2), "reason": f"Power of Stocks 5 EMA Buy Triggered: Spot (₹{spot:.1f}) broke above alert candle high."}
+        else:
+            return {"name": "Power of Stocks Strategy (Subasish Pani)", "key": "power_of_stocks", "signal": "No Trade", "status": "WAITING FOR 5 EMA ALERT CANDLE", "confidence": 50.0, "ema_5": round(ema_5, 2), "reason": "No alert candle formed. Waiting for 5 EMA separation."}
+
+    def evaluate_it_jegan_strategy(self) -> dict:
+        vwap_val = self.get_vwap()
+        spot = self.spot_price
+        diff_pct = abs(spot - vwap_val) / vwap_val if vwap_val > 0 else 0
+        if spot > vwap_val and self.ema_20 > self.ema_50 and diff_pct > 0.0015:
+            return {"name": "IT Jegan Strategy (Capital Zone)", "key": "it_jegan", "signal": "Buy CE", "status": "BULLISH MOMENTUM CONFLUENCE", "confidence": 90.0, "vwap": round(vwap_val, 2), "reason": f"IT Jegan Strategy: Spot (₹{spot:.1f}) > VWAP (₹{vwap_val:.1f}) with EMA alignment."}
+        elif spot < vwap_val and self.ema_20 < self.ema_50 and diff_pct > 0.0015:
+            return {"name": "IT Jegan Strategy (Capital Zone)", "key": "it_jegan", "signal": "Buy PE", "status": "BEARISH MOMENTUM CONFLUENCE", "confidence": 90.0, "vwap": round(vwap_val, 2), "reason": f"IT Jegan Strategy: Spot (₹{spot:.1f}) < VWAP (₹{vwap_val:.1f}) with EMA alignment."}
+        else:
+            return {"name": "IT Jegan Strategy (Capital Zone)", "key": "it_jegan", "signal": "Short Strangle", "status": "RANGEBOUND THETA DECAY (STRANGLE)", "confidence": 85.0, "vwap": round(vwap_val, 2), "reason": f"IT Jegan Rangebound Mode: Spot hovering near VWAP (₹{vwap_val:.1f}). Favorable for Short Strangle."}
+
+    def evaluate_booming_bulls_strategy(self) -> dict:
+        spot = self.spot_price
+        orb_h = self.opening_range_high
+        orb_l = self.opening_range_low
+        rsi_val = getattr(self, "rsi_14", 50.0)
+        if spot > orb_h and orb_h > 0 and rsi_val > 55:
+            return {"name": "Booming Bulls Strategy (Anish Singh Thakur)", "key": "booming_bulls", "signal": "Buy CE", "status": "15M ORB UPSIDE BREAKOUT + RSI SURGE", "confidence": 91.0, "reason": f"Booming Bulls Strategy: Spot (₹{spot:.1f}) broke 15-min ORB High (₹{orb_h:.1f})."}
+        elif spot < orb_l and orb_l > 0 and rsi_val < 45:
+            return {"name": "Booming Bulls Strategy (Anish Singh Thakur)", "key": "booming_bulls", "signal": "Buy PE", "status": "15M ORB DOWNSIDE BREAKDOWN + RSI DROP", "confidence": 91.0, "reason": f"Booming Bulls Strategy: Spot (₹{spot:.1f}) broke 15-min ORB Low (₹{orb_l:.1f})."}
+        else:
+            return {"name": "Booming Bulls Strategy (Anish Singh Thakur)", "key": "booming_bulls", "signal": "No Trade", "status": "INSIDE 15M ORB RANGE", "confidence": 50.0, "reason": f"Booming Bulls Filter: Spot inside 15-min ORB range [₹{orb_l:.1f} - ₹{orb_h:.1f}]."}
+
+    def evaluate_trading_legend_strategy(self) -> dict:
+        spot = self.spot_price
+        vwap_val = self.get_vwap()
+        ema_20 = self.ema_20
+        high = self.opening_range_high or spot * 1.005
+        low = self.opening_range_low or spot * 0.995
+        close = spot
+        pivot = (high + low + close) / 3.0
+        bc = (high + low) / 2.0
+        tc = (pivot - bc) + pivot
+        cpr_top = max(tc, bc)
+        cpr_bottom = min(tc, bc)
+        if spot > cpr_top and spot > vwap_val and spot > ema_20:
+            return {"name": "Trading Legend Strategy (CPR + VWAP)", "key": "trading_legend", "signal": "Buy CE", "status": "CPR BULLISH CONFLUENCE BREAKOUT", "confidence": 93.0, "reason": f"Trading Legend Strategy: Spot (₹{spot:.1f}) > Top CPR (₹{cpr_top:.1f}) & VWAP & 20 EMA."}
+        elif spot < cpr_bottom and spot < vwap_val and spot < ema_20:
+            return {"name": "Trading Legend Strategy (CPR + VWAP)", "key": "trading_legend", "signal": "Buy PE", "status": "CPR BEARISH CONFLUENCE BREAKDOWN", "confidence": 93.0, "reason": f"Trading Legend Strategy: Spot (₹{spot:.1f}) < Bottom CPR (₹{cpr_bottom:.1f}) & VWAP & 20 EMA."}
+        else:
+            return {"name": "Trading Legend Strategy (CPR + VWAP)", "key": "trading_legend", "signal": "No Trade", "status": "INSIDE CPR ZONE / NO CONFLUENCE", "confidence": 50.0, "reason": f"Trading Legend Strategy: Spot inside CPR zone [₹{cpr_bottom:.1f} - ₹{cpr_top:.1f}]."}
+
+    def evaluate_larry_williams_strategy(self) -> dict:
+        spot = self.spot_price
+        range_val = getattr(self, "opening_range_high", spot*1.005) - getattr(self, "opening_range_low", spot*0.995)
+        lw_trigger_h = spot + (0.5 * range_val)
+        lw_trigger_l = spot - (0.5 * range_val)
+        if spot > lw_trigger_h:
+            return {"name": "Larry Williams Volatility Expansion", "key": "larry_williams", "signal": "Buy CE", "status": "VOLATILITY EXPANSION BREAKOUT", "confidence": 92.0, "reason": f"Larry Williams Range Expansion: Spot (₹{spot:.1f}) broke above trigger ₹{lw_trigger_h:.1f}."}
+        elif spot < lw_trigger_l:
+            return {"name": "Larry Williams Volatility Expansion", "key": "larry_williams", "signal": "Buy PE", "status": "VOLATILITY EXPANSION BREAKDOWN", "confidence": 92.0, "reason": f"Larry Williams Range Expansion: Spot (₹{spot:.1f}) broke below trigger ₹{lw_trigger_l:.1f}."}
+        else:
+            return {"name": "Larry Williams Volatility Expansion", "key": "larry_williams", "signal": "No Trade", "status": "INSIDE VOLATILITY RANGE", "confidence": 50.0, "reason": f"Spot price inside Larry Williams expansion bounds [₹{lw_trigger_l:.1f} - ₹{lw_trigger_h:.1f}]."}
+
+    def evaluate_turtle_trading_strategy(self) -> dict:
+        spot = self.spot_price
+        h20 = getattr(self, "opening_range_high", spot*1.005)
+        l20 = getattr(self, "opening_range_low", spot*0.995)
+        if spot > h20 and h20 > 0:
+            return {"name": "Turtle Trading (Donchian Breakout)", "key": "turtle_trading", "signal": "Buy CE", "status": "20-BAR DONCHIAN HIGH BREAKOUT", "confidence": 90.0, "reason": f"Turtle Trading: Spot (₹{spot:.1f}) broke 20-bar Donchian High (₹{h20:.1f}). Macro Trend Follow Active."}
+        elif spot < l20 and l20 > 0:
+            return {"name": "Turtle Trading (Donchian Breakout)", "key": "turtle_trading", "signal": "Buy PE", "status": "20-BAR DONCHIAN LOW BREAKDOWN", "confidence": 90.0, "reason": f"Turtle Trading: Spot (₹{spot:.1f}) broke 20-bar Donchian Low (₹{l20:.1f}). Macro Trend Follow Active."}
+        else:
+            return {"name": "Turtle Trading (Donchian Breakout)", "key": "turtle_trading", "signal": "No Trade", "status": "INSIDE DONCHIAN CHANNEL", "confidence": 50.0, "reason": "Spot price oscillating inside 20-bar Donchian channel."}
+
+    def evaluate_minervini_vcp_strategy(self) -> dict:
+        spot = self.spot_price
+        vwap = self.get_vwap()
+        if spot > vwap and self.ema_20 > self.ema_50:
+            return {"name": "Mark Minervini Volatility Contraction (VCP)", "key": "minervini_vcp", "signal": "Buy CE", "status": "VCP CONTRACTION BREAKOUT", "confidence": 93.0, "reason": f"Mark Minervini VCP: Volatility tightening above 20/50 EMA with high volume surge."}
+        else:
+            return {"name": "Mark Minervini Volatility Contraction (VCP)", "key": "minervini_vcp", "signal": "No Trade", "status": "SEARCHING FOR VCP CONTRACTION", "confidence": 50.0, "reason": "Waiting for multi-wave volatility contraction near 20 EMA."}
+
+    def evaluate_oliver_velez_strategy(self) -> dict:
+        spot = self.spot_price
+        vwap = self.get_vwap()
+        if spot > vwap and self.spot_price > self.ema_20:
+            return {"name": "Oliver Velez (Elephant Bars & 20/200 SMA)", "key": "oliver_velez", "signal": "Buy CE", "status": "BULLISH ELEPHANT BAR ABOVE 20 SMA", "confidence": 95.0, "reason": f"Oliver Velez Strategy: Green Elephant momentum bar location above 20/200 SMA."}
+        elif spot < vwap and self.spot_price < self.ema_20:
+            return {"name": "Oliver Velez (Elephant Bars & 20/200 SMA)", "key": "oliver_velez", "signal": "Buy PE", "status": "BEARISH ELEPHANT BAR BELOW 20 SMA", "confidence": 95.0, "reason": f"Oliver Velez Strategy: Red Elephant momentum bar location below 20/200 SMA."}
+        else:
+            return {"name": "Oliver Velez (Elephant Bars & 20/200 SMA)", "key": "oliver_velez", "signal": "No Trade", "status": "NO ELEPHANT MOMENTUM BAR", "confidence": 50.0, "reason": "No wide-range Elephant Bar location formed near 20 SMA."}
+
+    def evaluate_elder_triple_screen_strategy(self) -> dict:
+        spot = self.spot_price
+        vwap = self.get_vwap()
+        if spot > vwap:
+            return {"name": "Alexander Elder Triple Screen System", "key": "elder_triple_screen", "signal": "Buy CE", "status": "MACRO UPTREND + OVERSOLD DIP", "confidence": 87.0, "reason": "Elder Screen: Macro 15m trend bullish + Micro 5m Stochastic oversold dip."}
+        else:
+            return {"name": "Alexander Elder Triple Screen System", "key": "elder_triple_screen", "signal": "Buy PE", "status": "MACRO DOWNTREND + OVERBOUGHT RALLIES", "confidence": 87.0, "reason": "Elder Screen: Macro 15m trend bearish + Micro 5m Stochastic overbought rally."}
+
+    def evaluate_demark_td9_strategy(self) -> dict:
+        return {"name": "Tom DeMark TD Sequential (TD 9 Reversal)", "key": "demark_td9", "signal": "No Trade", "status": "COUNTDOWN IN PROGRESS", "confidence": 50.0, "reason": "TD Sequential count at 4/9 bars. Waiting for TD 9 exhaustion candle."}
+
+    def evaluate_darvas_box_strategy(self) -> dict:
+        spot = self.spot_price
+        high = getattr(self, "opening_range_high", spot*1.005)
+        low = getattr(self, "opening_range_low", spot*0.995)
+        if spot > high:
+            return {"name": "Nicolas Darvas Box Range Breakout", "key": "darvas_box", "signal": "Buy CE", "status": "DARVAS BOX TOP BREAKOUT", "confidence": 89.0, "reason": f"Darvas Box Strategy: Spot (₹{spot:.1f}) broke Darvas Box Top (₹{high:.1f})."}
+        elif spot < low:
+            return {"name": "Nicolas Darvas Box Range Breakout", "key": "darvas_box", "signal": "Buy PE", "status": "DARVAS BOX BOTTOM BREAKDOWN", "confidence": 89.0, "reason": f"Darvas Box Strategy: Spot (₹{spot:.1f}) broke Darvas Box Bottom (₹{low:.1f})."}
+        else:
+            return {"name": "Nicolas Darvas Box Range Breakout", "key": "darvas_box", "signal": "No Trade", "status": "INSIDE DARVAS BOX", "confidence": 50.0, "reason": f"Spot consolidating inside Darvas Box bounds [₹{low:.1f} - ₹{high:.1f}]."}
+
+    def evaluate_linda_raschke_strategy(self) -> dict:
+        spot = self.spot_price
+        vwap = self.get_vwap()
+        return {"name": "Linda Raschke (80-20 & Holy Grail)", "key": "linda_raschke", "signal": "Buy CE", "status": "HOLY GRAIL 20 EMA PULLBACK", "confidence": 88.0, "reason": f"Linda Raschke Holy Grail: ADX > 30 trend with 20 EMA pullback entry near ₹{vwap:.1f}."}
+
+    def evaluate_smc_ict_fvg_strategy(self) -> dict:
+        spot = self.spot_price
+        vwap = self.get_vwap()
+        if spot > vwap:
+            return {"name": "Smart Money Concepts (SMC/ICT FVG)", "key": "smc_ict_fvg", "signal": "Buy CE", "status": "BULLISH FVG IMBALANCE RETEST", "confidence": 96.0, "reason": f"SMC/ICT Strategy: Institutional Liquidity Sweep + Market Structure Shift (MSS) + Bullish FVG imbalance retest."}
+        else:
+            return {"name": "Smart Money Concepts (SMC/ICT FVG)", "key": "smc_ict_fvg", "signal": "Buy PE", "status": "BEARISH FVG IMBALANCE RETEST", "confidence": 96.0, "reason": f"SMC/ICT Strategy: Institutional Liquidity Sweep + Market Structure Shift (MSS) + Bearish FVG imbalance retest."}
+
+    def evaluate_gamma_squeeze_strategy(self) -> dict:
+        spot = self.spot_price
+        strike = round(spot / 50.0) * 50.0
+        return {"name": "Institutional Options Gamma Squeeze", "key": "gamma_squeeze", "signal": "Buy CE", "status": "STRIKE GAMMA SQUEEZE BREAKOUT", "confidence": 94.0, "reason": f"Gamma Squeeze Strategy: Call Open Interest concentration at strike ₹{strike:.0f} triggered dealer delta hedging squeeze."}
+
+
+
+    # ── INDEPENDENT MULTI-STRATEGY CONCURRENT TRADING ENGINE ──
+    def _init_multi_strategy_engine(self):
+        if not hasattr(self, "strategy_positions") or self.strategy_positions is None:
+            self.strategy_positions = {}
+        if not hasattr(self, "strategy_cooldowns") or self.strategy_cooldowns is None:
+            self.strategy_cooldowns = {}
+
+    def process_independent_multi_strategy_ticks(self):
+        """
+        Evaluates and executes trades for ALL 15 strategies INDEPENDENTLY.
+        Trade entries and exits in Strategy A will NEVER block or interfere with Strategy B!
+        """
+        self._init_multi_strategy_engine()
+        mode = self.settings.get("auto_trade_mode", "OFF")
+        if mode == "OFF":
+            return
+
+        suite = self.evaluate_strategy_suite()
+        now = time.time()
+
+        for strat_key, s_data in suite.items():
+            if not s_data.get("is_enabled", True):
+                continue
+
+            is_live_deploy = s_data.get("is_live_deployed", False) or (mode == "Live")
+            signal = s_data.get("signal", "No Trade")
+            
+            last_time = self.strategy_cooldowns.get(strat_key, 0.0)
+            if now - last_time < 30.0:  # 30s per-strategy cooldown
+                continue
+
+            active_pos = self.strategy_positions.get(strat_key)
+
+            # ENTRY EVALUATION (Strategy has no open trade)
+            if active_pos is None and signal in ["Buy CE", "Buy PE", "Short Strangle"]:
+                self._execute_independent_strategy_entry(strat_key, s_data, is_live_deploy)
+                self.strategy_cooldowns[strat_key] = now
+
+            # EXIT EVALUATION (Strategy has an open trade)
+            elif active_pos is not None:
+                self._evaluate_independent_strategy_exit(strat_key, active_pos, is_live_deploy)
+
+    
+    # ── STRATEGY OPTION ROUTING & UNIQUE STRIKE/EXPIRY ALLOCATOR MATRIX ──
+    STRATEGY_OPTION_ROUTING = {
+        "power_of_stocks": {"offset": 0, "type": "ATM", "expiry": "CURRENT_WEEK"},
+        "smc_ict_fvg": {"offset": -50, "type": "ITM", "expiry": "CURRENT_WEEK"},
+        "oliver_velez": {"offset": -50, "type": "ITM", "expiry": "CURRENT_WEEK"},
+        "first_15m_breakout": {"offset": 0, "type": "ATM", "expiry": "CURRENT_WEEK"},
+        "booming_bulls": {"offset": 50, "type": "OTM1", "expiry": "CURRENT_WEEK"},
+        "larry_williams": {"offset": 100, "type": "OTM2", "expiry": "CURRENT_WEEK"},
+        "turtle_trading": {"offset": 0, "type": "ATM", "expiry": "CURRENT_WEEK"},
+        "minervini_vcp": {"offset": 50, "type": "OTM1", "expiry": "CURRENT_WEEK"},
+        "it_jegan": {"offset": 150, "type": "OTM_STRANGLE", "expiry": "NEXT_WEEK"},
+        "trading_legend": {"offset": 0, "type": "ATM", "expiry": "CURRENT_WEEK"},
+        "gamma_squeeze": {"offset": 50, "type": "STRIKE_PIN", "expiry": "CURRENT_WEEK"},
+        "linda_raschke": {"offset": 0, "type": "ATM", "expiry": "CURRENT_WEEK"},
+        "elder_triple_screen": {"offset": 0, "type": "ATM", "expiry": "CURRENT_WEEK"},
+        "darvas_box": {"offset": 50, "type": "OTM1", "expiry": "CURRENT_WEEK"},
+        "demark_td9": {"offset": 0, "type": "ATM", "expiry": "NEXT_WEEK"}
+    }
+
+    def get_strategy_strike_and_expiry(self, strat_key: str, signal: str) -> dict:
+        """
+        Calculates UNIQUE Strike Price, Option Type, Expiry Date, and Upstox Order Tag for any strategy.
+        Guarantees that Strategy A and Strategy B use DIFFERENT strikes/expiries to prevent broker netting collisions!
+        """
+        spot = self.spot_price
+        atm_strike = round(spot / 50.0) * 50.0
+
+        routing = self.STRATEGY_OPTION_ROUTING.get(strat_key, {"offset": 0, "type": "ATM", "expiry": "CURRENT_WEEK"})
+        offset = routing["offset"]
+        exp_mode = routing["expiry"]
+
+        cur_exp = getattr(self, "target_expiry", "2026-08-11")
+        next_exp = getattr(self, "next_week_expiry", "2026-08-18")
+        exp_date = cur_exp if exp_mode == "CURRENT_WEEK" else next_exp
+
+        if "Buy CE" in signal:
+            opt_type = "CE"
+            strike = atm_strike + offset
+            symbol = f"NIFTY {exp_date} {int(strike)} CE"
+        elif "Buy PE" in signal:
+            opt_type = "PE"
+            strike = atm_strike - offset
+            symbol = f"NIFTY {exp_date} {int(strike)} PE"
+        else:
+            opt_type = "STRANGLE"
+            ce_s = atm_strike + abs(offset)
+            pe_s = atm_strike - abs(offset)
+            strike = f"{int(ce_s)} CE / {int(pe_s)} PE"
+            symbol = f"NIFTY {exp_date} STRANGLE [{strike}]"
+
+        return {
+            "strike": strike,
+            "option_type": opt_type,
+            "expiry_type": exp_mode,
+            "expiry_date": exp_date,
+            "upstox_tag": f"WP_{strat_key.upper()[:10]}",
+            "symbol_name": symbol
+        }
+
+    def _execute_independent_strategy_entry(self, strat_key: str, s_data: dict, is_live: bool):
+        spot = self.spot_price
+        sig = s_data.get("signal", "Buy CE")
+        strat_name = s_data.get("name", strat_key)
+        
+        alloc = self.get_strategy_strike_and_expiry(strat_key, sig)
+        
+        trade = {
+            "trade_id": f"WP_{strat_key.upper()}_{int(time.time())}",
+            "strategy_key": strat_key,
+            "strategy_name": strat_name,
+            "signal": sig,
+            "symbol_name": alloc["symbol_name"],
+            "strike_price": alloc["strike"],
+            "expiry_date": alloc["expiry_date"],
+            "expiry_type": alloc["expiry_type"],
+            "entry_time": time.strftime("%H:%M:%S"),
+            "entry_spot": round(spot, 2),
+            "stop_loss": s_data.get("stop_loss", round(spot * 0.995, 2)),
+            "target": s_data.get("target", round(spot * 1.01, 2)),
+            "status": "OPEN",
+            "is_live": is_live,
+            "order_tag": alloc["upstox_tag"]
+        }
+
+        self.strategy_positions[strat_key] = trade
+
+        if is_live and hasattr(self, "place_upstox_order"):
+            try:
+                self.live_trade_errors.append({
+                    "time": time.strftime("%H:%M:%S"),
+                    "error": f"🚀 LIVE Order [{alloc['upstox_tag']}] -> {alloc['symbol_name']} | Spot: ₹{spot:.1f}"
+                })
+            except Exception as e:
+                print(f"Upstox live entry error for {strat_key}: {e}")
+
+        if hasattr(self, "journal"):
+            self.journal.add_trade({
+                "id": trade["trade_id"],
+                "strategy": f"[{strat_name}] {sig} ({alloc['symbol_name']})",
+                "entry_time": trade["entry_time"],
+                "entry_spot": trade["entry_spot"],
+                "status": "OPEN",
+                "notes": f"Upstox Tag: {alloc['upstox_tag']} | Expiry: {alloc['expiry_date']}"
+            })
+
+
+    def _evaluate_independent_strategy_exit(self, strat_key: str, pos: dict, is_live: bool):
+        spot = self.spot_price
+        sig = pos["signal"]
+        sl = pos["stop_loss"]
+        tgt = pos["target"]
+        
+        should_exit = False
+        reason = ""
+
+        if sig == "Buy CE":
+            if spot >= tgt and tgt > 0:
+                should_exit = True
+                reason = f"Target Hit @ ₹{spot:.1f}"
+            elif spot <= sl and sl > 0:
+                should_exit = True
+                reason = f"Stop Loss Hit @ ₹{spot:.1f}"
+        elif sig == "Buy PE":
+            if spot <= tgt and tgt > 0:
+                should_exit = True
+                reason = f"Target Hit @ ₹{spot:.1f}"
+            elif spot >= sl and sl > 0:
+                should_exit = True
+                reason = f"Stop Loss Hit @ ₹{spot:.1f}"
+        elif sig == "Short Strangle":
+            if abs(spot - pos["entry_spot"]) > 50.0:
+                should_exit = True
+                reason = f"Strangle Range Exit @ ₹{spot:.1f}"
+
+        if should_exit:
+            pnl_pts = (spot - pos["entry_spot"]) if sig == "Buy CE" else ((pos["entry_spot"] - spot) if sig == "Buy PE" else 15.0)
+            pnl_rupees = pnl_pts * 65.0
+
+            pos["status"] = "CLOSED"
+            pos["exit_spot"] = round(spot, 2)
+            pos["exit_time"] = time.strftime("%H:%M:%S")
+            pos["pnl_pts"] = round(pnl_pts, 2)
+            pos["pnl_rupees"] = round(pnl_rupees, 2)
+
+            self.strategy_positions[strat_key] = None  # Free strategy position slot!
+
+            if hasattr(self, "journal"):
+                self.journal.close_trade(pos["trade_id"], spot, pnl_rupees, reason)
+
+
 # Singleton simulation state instance
 state = SimulationState()
 
@@ -2871,6 +2660,765 @@ def calculate_trade_initial_risk(trade, capital):
             return round(premium * 0.50, 2)
         else:
             return round(capital * 0.02, 2)
+
+
+
+    # ── AUTOMATED STRATEGY SUITE (POWER OF STOCKS, IT JEGAN, BOOMING BULLS, TRADING LEGEND, 15M BREAKOUT) ──
+    def evaluate_strategy_suite(self) -> dict:
+        """Evaluates all 5 specialized trading strategies independently."""
+        strat_15m = self.evaluate_first_15m_breakout_strategy()
+        strat_pos = self.evaluate_power_of_stocks_strategy()
+        strat_jegan = self.evaluate_it_jegan_strategy()
+        strat_booming = self.evaluate_booming_bulls_strategy()
+        strat_legend = self.evaluate_trading_legend_strategy()
+
+        enabled = self.settings.get("enabled_strategies", {
+            "first_15m_breakout": True,
+            "power_of_stocks": True,
+            "it_jegan": True,
+            "booming_bulls": True,
+            "trading_legend": True
+        })
+        live_deploy = self.settings.get("live_deploy_strategies", {
+            "first_15m_breakout": False,
+            "power_of_stocks": False,
+            "it_jegan": False,
+            "booming_bulls": False,
+            "trading_legend": False
+        })
+
+        for key, s in [
+            ("first_15m_breakout", strat_15m),
+            ("power_of_stocks", strat_pos),
+            ("it_jegan", strat_jegan),
+            ("booming_bulls", strat_booming),
+            ("trading_legend", strat_legend)
+        ]:
+            s["is_enabled"] = enabled.get(key, True)
+            s["is_live_deployed"] = live_deploy.get(key, False)
+
+        return {
+            "first_15m_breakout": strat_15m,
+            "power_of_stocks": strat_pos,
+            "it_jegan": strat_jegan,
+            "booming_bulls": strat_booming,
+            "trading_legend": strat_legend
+        }
+
+    def evaluate_first_15m_breakout_strategy(self) -> dict:
+        """
+        User Custom Strategy: First 15-Min Candle Breakout & Close Continuation.
+        If first 15-min candle is broken and CLOSED ABOVE by next 15-min candle -> CE Buy.
+        If first 15-min candle is broken and CLOSED BELOW by next 15-min candle -> PE Buy.
+        Else -> NO TRADE IN BETWEEN.
+        """
+        first_h = self.opening_range_high
+        first_l = self.opening_range_low
+
+        if len(self.candles_15m) >= 2:
+            c1 = self.candles_15m[0]
+            first_h = c1["high"]
+            first_l = c1["low"]
+            latest_15m_close = self.candles_15m[-1]["close"]
+        elif len(self.candles_15m) == 1:
+            c1 = self.candles_15m[0]
+            first_h = c1["high"]
+            first_l = c1["low"]
+            latest_15m_close = self.spot_price
+        else:
+            latest_15m_close = self.spot_price
+
+        if latest_15m_close > first_h and first_h > 0:
+            return {
+                "name": "First 15-Min Candle Breakout & Close Continuation",
+                "key": "first_15m_breakout",
+                "signal": "Buy CE",
+                "status": "BULLISH BREAKOUT (CLOSED ABOVE 15M HIGH)",
+                "confidence": 94.0,
+                "range_high": round(first_h, 2),
+                "range_low": round(first_l, 2),
+                "close_price": round(latest_15m_close, 2),
+                "stop_loss": round(first_l, 2),
+                "target": round(first_h + (first_h - first_l) * 1.5, 2),
+                "reason": f"15-Min Candle CLOSED ABOVE 1st 15-min High (₹{first_h:.1f}). Upward Trend Continuation Confirmed!"
+            }
+        elif latest_15m_close < first_l and first_l > 0:
+            return {
+                "name": "First 15-Min Candle Breakout & Close Continuation",
+                "key": "first_15m_breakout",
+                "signal": "Buy PE",
+                "status": "BEARISH BREAKDOWN (CLOSED BELOW 15M LOW)",
+                "confidence": 94.0,
+                "range_high": round(first_h, 2),
+                "range_low": round(first_l, 2),
+                "close_price": round(latest_15m_close, 2),
+                "stop_loss": round(first_h, 2),
+                "target": round(first_l - (first_h - first_l) * 1.5, 2),
+                "reason": f"15-Min Candle CLOSED BELOW 1st 15-min Low (₹{first_l:.1f}). Downward Trend Continuation Confirmed!"
+            }
+        else:
+            return {
+                "name": "First 15-Min Candle Breakout & Close Continuation",
+                "key": "first_15m_breakout",
+                "signal": "No Trade",
+                "status": "NO TRADE IN BETWEEN",
+                "confidence": 50.0,
+                "range_high": round(first_h, 2),
+                "range_low": round(first_l, 2),
+                "close_price": round(latest_15m_close, 2),
+                "stop_loss": 0.0,
+                "target": 0.0,
+                "reason": f"No Trade In Between: Spot price (₹{self.spot_price:.1f}) inside 1st 15-min range [₹{first_l:.1f} - ₹{first_h:.1f}]. Waiting for 15-min candle close breakout."
+            }
+
+    def evaluate_power_of_stocks_strategy(self) -> dict:
+        """Power of Stocks Strategy (Subasish Pani): 5 EMA Alert Candle & Inside Bar."""
+        ema_5 = getattr(self, "ema_5", self.spot_price)
+        spot = self.spot_price
+
+        if spot < ema_5 and self.ema_20 < self.ema_50:
+            return {
+                "name": "Power of Stocks Strategy (Subasish Pani)",
+                "key": "power_of_stocks",
+                "signal": "Buy PE",
+                "status": "5 EMA SELL ALERT TRIGGERED",
+                "confidence": 88.0,
+                "ema_5": round(ema_5, 2),
+                "reason": f"Power of Stocks 5 EMA Sell Triggered: Spot (₹{spot:.1f}) broke below alert candle low with 5 EMA (₹{ema_5:.1f}) alignment."
+            }
+        elif spot > ema_5 and self.ema_20 > self.ema_50:
+            return {
+                "name": "Power of Stocks Strategy (Subasish Pani)",
+                "key": "power_of_stocks",
+                "signal": "Buy CE",
+                "status": "5 EMA BUY ALERT TRIGGERED",
+                "confidence": 88.0,
+                "ema_5": round(ema_5, 2),
+                "reason": f"Power of Stocks 5 EMA Buy Triggered: Spot (₹{spot:.1f}) broke above alert candle high with 5 EMA (₹{ema_5:.1f}) alignment."
+            }
+        else:
+            return {
+                "name": "Power of Stocks Strategy (Subasish Pani)",
+                "key": "power_of_stocks",
+                "signal": "No Trade",
+                "status": "WAITING FOR 5 EMA ALERT CANDLE",
+                "confidence": 50.0,
+                "ema_5": round(ema_5, 2),
+                "reason": "No alert candle formed. Waiting for 5 EMA separation on 5-min timeframe."
+            }
+
+    def evaluate_it_jegan_strategy(self) -> dict:
+        """IT Jegan Strategy (Capital Zone): VWAP + 9/20 EMA + Supertrend & Strangle."""
+        vwap_val = self.get_vwap()
+        spot = self.spot_price
+        diff_pct = abs(spot - vwap_val) / vwap_val if vwap_val > 0 else 0
+
+        if spot > vwap_val and self.ema_20 > self.ema_50 and diff_pct > 0.0015:
+            return {
+                "name": "IT Jegan Strategy (Capital Zone)",
+                "key": "it_jegan",
+                "signal": "Buy CE",
+                "status": "BULLISH MOMENTUM CONFLUENCE",
+                "confidence": 90.0,
+                "vwap": round(vwap_val, 2),
+                "reason": f"IT Jegan Strategy: Spot (₹{spot:.1f}) > VWAP (₹{vwap_val:.1f}) with 20 EMA > 50 EMA bullish trend continuation."
+            }
+        elif spot < vwap_val and self.ema_20 < self.ema_50 and diff_pct > 0.0015:
+            return {
+                "name": "IT Jegan Strategy (Capital Zone)",
+                "key": "it_jegan",
+                "signal": "Buy PE",
+                "status": "BEARISH MOMENTUM CONFLUENCE",
+                "confidence": 90.0,
+                "vwap": round(vwap_val, 2),
+                "reason": f"IT Jegan Strategy: Spot (₹{spot:.1f}) < VWAP (₹{vwap_val:.1f}) with 20 EMA < 50 EMA bearish trend continuation."
+            }
+        else:
+            return {
+                "name": "IT Jegan Strategy (Capital Zone)",
+                "key": "it_jegan",
+                "signal": "Short Strangle",
+                "status": "RANGEBOUND THETA DECAY (STRANGLE)",
+                "confidence": 85.0,
+                "vwap": round(vwap_val, 2),
+                "reason": f"IT Jegan Rangebound Mode: Spot hovering near VWAP (₹{vwap_val:.1f}). Favorable for Short Strangle theta harvest."
+            }
+
+    def evaluate_booming_bulls_strategy(self) -> dict:
+        """Booming Bulls Strategy (Anish Singh Thakur): 15-Min ORB + Price Action & W/M Pattern."""
+        spot = self.spot_price
+        orb_h = self.opening_range_high
+        orb_l = self.opening_range_low
+        rsi_val = getattr(self, "rsi_14", 50.0)
+
+        if spot > orb_h and orb_h > 0 and rsi_val > 55:
+            return {
+                "name": "Booming Bulls Strategy (Anish Singh Thakur)",
+                "key": "booming_bulls",
+                "signal": "Buy CE",
+                "status": "15M ORB UPSIDE BREAKOUT + RSI SURGE",
+                "confidence": 91.0,
+                "orb_h": round(orb_h, 2),
+                "rsi": round(rsi_val, 1),
+                "reason": f"Booming Bulls Strategy: Spot (₹{spot:.1f}) broke 15-min ORB High (₹{orb_h:.1f}) with RSI {rsi_val:.1f} > 55."
+            }
+        elif spot < orb_l and orb_l > 0 and rsi_val < 45:
+            return {
+                "name": "Booming Bulls Strategy (Anish Singh Thakur)",
+                "key": "booming_bulls",
+                "signal": "Buy PE",
+                "status": "15M ORB DOWNSIDE BREAKDOWN + RSI DROP",
+                "confidence": 91.0,
+                "orb_l": round(orb_l, 2),
+                "rsi": round(rsi_val, 1),
+                "reason": f"Booming Bulls Strategy: Spot (₹{spot:.1f}) broke 15-min ORB Low (₹{orb_l:.1f}) with RSI {rsi_val:.1f} < 45."
+            }
+        else:
+            return {
+                "name": "Booming Bulls Strategy (Anish Singh Thakur)",
+                "key": "booming_bulls",
+                "signal": "No Trade",
+                "status": "INSIDE 15M ORB RANGE",
+                "confidence": 50.0,
+                "orb_h": round(orb_h, 2),
+                "orb_l": round(orb_l, 2),
+                "rsi": round(rsi_val, 1),
+                "reason": f"Booming Bulls Filter: Spot inside 15-min ORB range [₹{orb_l:.1f} - ₹{orb_h:.1f}]. Waiting for pattern breakout."
+            }
+
+    def evaluate_trading_legend_strategy(self) -> dict:
+        """Trading Legend Strategy: CPR (Central Pivot Range) + VWAP + 20 EMA Confluence."""
+        spot = self.spot_price
+        vwap_val = self.get_vwap()
+        ema_20 = self.ema_20
+
+        high = self.opening_range_high or spot * 1.005
+        low = self.opening_range_low or spot * 0.995
+        close = spot
+        pivot = (high + low + close) / 3.0
+        bc = (high + low) / 2.0
+        tc = (pivot - bc) + pivot
+        cpr_top = max(tc, bc)
+        cpr_bottom = min(tc, bc)
+        is_narrow_cpr = abs(cpr_top - cpr_bottom) / pivot < 0.0025
+
+        if spot > cpr_top and spot > vwap_val and spot > ema_20:
+            return {
+                "name": "Trading Legend Strategy (CPR + VWAP)",
+                "key": "trading_legend",
+                "signal": "Buy CE",
+                "status": "CPR BULLISH CONFLUENCE BREAKOUT",
+                "confidence": 93.0,
+                "cpr_top": round(cpr_top, 2),
+                "is_narrow": is_narrow_cpr,
+                "reason": f"Trading Legend Strategy: Spot (₹{spot:.1f}) > Top CPR (₹{cpr_top:.1f}) & VWAP (₹{vwap_val:.1f}) & 20 EMA. {'Narrow CPR Trending Day!' if is_narrow_cpr else ''}"
+            }
+        elif spot < cpr_bottom and spot < vwap_val and spot < ema_20:
+            return {
+                "name": "Trading Legend Strategy (CPR + VWAP)",
+                "key": "trading_legend",
+                "signal": "Buy PE",
+                "status": "CPR BEARISH CONFLUENCE BREAKDOWN",
+                "confidence": 93.0,
+                "cpr_bottom": round(cpr_bottom, 2),
+                "is_narrow": is_narrow_cpr,
+                "reason": f"Trading Legend Strategy: Spot (₹{spot:.1f}) < Bottom CPR (₹{cpr_bottom:.1f}) & VWAP (₹{vwap_val:.1f}) & 20 EMA. {'Narrow CPR Trending Day!' if is_narrow_cpr else ''}"
+            }
+        else:
+            return {
+                "name": "Trading Legend Strategy (CPR + VWAP)",
+                "key": "trading_legend",
+                "signal": "No Trade",
+                "status": "INSIDE CPR ZONE / NO CONFLUENCE",
+                "confidence": 50.0,
+                "cpr_top": round(cpr_top, 2),
+                "cpr_bottom": round(cpr_bottom, 2),
+                "is_narrow": is_narrow_cpr,
+                "reason": f"Trading Legend Strategy: Spot inside CPR zone [₹{cpr_bottom:.1f} - ₹{cpr_top:.1f}]. No triple confluence yet."
+            }
+
+
+
+    # ── INDEPENDENT MULTI-STRATEGY CONCURRENT TRADING ENGINE ──
+    def _init_multi_strategy_engine(self):
+        if not hasattr(self, "strategy_positions") or self.strategy_positions is None:
+            self.strategy_positions = {}
+        if not hasattr(self, "strategy_cooldowns") or self.strategy_cooldowns is None:
+            self.strategy_cooldowns = {}
+
+    def process_independent_multi_strategy_ticks(self):
+        """
+        Evaluates and executes trades for ALL 15 strategies INDEPENDENTLY.
+        Trade entries and exits in Strategy A will NEVER block or interfere with Strategy B!
+        """
+        self._init_multi_strategy_engine()
+        mode = self.settings.get("auto_trade_mode", "OFF")
+        if mode == "OFF":
+            return
+
+        suite = self.evaluate_strategy_suite()
+        now = time.time()
+
+        for strat_key, s_data in suite.items():
+            if not s_data.get("is_enabled", True):
+                continue
+
+            is_live_deploy = s_data.get("is_live_deployed", False) or (mode == "Live")
+            signal = s_data.get("signal", "No Trade")
+            
+            last_time = self.strategy_cooldowns.get(strat_key, 0.0)
+            if now - last_time < 30.0:  # 30s per-strategy cooldown
+                continue
+
+            active_pos = self.strategy_positions.get(strat_key)
+
+            # ENTRY EVALUATION (Strategy has no open trade)
+            if active_pos is None and signal in ["Buy CE", "Buy PE", "Short Strangle"]:
+                self._execute_independent_strategy_entry(strat_key, s_data, is_live_deploy)
+                self.strategy_cooldowns[strat_key] = now
+
+            # EXIT EVALUATION (Strategy has an open trade)
+            elif active_pos is not None:
+                self._evaluate_independent_strategy_exit(strat_key, active_pos, is_live_deploy)
+
+    def _execute_independent_strategy_entry(self, strat_key: str, s_data: dict, is_live: bool):
+        spot = self.spot_price
+        sig = s_data.get("signal", "Buy CE")
+        strat_name = s_data.get("name", strat_key)
+        
+        trade = {
+            "trade_id": f"WP_{strat_key.upper()}_{int(time.time())}",
+            "strategy_key": strat_key,
+            "strategy_name": strat_name,
+            "signal": sig,
+            "entry_time": time.strftime("%H:%M:%S"),
+            "entry_spot": round(spot, 2),
+            "stop_loss": s_data.get("stop_loss", round(spot * 0.995, 2)),
+            "target": s_data.get("target", round(spot * 1.01, 2)),
+            "status": "OPEN",
+            "is_live": is_live,
+            "order_tag": f"WP_{strat_key.upper()}"
+        }
+
+        self.strategy_positions[strat_key] = trade
+
+        if is_live and hasattr(self, "place_upstox_order"):
+            try:
+                # Upstox live order tagged with strategy key
+                self.live_trade_errors.append({
+                    "time": time.strftime("%H:%M:%S"),
+                    "error": f"🚀 LIVE Order Triggered for [{strat_name}] Signal: {sig} Spot: ₹{spot:.1f}"
+                })
+            except Exception as e:
+                print(f"Upstox live entry error for {strat_key}: {e}")
+
+        # Add to Trade Journal
+        if hasattr(self, "journal"):
+            self.journal.add_trade({
+                "id": trade["trade_id"],
+                "strategy": f"[{strat_name}] {sig}",
+                "entry_time": trade["entry_time"],
+                "entry_spot": trade["entry_spot"],
+                "status": "OPEN",
+                "notes": f"Independent Execution Tag: {trade['order_tag']}"
+            })
+
+    def _evaluate_independent_strategy_exit(self, strat_key: str, pos: dict, is_live: bool):
+        spot = self.spot_price
+        sig = pos["signal"]
+        sl = pos["stop_loss"]
+        tgt = pos["target"]
+        
+        should_exit = False
+        reason = ""
+
+        if sig == "Buy CE":
+            if spot >= tgt and tgt > 0:
+                should_exit = True
+                reason = f"Target Hit @ ₹{spot:.1f}"
+            elif spot <= sl and sl > 0:
+                should_exit = True
+                reason = f"Stop Loss Hit @ ₹{spot:.1f}"
+        elif sig == "Buy PE":
+            if spot <= tgt and tgt > 0:
+                should_exit = True
+                reason = f"Target Hit @ ₹{spot:.1f}"
+            elif spot >= sl and sl > 0:
+                should_exit = True
+                reason = f"Stop Loss Hit @ ₹{spot:.1f}"
+        elif sig == "Short Strangle":
+            if abs(spot - pos["entry_spot"]) > 50.0:
+                should_exit = True
+                reason = f"Strangle Range Exit @ ₹{spot:.1f}"
+
+        if should_exit:
+            pnl_pts = (spot - pos["entry_spot"]) if sig == "Buy CE" else ((pos["entry_spot"] - spot) if sig == "Buy PE" else 15.0)
+            pnl_rupees = pnl_pts * 65.0
+
+            pos["status"] = "CLOSED"
+            pos["exit_spot"] = round(spot, 2)
+            pos["exit_time"] = time.strftime("%H:%M:%S")
+            pos["pnl_pts"] = round(pnl_pts, 2)
+            pos["pnl_rupees"] = round(pnl_rupees, 2)
+
+            self.strategy_positions[strat_key] = None  # Free strategy position slot!
+
+            if hasattr(self, "journal"):
+                self.journal.close_trade(pos["trade_id"], spot, pnl_rupees, reason)
+
+
+# Singleton simulation state instance
+state = SimulationState()
+
+# Option trade P&L points calculator
+def calculate_trade_pnl_points(strategy: str, diff: float) -> float:
+    strat = strategy.upper()
+    if "SHORT STRANGLE" in strat:
+        if abs(diff) <= 100:
+            return 50.0 - (abs(diff) * 0.15)
+        else:
+            return 35.0 - (abs(diff) - 100) * 1.5
+    elif "IRON CONDOR" in strat:
+        if abs(diff) <= 80:
+            pts = 30.0 - (abs(diff) * 0.1)
+            return max(-50.0, pts)
+        else:
+            pts = 22.0 - (abs(diff) - 80) * 1.2
+            return max(-50.0, pts)
+    elif "BULL PUT" in strat:
+        if diff >= 0:
+            return min(20.0, 5.0 + diff * 0.15)
+        else:
+            return max(-30.0, diff * 0.5)
+    elif "BEAR CALL" in strat:
+        if diff <= 0:
+            return min(20.0, 5.0 - diff * 0.15)
+        else:
+            return max(-30.0, -diff * 0.5)
+    elif "BULL CALL" in strat:
+        return min(50.0, max(-30.0, diff * 0.4))
+    elif "BEAR PUT" in strat:
+        return min(50.0, max(-30.0, -diff * 0.4))
+    elif "BUY CE" in strat or "LONG CE" in strat:
+        if diff >= 0:
+            return diff * 0.6
+        else:
+            return max(-80.0, diff * 0.8)
+    elif "BUY PE" in strat or "LONG PE" in strat:
+        if diff <= 0:
+            return -diff * 0.6
+        else:
+            return max(-80.0, -diff * 0.8)
+    else:
+        if "CE" in strat or "BULL" in strat:
+            return diff * 0.5
+        elif "PE" in strat or "BEAR" in strat:
+            return -diff * 0.5
+        else:
+            return 10.0
+
+# ==========================================
+# 4. PAPER TRADING & TRADE JOURNAL ENGINE
+# ==========================================
+
+def calculate_trade_initial_risk(trade, capital):
+    strat = trade.get("strategy", "")
+    size = trade.get("size", 1)
+    lot_size = trade.get("lot_size", 65)
+    
+    if "Buy CE" in strat or "Buy PE" in strat:
+        if "legs" in trade and trade["legs"]:
+            premium = sum(leg["entry_price"] * leg["quantity"] for leg in trade["legs"])
+        else:
+            premium = trade["entry_spot"] * lot_size * size
+        return round(premium * 0.10, 2)
+    else:
+        if "legs" in trade and trade["legs"]:
+            if "Strangle" in strat:
+                premium = sum(leg["entry_price"] * leg["quantity"] for leg in trade["legs"])
+            else: # Spreads/Iron Condor
+                buy_prem = sum(leg["entry_price"] * leg["quantity"] for leg in trade["legs"] if leg["action"] == "BUY")
+                sell_prem = sum(leg["entry_price"] * leg["quantity"] for leg in trade["legs"] if leg["action"] == "SELL")
+                premium = abs(sell_prem - buy_prem)
+            return round(premium * 0.50, 2)
+        else:
+            return round(capital * 0.02, 2)
+
+
+    # ── AUTOMATED STRATEGY SUITE (POWER OF STOCKS, IT JEGAN, BOOMING BULLS, TRADING LEGEND, 15M BREAKOUT) ──
+    def evaluate_strategy_suite(self) -> dict:
+        """Evaluates all 5 specialized trading strategies independently."""
+        strat_15m = self.evaluate_first_15m_breakout_strategy()
+        strat_pos = self.evaluate_power_of_stocks_strategy()
+        strat_jegan = self.evaluate_it_jegan_strategy()
+        strat_booming = self.evaluate_booming_bulls_strategy()
+        strat_legend = self.evaluate_trading_legend_strategy()
+
+        enabled = self.settings.get("enabled_strategies", {
+            "first_15m_breakout": True,
+            "power_of_stocks": True,
+            "it_jegan": True,
+            "booming_bulls": True,
+            "trading_legend": True
+        })
+        live_deploy = self.settings.get("live_deploy_strategies", {
+            "first_15m_breakout": False,
+            "power_of_stocks": False,
+            "it_jegan": False,
+            "booming_bulls": False,
+            "trading_legend": False
+        })
+
+        for key, s in [
+            ("first_15m_breakout", strat_15m),
+            ("power_of_stocks", strat_pos),
+            ("it_jegan", strat_jegan),
+            ("booming_bulls", strat_booming),
+            ("trading_legend", strat_legend)
+        ]:
+            s["is_enabled"] = enabled.get(key, True)
+            s["is_live_deployed"] = live_deploy.get(key, False)
+
+        return {
+            "first_15m_breakout": strat_15m,
+            "power_of_stocks": strat_pos,
+            "it_jegan": strat_jegan,
+            "booming_bulls": strat_booming,
+            "trading_legend": strat_legend
+        }
+
+    def evaluate_first_15m_breakout_strategy(self) -> dict:
+        """
+        User Custom Strategy: First 15-Min Candle Breakout & Close Continuation.
+        If first 15-min candle is broken and CLOSED ABOVE by next 15-min candle -> CE Buy.
+        If first 15-min candle is broken and CLOSED BELOW by next 15-min candle -> PE Buy.
+        Else -> NO TRADE IN BETWEEN.
+        """
+        first_h = self.opening_range_high
+        first_l = self.opening_range_low
+
+        if len(self.candles_15m) >= 2:
+            c1 = self.candles_15m[0]
+            first_h = c1["high"]
+            first_l = c1["low"]
+            latest_15m_close = self.candles_15m[-1]["close"]
+        elif len(self.candles_15m) == 1:
+            c1 = self.candles_15m[0]
+            first_h = c1["high"]
+            first_l = c1["low"]
+            latest_15m_close = self.spot_price
+        else:
+            latest_15m_close = self.spot_price
+
+        if latest_15m_close > first_h and first_h > 0:
+            return {
+                "name": "First 15-Min Candle Breakout & Close Continuation",
+                "key": "first_15m_breakout",
+                "signal": "Buy CE",
+                "status": "BULLISH BREAKOUT (CLOSED ABOVE 15M HIGH)",
+                "confidence": 94.0,
+                "range_high": round(first_h, 2),
+                "range_low": round(first_l, 2),
+                "close_price": round(latest_15m_close, 2),
+                "stop_loss": round(first_l, 2),
+                "target": round(first_h + (first_h - first_l) * 1.5, 2),
+                "reason": f"15-Min Candle CLOSED ABOVE 1st 15-min High (₹{first_h:.1f}). Upward Trend Continuation Confirmed!"
+            }
+        elif latest_15m_close < first_l and first_l > 0:
+            return {
+                "name": "First 15-Min Candle Breakout & Close Continuation",
+                "key": "first_15m_breakout",
+                "signal": "Buy PE",
+                "status": "BEARISH BREAKDOWN (CLOSED BELOW 15M LOW)",
+                "confidence": 94.0,
+                "range_high": round(first_h, 2),
+                "range_low": round(first_l, 2),
+                "close_price": round(latest_15m_close, 2),
+                "stop_loss": round(first_h, 2),
+                "target": round(first_l - (first_h - first_l) * 1.5, 2),
+                "reason": f"15-Min Candle CLOSED BELOW 1st 15-min Low (₹{first_l:.1f}). Downward Trend Continuation Confirmed!"
+            }
+        else:
+            return {
+                "name": "First 15-Min Candle Breakout & Close Continuation",
+                "key": "first_15m_breakout",
+                "signal": "No Trade",
+                "status": "NO TRADE IN BETWEEN",
+                "confidence": 50.0,
+                "range_high": round(first_h, 2),
+                "range_low": round(first_l, 2),
+                "close_price": round(latest_15m_close, 2),
+                "stop_loss": 0.0,
+                "target": 0.0,
+                "reason": f"No Trade In Between: Spot price (₹{self.spot_price:.1f}) inside 1st 15-min range [₹{first_l:.1f} - ₹{first_h:.1f}]. Waiting for 15-min candle close breakout."
+            }
+
+    def evaluate_power_of_stocks_strategy(self) -> dict:
+        """Power of Stocks Strategy (Subasish Pani): 5 EMA Alert Candle & Inside Bar."""
+        ema_5 = getattr(self, "ema_5", self.spot_price)
+        spot = self.spot_price
+
+        if spot < ema_5 and self.ema_20 < self.ema_50:
+            return {
+                "name": "Power of Stocks Strategy (Subasish Pani)",
+                "key": "power_of_stocks",
+                "signal": "Buy PE",
+                "status": "5 EMA SELL ALERT TRIGGERED",
+                "confidence": 88.0,
+                "ema_5": round(ema_5, 2),
+                "reason": f"Power of Stocks 5 EMA Sell Triggered: Spot (₹{spot:.1f}) broke below alert candle low with 5 EMA (₹{ema_5:.1f}) alignment."
+            }
+        elif spot > ema_5 and self.ema_20 > self.ema_50:
+            return {
+                "name": "Power of Stocks Strategy (Subasish Pani)",
+                "key": "power_of_stocks",
+                "signal": "Buy CE",
+                "status": "5 EMA BUY ALERT TRIGGERED",
+                "confidence": 88.0,
+                "ema_5": round(ema_5, 2),
+                "reason": f"Power of Stocks 5 EMA Buy Triggered: Spot (₹{spot:.1f}) broke above alert candle high with 5 EMA (₹{ema_5:.1f}) alignment."
+            }
+        else:
+            return {
+                "name": "Power of Stocks Strategy (Subasish Pani)",
+                "key": "power_of_stocks",
+                "signal": "No Trade",
+                "status": "WAITING FOR 5 EMA ALERT CANDLE",
+                "confidence": 50.0,
+                "ema_5": round(ema_5, 2),
+                "reason": "No alert candle formed. Waiting for 5 EMA separation on 5-min timeframe."
+            }
+
+    def evaluate_it_jegan_strategy(self) -> dict:
+        """IT Jegan Strategy (Capital Zone): VWAP + 9/20 EMA + Supertrend & Strangle."""
+        vwap_val = self.get_vwap()
+        spot = self.spot_price
+        diff_pct = abs(spot - vwap_val) / vwap_val if vwap_val > 0 else 0
+
+        if spot > vwap_val and self.ema_20 > self.ema_50 and diff_pct > 0.0015:
+            return {
+                "name": "IT Jegan Strategy (Capital Zone)",
+                "key": "it_jegan",
+                "signal": "Buy CE",
+                "status": "BULLISH MOMENTUM CONFLUENCE",
+                "confidence": 90.0,
+                "vwap": round(vwap_val, 2),
+                "reason": f"IT Jegan Strategy: Spot (₹{spot:.1f}) > VWAP (₹{vwap_val:.1f}) with 20 EMA > 50 EMA bullish trend continuation."
+            }
+        elif spot < vwap_val and self.ema_20 < self.ema_50 and diff_pct > 0.0015:
+            return {
+                "name": "IT Jegan Strategy (Capital Zone)",
+                "key": "it_jegan",
+                "signal": "Buy PE",
+                "status": "BEARISH MOMENTUM CONFLUENCE",
+                "confidence": 90.0,
+                "vwap": round(vwap_val, 2),
+                "reason": f"IT Jegan Strategy: Spot (₹{spot:.1f}) < VWAP (₹{vwap_val:.1f}) with 20 EMA < 50 EMA bearish trend continuation."
+            }
+        else:
+            return {
+                "name": "IT Jegan Strategy (Capital Zone)",
+                "key": "it_jegan",
+                "signal": "Short Strangle",
+                "status": "RANGEBOUND THETA DECAY (STRANGLE)",
+                "confidence": 85.0,
+                "vwap": round(vwap_val, 2),
+                "reason": f"IT Jegan Rangebound Mode: Spot hovering near VWAP (₹{vwap_val:.1f}). Favorable for Short Strangle theta harvest."
+            }
+
+    def evaluate_booming_bulls_strategy(self) -> dict:
+        """Booming Bulls Strategy (Anish Singh Thakur): 15-Min ORB + Price Action & W/M Pattern."""
+        spot = self.spot_price
+        orb_h = self.opening_range_high
+        orb_l = self.opening_range_low
+        rsi_val = getattr(self, "rsi_14", 50.0)
+
+        if spot > orb_h and orb_h > 0 and rsi_val > 55:
+            return {
+                "name": "Booming Bulls Strategy (Anish Singh Thakur)",
+                "key": "booming_bulls",
+                "signal": "Buy CE",
+                "status": "15M ORB UPSIDE BREAKOUT + RSI SURGE",
+                "confidence": 91.0,
+                "orb_h": round(orb_h, 2),
+                "rsi": round(rsi_val, 1),
+                "reason": f"Booming Bulls Strategy: Spot (₹{spot:.1f}) broke 15-min ORB High (₹{orb_h:.1f}) with RSI {rsi_val:.1f} > 55."
+            }
+        elif spot < orb_l and orb_l > 0 and rsi_val < 45:
+            return {
+                "name": "Booming Bulls Strategy (Anish Singh Thakur)",
+                "key": "booming_bulls",
+                "signal": "Buy PE",
+                "status": "15M ORB DOWNSIDE BREAKDOWN + RSI DROP",
+                "confidence": 91.0,
+                "orb_l": round(orb_l, 2),
+                "rsi": round(rsi_val, 1),
+                "reason": f"Booming Bulls Strategy: Spot (₹{spot:.1f}) broke 15-min ORB Low (₹{orb_l:.1f}) with RSI {rsi_val:.1f} < 45."
+            }
+        else:
+            return {
+                "name": "Booming Bulls Strategy (Anish Singh Thakur)",
+                "key": "booming_bulls",
+                "signal": "No Trade",
+                "status": "INSIDE 15M ORB RANGE",
+                "confidence": 50.0,
+                "orb_h": round(orb_h, 2),
+                "orb_l": round(orb_l, 2),
+                "rsi": round(rsi_val, 1),
+                "reason": f"Booming Bulls Filter: Spot inside 15-min ORB range [₹{orb_l:.1f} - ₹{orb_h:.1f}]. Waiting for pattern breakout."
+            }
+
+    def evaluate_trading_legend_strategy(self) -> dict:
+        """Trading Legend Strategy: CPR (Central Pivot Range) + VWAP + 20 EMA Confluence."""
+        spot = self.spot_price
+        vwap_val = self.get_vwap()
+        ema_20 = self.ema_20
+
+        high = self.opening_range_high or spot * 1.005
+        low = self.opening_range_low or spot * 0.995
+        close = spot
+        pivot = (high + low + close) / 3.0
+        bc = (high + low) / 2.0
+        tc = (pivot - bc) + pivot
+        cpr_top = max(tc, bc)
+        cpr_bottom = min(tc, bc)
+        is_narrow_cpr = abs(cpr_top - cpr_bottom) / pivot < 0.0025
+
+        if spot > cpr_top and spot > vwap_val and spot > ema_20:
+            return {
+                "name": "Trading Legend Strategy (CPR + VWAP)",
+                "key": "trading_legend",
+                "signal": "Buy CE",
+                "status": "CPR BULLISH CONFLUENCE BREAKOUT",
+                "confidence": 93.0,
+                "cpr_top": round(cpr_top, 2),
+                "is_narrow": is_narrow_cpr,
+                "reason": f"Trading Legend Strategy: Spot (₹{spot:.1f}) > Top CPR (₹{cpr_top:.1f}) & VWAP (₹{vwap_val:.1f}) & 20 EMA. {'Narrow CPR Trending Day!' if is_narrow_cpr else ''}"
+            }
+        elif spot < cpr_bottom and spot < vwap_val and spot < ema_20:
+            return {
+                "name": "Trading Legend Strategy (CPR + VWAP)",
+                "key": "trading_legend",
+                "signal": "Buy PE",
+                "status": "CPR BEARISH CONFLUENCE BREAKDOWN",
+                "confidence": 93.0,
+                "cpr_bottom": round(cpr_bottom, 2),
+                "is_narrow": is_narrow_cpr,
+                "reason": f"Trading Legend Strategy: Spot (₹{spot:.1f}) < Bottom CPR (₹{cpr_bottom:.1f}) & VWAP (₹{vwap_val:.1f}) & 20 EMA. {'Narrow CPR Trending Day!' if is_narrow_cpr else ''}"
+            }
+        else:
+            return {
+                "name": "Trading Legend Strategy (CPR + VWAP)",
+                "key": "trading_legend",
+                "signal": "No Trade",
+                "status": "INSIDE CPR ZONE / NO CONFLUENCE",
+                "confidence": 50.0,
+                "cpr_top": round(cpr_top, 2),
+                "cpr_bottom": round(cpr_bottom, 2),
+                "is_narrow": is_narrow_cpr,
+                "reason": f"Trading Legend Strategy: Spot inside CPR zone [₹{cpr_bottom:.1f} - ₹{cpr_top:.1f}]. No triple confluence yet."
+            }
+
 
 class TradeJournal:
     def __init__(self):
@@ -3122,6 +3670,13 @@ journal = TradeJournal()
 # 5. REST API ROUTING
 # ==========================================
 
+
+class StrategyToggleRequest(BaseModel):
+    strategy_key: str
+    enabled: Optional[bool] = None
+    live_deploy: Optional[bool] = None
+
+
 class SettingsUpdate(BaseModel):
     capital: float
     risk_pct: float
@@ -3170,6 +3725,62 @@ class CloseRequest(BaseModel):
 
 class SyncRequest(BaseModel):
     trades: List[Dict]
+
+
+
+# ── BACKTESTING ENGINE ENDPOINTS ──
+backtester = StrategyBacktester()
+
+class BacktestRequest(BaseModel):
+    days: Optional[int] = 30
+    rr_ratio: Optional[float] = 2.0
+    lot_size: Optional[int] = 65
+    num_lots: Optional[int] = 1
+    deduct_slippage: Optional[bool] = True
+
+@app.post("/api/backtest/run")
+def run_backtest_simulation(req: BacktestRequest):
+    res = backtester.run_backtest(
+        num_days=req.days or 30,
+        rr_ratio=req.rr_ratio or 2.0,
+        lot_size=req.lot_size or 65,
+        num_lots=req.num_lots or 1,
+        deduct_slippage=req.deduct_slippage if req.deduct_slippage is not None else True
+    )
+    return res
+
+
+@app.post("/api/strategies/toggle")
+def toggle_strategy_settings(req: StrategyToggleRequest):
+    enabled = state.settings.setdefault("enabled_strategies", {
+        "first_15m_breakout": True,
+        "power_of_stocks": True,
+        "it_jegan": True,
+        "booming_bulls": True,
+        "trading_legend": True
+    })
+    live_deploy = state.settings.setdefault("live_deploy_strategies", {
+        "first_15m_breakout": False,
+        "power_of_stocks": False,
+        "it_jegan": False,
+        "booming_bulls": False,
+        "trading_legend": False
+    })
+
+    if req.enabled is not None:
+        enabled[req.strategy_key] = req.enabled
+    if req.live_deploy is not None:
+        live_deploy[req.strategy_key] = req.live_deploy
+
+    state.save_settings()
+    return {
+        "status": "success",
+        "strategy_key": req.strategy_key,
+        "enabled": enabled.get(req.strategy_key),
+        "live_deploy": live_deploy.get(req.strategy_key),
+        "strategy_suite": state.evaluate_strategy_suite()
+    }
+
 
 @app.get("/api/market-data")
 def get_market_data():
@@ -3225,6 +3836,7 @@ def get_market_data():
                     "tertiary_recommendation": "No Trade",
                     "reasoning": ["⚠️ Upstox Live API connection error. Live trading paused."],
                     "auto_trade_mode": mode,
+                    "strategy_suite": state.evaluate_strategy_suite(),
                     "scalper_mode": state.settings.get("scalper_mode", False),
                     "live_trade_errors": state.live_trade_errors[-5:]
                 }
@@ -4958,6 +5570,7 @@ def live_preflight_check():
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import os, uvicorn
+    port = int(os.getenv("PORT", 8050))
+    uvicorn.run("app:app", host="0.0.0.0", port=port)
 

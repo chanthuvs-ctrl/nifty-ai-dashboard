@@ -462,6 +462,7 @@ async function resetMarginFlag() {
     try {
         const resp = await fetch('/api/reset-margin-flag', { method: 'POST' });
         const data = await resp.json();
+        if (data.strategy_suite) updateStrategySuiteUI(data.strategy_suite);
         console.log('Margin flag reset:', data.message);
         // Banner will auto-hide on next market data poll
     } catch (e) {
@@ -479,6 +480,7 @@ async function fetchMarketData() {
             return;
         }
         const data = await resp.json();
+        if (data.strategy_suite) updateStrategySuiteUI(data.strategy_suite);
         
         // Indicator Pulse
         const indicator = document.getElementById('refresh-indicator');
@@ -1120,6 +1122,7 @@ async function fetchJournal() {
             return;
         }
         const data = await resp.json();
+        if (data.strategy_suite) updateStrategySuiteUI(data.strategy_suite);
         
         // Synchronize with local storage backup
         const serverTrades = data.trades || [];
@@ -1830,6 +1833,7 @@ async function saveSettings() {
         };
 
         const capital = parseNum('set-capital', 1000000.0);
+        const hftCapital = parseNum('set-hft-capital', 0.0);
         const risk = parseNum('set-risk', 1.0);
         const broker = getVal('set-broker', 'Upstox');
         const strategy = getVal('set-strategy', 'All');
@@ -1852,6 +1856,7 @@ async function saveSettings() {
 
         const req = {
             capital: capital,
+            hft_scalper_capital: hftCapital,
             risk_pct: risk,
             preferred_broker: broker,
             preferred_strategy: strategy,
@@ -2141,6 +2146,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Populate settings modal input values immediately on load
         if (document.getElementById('set-capital')) document.getElementById('set-capital').value = settings.capital;
+            if (document.getElementById('set-hft-capital')) document.getElementById('set-hft-capital').value = settings.hft_scalper_capital || 0.0;
+        if (document.getElementById('set-hft-capital')) document.getElementById('set-hft-capital').value = settings.hft_scalper_capital || 0.0;
         if (document.getElementById('set-risk')) document.getElementById('set-risk').value = settings.risk_pct;
         if (document.getElementById('set-broker')) document.getElementById('set-broker').value = settings.preferred_broker;
         if (document.getElementById('set-strategy')) document.getElementById('set-strategy').value = settings.preferred_strategy;
@@ -2313,6 +2320,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const settings = await resp.json();
             
             document.getElementById('set-capital').value = settings.capital;
+            if (document.getElementById('set-hft-capital')) document.getElementById('set-hft-capital').value = settings.hft_scalper_capital || 0.0;
             document.getElementById('set-risk').value = settings.risk_pct;
             document.getElementById('set-broker').value = settings.preferred_broker;
             document.getElementById('set-strategy').value = settings.preferred_strategy;
@@ -2416,6 +2424,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const resp = await fetch('/api/detect-ips');
             const data = await resp.json();
+        if (data.strategy_suite) updateStrategySuiteUI(data.strategy_suite);
             if (data.status === 'SUCCESS') {
                 if (primaryField && !primaryField.value) {
                     primaryField.value = '111.92.13.37';
@@ -3229,6 +3238,7 @@ async function fetchChartData() {
             return;
         }
         const data = await resp.json();
+        if (data.strategy_suite) updateStrategySuiteUI(data.strategy_suite);
         
         if (!liveChart) {
             initLiveChart();
@@ -4846,3 +4856,273 @@ async function updatePayoffGraph() {
     }
 }
 
+
+
+// ── AUTOMATED STRATEGY SUITE UI UPDATES & EVENT LISTENERS ──
+function updateStrategySuiteUI(suite) {
+    if (!suite) return;
+
+    let enabledCount = 0;
+    const totalCount = Object.keys(suite).length;
+
+    for (const [key, s] of Object.entries(suite)) {
+        if (s.is_enabled !== false) enabledCount++;
+
+        const chkEnable = document.querySelector(`.strat-enable-checkbox[data-strat="${key}"]`);
+        if (chkEnable && document.activeElement !== chkEnable) {
+            chkEnable.checked = s.is_enabled !== false;
+        }
+
+        const chkLive = document.querySelector(`.strat-live-checkbox[data-strat="${key}"]`);
+        if (chkLive && document.activeElement !== chkLive) {
+            chkLive.checked = s.is_live_deployed === true;
+        }
+
+        const badge = document.getElementById(`badge-signal-${key}`);
+        if (badge) {
+            const sig = s.signal || "No Trade";
+            badge.innerText = sig === "No Trade" ? (s.status || "NO TRADE") : `${sig} SIGNAL`;
+            
+            badge.className = "strat-signal-badge ";
+            if (sig.includes("CE") || sig.includes("Bull")) {
+                badge.className += "badge-bullish";
+            } else if (sig.includes("PE") || sig.includes("Bear")) {
+                badge.className += "badge-bearish";
+            } else if (sig.includes("Strangle")) {
+                badge.className += "badge-warning";
+            } else {
+                badge.className += "badge-neutral";
+            }
+        }
+
+        const reasonEl = document.getElementById(`reason-${key}`);
+        if (reasonEl) {
+            reasonEl.innerText = s.reason || "Evaluating market conditions...";
+        }
+
+        if (key === "first_15m_breakout") {
+            const elHigh = document.getElementById("val-15m-high");
+            const elLow = document.getElementById("val-15m-low");
+            if (elHigh && s.range_high) elHigh.innerText = `₹${s.range_high}`;
+            if (elLow && s.range_low) elLow.innerText = `₹${s.range_low}`;
+        }
+    }
+
+    const cntEl = document.getElementById("active-strat-count");
+    if (cntEl) {
+        cntEl.innerText = `${enabledCount} / ${totalCount} Enabled`;
+    }
+}
+
+function initStrategySuiteListeners() {
+    document.addEventListener('change', async (e) => {
+        if (e.target.classList.contains('strat-enable-checkbox')) {
+            const stratKey = e.target.getAttribute('data-strat');
+            const enabled = e.target.checked;
+            try {
+                await fetch('/api/strategies/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy_key: stratKey, enabled: enabled })
+                });
+                if (typeof showToast === 'function') showToast(`Strategy ${stratKey} ${enabled ? 'Enabled' : 'Disabled'}`);
+            } catch (err) {
+                console.error("Failed to toggle strategy enabled:", err);
+            }
+        }
+
+        if (e.target.classList.contains('strat-live-checkbox')) {
+            const stratKey = e.target.getAttribute('data-strat');
+            const liveDeploy = e.target.checked;
+            try {
+                await fetch('/api/strategies/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy_key: stratKey, live_deploy: liveDeploy })
+                });
+                if (typeof showToast === 'function') showToast(`Live Deploy for ${stratKey} ${liveDeploy ? 'ACTIVATED' : 'Deactivated'}`);
+            } catch (err) {
+                console.error("Failed to toggle strategy live deployment:", err);
+            }
+        }
+    });
+}
+
+// Call listener initialization
+initStrategySuiteListeners();
+
+
+// ── BACKTESTING LAB EVENT LISTENERS & UI RENDERERS ──
+let lastBacktestData = null;
+
+function initBacktestListeners() {
+    const modal = document.getElementById('modal-backtest');
+    const openBtn = document.getElementById('btn-open-backtest-modal');
+    const closeBtn = document.getElementById('close-backtest-modal');
+    const runBtn = document.getElementById('btn-run-backtest-exec');
+    const filterSelect = document.getElementById('bt-trade-log-filter');
+
+    if (openBtn && modal) {
+        openBtn.addEventListener('click', () => {
+            modal.style.display = 'block';
+            if (!lastBacktestData) runBacktestExecution();
+        });
+    }
+
+    if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+    }
+
+    if (runBtn) {
+        runBtn.addEventListener('click', () => {
+            runBacktestExecution();
+        });
+    }
+
+    if (filterSelect) {
+        filterSelect.addEventListener('change', () => {
+            if (lastBacktestData) renderBacktestTradeLog(lastBacktestData);
+        });
+    }
+}
+
+async function runBacktestExecution() {
+    const days = parseInt(document.getElementById('bt-param-days')?.value || 30);
+    const rr = parseFloat(document.getElementById('bt-param-rr')?.value || 2.0);
+    const lots = parseInt(document.getElementById('bt-param-lots')?.value || 1);
+    const slippage = document.getElementById('bt-param-slippage')?.checked !== false;
+
+    const runBtn = document.getElementById('btn-run-backtest-exec');
+    if (runBtn) {
+        runBtn.disabled = true;
+        runBtn.innerText = '⏳ SIMULATING...';
+    }
+
+    try {
+        const resp = await fetch('/api/backtest/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                days: days,
+                rr_ratio: rr,
+                num_lots: lots,
+                deduct_slippage: slippage
+            })
+        });
+
+        if (resp.ok) {
+            const data = await resp.json();
+            lastBacktestData = data;
+            renderBacktestResults(data);
+            if (typeof showToast === 'function') showToast(`Backtest executed for ${days} days!`);
+        }
+    } catch (err) {
+        console.error("Backtest execution error:", err);
+    } finally {
+        if (runBtn) {
+            runBtn.disabled = false;
+            runBtn.innerText = '🚀 RUN BACKTEST NOW';
+        }
+    }
+}
+
+function renderBacktestResults(data) {
+    if (!data || !data.summary) return;
+
+    const summary = data.summary;
+
+    // KPI Cards
+    if (summary.length > 0) {
+        const best = summary[0];
+        document.getElementById('bt-kpi-best-strat').innerText = `🏆 ${best.name}`;
+    }
+
+    let totPnl = 0;
+    let totWin = 0;
+    let totTrades = 0;
+
+    summary.forEach(s => {
+        totPnl += s.net_pnl_rupees;
+        totWin += s.winning_trades;
+        totTrades += s.total_trades;
+    });
+
+    const avgWinRate = totTrades > 0 ? (totWin / totTrades * 100).toFixed(1) : '0.0';
+
+    const pnlEl = document.getElementById('bt-kpi-total-pnl');
+    if (pnlEl) {
+        pnlEl.innerText = `₹${totPnl.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+        pnlEl.style.color = totPnl >= 0 ? '#34d399' : '#f87171';
+    }
+
+    document.getElementById('bt-kpi-avg-winrate').innerText = `${avgWinRate}%`;
+    document.getElementById('bt-kpi-total-trades').innerText = totTrades.toLocaleString();
+
+    // Table matrix
+    const tableBody = document.getElementById('bt-table-body');
+    if (tableBody) {
+        tableBody.innerHTML = '';
+        summary.forEach(s => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid rgba(51, 65, 85, 0.4)';
+            const pnlColor = s.net_pnl_rupees >= 0 ? '#34d399' : '#f87171';
+            tr.innerHTML = `
+                <td style="padding: 8px; font-weight: 700; color: #f8fafc;">${s.name}</td>
+                <td style="padding: 8px;">${s.total_trades} (${s.winning_trades}W / ${s.losing_trades}L)</td>
+                <td style="padding: 8px; font-weight: 700; color: #fbbf24;">${s.win_rate_pct}%</td>
+                <td style="padding: 8px; font-weight: 700; color: ${pnlColor};">${s.net_pnl_pts > 0 ? '+' : ''}${s.net_pnl_pts} pts</td>
+                <td style="padding: 8px; font-weight: 800; color: ${pnlColor};">₹${s.net_pnl_rupees.toLocaleString('en-IN')}</td>
+                <td style="padding: 8px; font-weight: 700;">${s.profit_factor}</td>
+                <td style="padding: 8px; color: #f87171;">₹${s.max_drawdown_rupees.toLocaleString('en-IN')}</td>
+            `;
+            tableBody.appendChild(tr);
+        });
+    }
+
+    renderBacktestTradeLog(data);
+}
+
+function renderBacktestTradeLog(data) {
+    const filter = document.getElementById('bt-trade-log-filter')?.value || 'ALL';
+    const logBody = document.getElementById('bt-tradelog-body');
+    if (!logBody || !data || !data.details) return;
+
+    logBody.innerHTML = '';
+
+    let allTrades = [];
+    for (const [key, detail] of Object.entries(data.details)) {
+        if (filter === 'ALL' || filter === key) {
+            allTrades = allTrades.concat(detail.trades || []);
+        }
+    }
+
+    // Sort by date/time descending
+    allTrades.sort((a, b) => b.trade_id - a.trade_id);
+
+    if (allTrades.length === 0) {
+        logBody.innerHTML = '<tr><td colspan="8" style="padding: 10px; text-align: center; color: #64748b;">No trades for selected filter.</td></tr>';
+        return;
+    }
+
+    allTrades.slice(0, 50).forEach(t => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid rgba(30, 41, 59, 0.6)';
+        const outcomeColor = t.outcome === 'WIN' ? '#34d399' : '#f87171';
+        tr.innerHTML = `
+            <td style="padding: 6px; color: #94a3b8;">${t.date} ${t.entry_time}</td>
+            <td style="padding: 6px; font-weight: 600; color: #e2e8f0;">${t.strategy_key}</td>
+            <td style="padding: 6px; font-weight: 700; color: ${t.signal.includes('CE') ? '#34d399' : '#f87171'};">${t.signal}</td>
+            <td style="padding: 6px;">₹${t.entry_spot}</td>
+            <td style="padding: 6px;">₹${t.exit_spot}</td>
+            <td style="padding: 6px; font-weight: 700; color: ${outcomeColor};">${t.pnl_pts > 0 ? '+' : ''}${t.pnl_pts}</td>
+            <td style="padding: 6px; font-weight: 800; color: ${outcomeColor};">₹${t.pnl_rupees.toLocaleString('en-IN')}</td>
+            <td style="padding: 6px;"><span style="padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 800; background: ${t.outcome === 'WIN' ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}; color: ${outcomeColor};">${t.outcome}</span></td>
+        `;
+        logBody.appendChild(tr);
+    });
+}
+
+// Initialize listener
+initBacktestListeners();

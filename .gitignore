@@ -1,0 +1,20 @@
+# Environment & dependencies
+node_env/
+node22_env/
+node.tar.gz
+node22.tar.gz
+__pycache__/
+*.pyc
+
+# Temporary patch & test scripts
+patch_*.py
+fix_*.py
+restore_*.py
+update_*.py
+test_*.py
+create_*.py
+setup_gitignore.py
+
+# Logs & temp files
+*.log
+scratch/
