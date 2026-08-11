@@ -4990,6 +4990,32 @@ async function updateStrategySuiteUI(suite) {
             reasonEl.innerText = s.reason || "Evaluating market conditions...";
         }
 
+        // Update Live Position & Live PnL Box
+        const posBadge = document.getElementById(`pos-badge-${key}`);
+        const posPnl = document.getElementById(`pos-pnl-${key}`);
+
+        if (s.active_position) {
+            const p = s.active_position;
+            const pnlVal = p.pnl_rupees || 0.0;
+            if (posBadge) {
+                posBadge.innerHTML = `<span style="color: #38bdf8;">🟢 OPEN:</span> ${p.symbol || 'NIFTY TRADE'} (${p.lots || 1} Lot)`;
+            }
+            if (posPnl) {
+                const isWin = pnlVal >= 0;
+                posPnl.innerText = `Live PnL: ${isWin ? '+' : ''}₹${pnlVal.toFixed(2)}`;
+                posPnl.style.color = isWin ? '#10b981' : '#ef4444';
+            }
+        } else {
+            if (posBadge) {
+                posBadge.innerText = "⚪ NO ACTIVE POSITION";
+                posBadge.style.color = "#94a3b8";
+            }
+            if (posPnl) {
+                posPnl.innerText = "PnL: ₹0.00";
+                posPnl.style.color = "#cbd5e1";
+            }
+        }
+
         if (key === "first_15m_breakout") {
             const elHigh = document.getElementById("val-15m-high");
             const elLow = document.getElementById("val-15m-low");

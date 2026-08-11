@@ -23,7 +23,7 @@
         <div class="header-brand">
             <div class="pulse-indicator" id="refresh-indicator"></div>
             <h1>INTRADAY <span class="glow-text">DECISION ENGINE</span></h1>
-            <span class="badge-pro" id="version-badge">PRODUCTION v4.1.1</span>
+            <span class="badge-pro" id="version-badge">PRODUCTION v4.2.0</span>
             <span class="badge-pro" id="api-status-badge" style="font-size: 0.58rem; padding: 2px 5px; margin-left: 6px; background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border-color: var(--border-color);">API Checking...</span>
         </div>
         
@@ -290,6 +290,10 @@
         <div class="strat-desc">5 EMA Alert Candle & Inside Bar Strategy</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-power_of_stocks">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="power_of_stocks"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-power_of_stocks">Waiting for 5 EMA alert candle.</div>
+        <div class="strat-pnl-box" id="pnl-box-power_of_stocks" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-power_of_stocks" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-power_of_stocks" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 2: Smart Money Concepts (SMC/ICT FVG) -->
@@ -298,6 +302,10 @@
         <div class="strat-desc">Institutional Liquidity Sweep & Fair Value Gap Retest</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-bullish" id="badge-signal-smc_ict_fvg">CE BUY</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="smc_ict_fvg"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-smc_ict_fvg">Liquidity sweep + Market Structure Shift (MSS) + FVG retest.</div>
+        <div class="strat-pnl-box" id="pnl-box-smc_ict_fvg" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-smc_ict_fvg" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-smc_ict_fvg" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 3: Larry Williams Volatility Expansion -->
@@ -306,6 +314,10 @@
         <div class="strat-desc">Range expansion past 0.5x previous session range</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-larry_williams">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="larry_williams"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-larry_williams">Waiting for range expansion trigger.</div>
+        <div class="strat-pnl-box" id="pnl-box-larry_williams" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-larry_williams" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-larry_williams" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 4: Trading Legend (CPR + VWAP) -->
@@ -314,6 +326,10 @@
         <div class="strat-desc">CPR Confluence + VWAP & 20 EMA Triple Confirmation</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-trading_legend">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="trading_legend"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-trading_legend">Spot inside CPR zone.</div>
+        <div class="strat-pnl-box" id="pnl-box-trading_legend" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-trading_legend" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-trading_legend" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 5: Mark Minervini VCP Pattern -->
@@ -322,6 +338,10 @@
         <div class="strat-desc">Tightening price contractions before explosive breakout</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-minervini_vcp">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="minervini_vcp"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-minervini_vcp">Searching for VCP contraction.</div>
+        <div class="strat-pnl-box" id="pnl-box-minervini_vcp" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-minervini_vcp" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-minervini_vcp" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 6: Turtle Trading Donchian Breakout -->
@@ -330,6 +350,10 @@
         <div class="strat-desc">20-bar Donchian channel breakout trend following</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-turtle_trading">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="turtle_trading"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-turtle_trading">Spot inside Donchian channel bounds.</div>
+        <div class="strat-pnl-box" id="pnl-box-turtle_trading" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-turtle_trading" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-turtle_trading" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 7: Nicolas Darvas Box Strategy -->
@@ -338,6 +362,10 @@
         <div class="strat-desc">Dynamic consolidated box range breakout</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-darvas_box">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="darvas_box"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-darvas_box">Spot inside Darvas Box range.</div>
+        <div class="strat-pnl-box" id="pnl-box-darvas_box" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-darvas_box" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-darvas_box" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 8: Oliver Velez Elephant Bars -->
@@ -346,6 +374,10 @@
         <div class="strat-desc">Wide-range Elephant momentum bars near 20/200 SMA</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-oliver_velez">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="oliver_velez"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-oliver_velez">No Elephant Bar formed.</div>
+        <div class="strat-pnl-box" id="pnl-box-oliver_velez" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-oliver_velez" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-oliver_velez" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 9: Institutional Options Gamma Squeeze -->
@@ -354,6 +386,10 @@
         <div class="strat-desc">Strike Open Interest concentration delta squeeze</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-gamma_squeeze">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="gamma_squeeze"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-gamma_squeeze">Monitoring option strike gamma levels.</div>
+        <div class="strat-pnl-box" id="pnl-box-gamma_squeeze" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-gamma_squeeze" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-gamma_squeeze" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 10: Booming Bulls Strategy -->
@@ -362,6 +398,10 @@
         <div class="strat-desc">15-Min ORB + Support/Resistance & W/M Pattern</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-booming_bulls">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="booming_bulls"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-booming_bulls">Spot inside 15m ORB range.</div>
+        <div class="strat-pnl-box" id="pnl-box-booming_bulls" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-booming_bulls" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-booming_bulls" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 11: IT Jegan Strategy -->
@@ -373,6 +413,10 @@
         <div class="strat-desc">ADX > 30 20 EMA pullback & 80-20 false breakout reversal</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-linda_raschke">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="linda_raschke"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-linda_raschke">Evaluating 20 EMA pullback.</div>
+        <div class="strat-pnl-box" id="pnl-box-linda_raschke" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-linda_raschke" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-linda_raschke" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 13: First 15-Min Breakout & Close Continuation (User Custom Strategy) -->
@@ -382,6 +426,10 @@
         <div class="strat-range-indicator" style="font-size: 0.7rem; color: #a0aec0; margin: 4px 0;"><span>1st 15m High: <strong id="val-15m-high" style="color: #10b981;">--</strong></span> | <span>1st 15m Low: <strong id="val-15m-low" style="color: #ef4444;">--</strong></span></div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-warning" id="badge-signal-first_15m_breakout">NO TRADE IN BETWEEN</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="first_15m_breakout"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-first_15m_breakout">No Trade In Between: Spot price inside 1st 15-min range.</div>
+        <div class="strat-pnl-box" id="pnl-box-first_15m_breakout" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-first_15m_breakout" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-first_15m_breakout" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 14: Alexander Elder Triple Screen -->
@@ -390,6 +438,10 @@
         <div class="strat-desc">Macro trend filter + Micro stochastic oversold dip</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-elder_triple_screen">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="elder_triple_screen"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-elder_triple_screen">Macro trend evaluation active.</div>
+        <div class="strat-pnl-box" id="pnl-box-elder_triple_screen" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-elder_triple_screen" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-elder_triple_screen" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
       <!-- CARD 15: Tom DeMark TD Sequential -->
@@ -398,6 +450,10 @@
         <div class="strat-desc">Exhaustion counter-trend mean reversal setup</div>
         <div class="strat-badge-row"><span class="strat-signal-badge badge-neutral" id="badge-signal-demark_td9">NO TRADE</span><label class="live-deploy-toggle"><input type="checkbox" class="strat-live-checkbox" data-strat="demark_td9"><span class="live-toggle-text">🚀 Live Deploy</span></label></div>
         <div class="strat-reason" id="reason-demark_td9">TD Sequential count in progress.</div>
+        <div class="strat-pnl-box" id="pnl-box-demark_td9" style="margin-top: 8px; padding: 6px 10px; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+            <span class="pnl-pos-badge" id="pos-badge-demark_td9" style="color: #94a3b8; font-weight: 600;">⚪ NO ACTIVE POSITION</span>
+            <span class="pnl-val-badge" id="pos-pnl-demark_td9" style="font-weight: 700; color: #cbd5e1;">PnL: ₹0.00</span>
+        </div>
       </div>
 
     </div>
@@ -1578,7 +1634,7 @@ Weekly Review: Week ____ (P&L: _________)
     <div class="alert-toast-container" id="toast-container"></div>
 
     <script src="academy_data.js"></script>
-    <script src="script.js?v=4.1.1_NO_STRANGLE_FINAL"></script>
+    <script src="script.js?v=4.2.0_LIVE_PNL_FINAL"></script>
 
 <!-- 📊 STRATEGY BACKTESTING LAB MODAL -->
 <div id="modal-backtest" class="modal-overlay" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(5, 10, 20, 0.85); backdrop-filter: blur(12px); padding: 20px; overflow-y: auto;">
