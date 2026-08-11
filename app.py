@@ -4119,6 +4119,7 @@ def get_market_data():
         "reasoning": state.rec_reasoning,
         "negation": state.rec_negation,
         "auto_trade_mode": state.settings.get("auto_trade_mode", "OFF"),
+        "strategy_suite": state.evaluate_strategy_suite(),
         "scalper_mode": state.settings.get("scalper_mode", False),
         "live_trade_errors": getattr(state, 'live_trade_errors', [])[-5:],
         "trailing_sl_pts": state.settings.get("trailing_sl_pts", 30.0),
