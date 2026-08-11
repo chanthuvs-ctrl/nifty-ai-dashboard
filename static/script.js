@@ -1018,102 +1018,16 @@ function renderOptionChain(chain, spot, maxPain) {
 
 // Synchronize client journal trades with server (backup & restore)
 async function syncJournalWithServer(serverTrades) {
-    if (safeStorage.getItem('prevent_restore') === 'true') {
-        safeStorage.removeItem('nifty_journal_trades');
-        safeStorage.removeItem('prevent_restore');
-        return serverTrades;
-    }
-    if (serverTrades.length === 0) {
-        safeStorage.removeItem('nifty_journal_trades');
-        return serverTrades;
-    }
-    let localTrades = [];
     try {
-        localTrades = JSON.parse(safeStorage.getItem('nifty_journal_trades')) || [];
-    } catch (e) {
-        console.error("Failed to parse local trades:", e);
-    }
-    
-    // Check if we have local trades, and the server was reset (server has less than or equal to 2 trades, which are dummy trades)
-    // or if the server doesn't have our latest local trade ID.
-    const localIds = localTrades.map(t => t.id);
-    const serverIds = serverTrades.map(t => t.id);
-    
-    const needsRestore = localTrades.length > 0 && (
-        serverTrades.length <= 2 || // default dummy trades
-        localTrades.length > serverTrades.length ||
-        (localIds.length > 0 && !serverIds.includes(localIds[0]))
-    );
-    
-    if (needsRestore && localTrades.length > serverTrades.length) {
-        console.log("Restoring paper trades from local storage backup...");
-        try {
-            const resp = await fetch('/api/journal/sync', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ trades: localTrades })
-            });
-            const res = await resp.json();
-            if (res.status === "SUCCESS") {
-                return res.trades || [];
-            }
-        } catch (err) {
-            console.error("Failed syncing journal backup:", err);
+        if (serverTrades && Array.isArray(serverTrades)) {
+            safeStorage.setItem('nifty_journal_trades', JSON.stringify(serverTrades));
         }
-    } else {
-        // Save current server trades to local storage as backup
-        safeStorage.setItem('nifty_journal_trades', JSON.stringify(serverTrades));
+    } catch (e) {
+        console.error("Failed to sync storage:", e);
     }
     return serverTrades;
 }
 
-// Synchronize client settings configuration with server (backup & restore)
-async function syncSettingsWithServer(serverSettings) {
-    let localSettings = null;
-    try {
-        localSettings = JSON.parse(safeStorage.getItem('nifty_settings'));
-        if (localSettings && localSettings.scalper_mode === undefined) {
-            console.log("🧹 Outdated settings backup detected (missing scalper_mode). Clearing local cache...");
-            safeStorage.removeItem('nifty_settings');
-            localSettings = null;
-        }
-    } catch (e) {}
-    
-    // Check if server settings have empty token, but local storage has a token
-    const serverToken = serverSettings.upstox_access_token;
-    const localToken = localSettings ? localSettings.upstox_access_token : "";
-    
-    const needsRestore = localSettings && (
-        (localToken && !serverToken) ||
-        (localSettings.capital && localSettings.capital !== serverSettings.capital) ||
-        (localSettings.risk_pct && localSettings.risk_pct !== serverSettings.risk_pct)
-    );
-    
-    if (needsRestore) {
-        console.log("Restoring dashboard settings from local storage backup...");
-        try {
-            const resp = await fetch('/api/settings', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(localSettings)
-            });
-            const res = await resp.json();
-            if (res.status === "SUCCESS") {
-                return localSettings;
-            }
-        } catch (err) {
-            console.error("Failed syncing settings backup:", err);
-        }
-    } else {
-        // Save current server settings to local storage as backup
-        const cleanSettings = { ...serverSettings };
-        delete cleanSettings.upcoming_expiry_dates; // Keep clean
-        safeStorage.setItem('nifty_settings', JSON.stringify(cleanSettings));
-    }
-    return serverSettings;
-}
-
-// Fetch and draw Paper/Live Trading lists
 async function fetchJournal() {
     try {
         const resp = await fetch('/api/journal');
