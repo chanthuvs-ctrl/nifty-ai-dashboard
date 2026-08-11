@@ -985,18 +985,18 @@ class SimulationState:
         elif strategy == "Bear Call Spread":
             legs_to_order.append({"strike": atm_strike, "option_type": "CE", "action": "SELL"})
             legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "BUY"})
-        elif strategy == "Short Strangle" or strategy == "Short Straddle":
+        elif strategy == "Buy CE" or strategy == "Buy CE":
             # Scan all OTM strikes with target ₹2.00 / strictly < ₹5.00
             hedge_call_strike, hedge_put_strike = self.find_hedge_strikes(atm_strike, strike_interval)
             
-            sell_call_strike = atm_strike + strike_interval if strategy == "Short Strangle" else atm_strike
-            sell_put_strike = atm_strike - strike_interval if strategy == "Short Strangle" else atm_strike
+            sell_call_strike = atm_strike + strike_interval if strategy == "Buy CE" else atm_strike
+            sell_put_strike = atm_strike - strike_interval if strategy == "Buy CE" else atm_strike
             
             legs_to_order.append({"strike": hedge_call_strike, "option_type": "CE", "action": "BUY"})
             legs_to_order.append({"strike": hedge_put_strike, "option_type": "PE", "action": "BUY"})
             legs_to_order.append({"strike": sell_call_strike, "option_type": "CE", "action": "SELL"})
             legs_to_order.append({"strike": sell_put_strike, "option_type": "PE", "action": "SELL"})
-        elif strategy == "Iron Condor":
+        elif strategy == "Buy PE":
             legs_to_order.append({"strike": atm_strike + strike_interval, "option_type": "CE", "action": "SELL"})
             legs_to_order.append({"strike": atm_strike + 2*strike_interval, "option_type": "CE", "action": "BUY"})
             legs_to_order.append({"strike": atm_strike - strike_interval, "option_type": "PE", "action": "SELL"})
@@ -2086,9 +2086,9 @@ class SimulationState:
                 reasoning_list = reasons_neutral
                 negation_list = reasons_bullish + reasons_bearish
                 if self.vix > 18.0:
-                    primary_rec = "Iron Condor"
+                    primary_rec = "Buy PE"
                 else:
-                    primary_rec = "Short Strangle"
+                    primary_rec = "Buy CE" if self.spot_price >= self.ema_20 else "Buy PE"
             
             # Rule: If confidence is below 65%, force NO TRADE.
             if confidence_pct < 65.0:
@@ -2124,17 +2124,17 @@ class SimulationState:
                 if not is_bullish_confirmed:
                     reasoning_list.append(f"⚠️ Bullish signal '{primary_rec}' blocked: Mismatched MTF trend (15m: {trend_15m}, 5m: {trend_5m}, 1m: {trend_1m}). Locked to Sideways.")
                     if self.vix > 18.0:
-                        primary_rec = "Iron Condor"
+                        primary_rec = "Buy PE"
                     else:
-                        primary_rec = "Short Strangle"
+                        primary_rec = "Buy CE" if self.spot_price >= self.ema_20 else "Buy PE"
                     confidence_pct = 70.0
             elif primary_rec in ["Buy PE", "Bear Put Spread", "Bear Call Spread"]:
                 if not is_bearish_confirmed:
                     reasoning_list.append(f"⚠️ Bearish signal '{primary_rec}' blocked: Mismatched MTF trend (15m: {trend_15m}, 5m: {trend_5m}, 1m: {trend_1m}). Locked to Sideways.")
                     if self.vix > 18.0:
-                        primary_rec = "Iron Condor"
+                        primary_rec = "Buy PE"
                     else:
-                        primary_rec = "Short Strangle"
+                        primary_rec = "Buy CE" if self.spot_price >= self.ema_20 else "Buy PE"
                     confidence_pct = 70.0
 
         # Apply Stability Filter
@@ -2176,12 +2176,12 @@ class SimulationState:
                 primary_rec = "No Trade"
                 confidence_pct = 50.0
         elif pref == "Option Selling Only":
-            if primary_rec not in ["Short Strangle", "Iron Condor", "Short Straddle", "No Trade"]:
+            if primary_rec not in ["Buy CE", "Buy PE", "Buy CE", "No Trade"]:
                 reasoning_list.append(f"🔒 Strategy '{primary_rec}' blocked by preference: Option Selling Only. Falling back to No Trade.")
                 primary_rec = "No Trade"
                 confidence_pct = 50.0
         elif pref == "Spreads Only":
-            if primary_rec not in ["Bull Call Spread", "Bear Put Spread", "Bull Put Spread", "Bear Call Spread", "Iron Condor", "No Trade"]:
+            if primary_rec not in ["Bull Call Spread", "Bear Put Spread", "Bull Put Spread", "Bear Call Spread", "Buy PE", "No Trade"]:
                 reasoning_list.append(f"🔒 Strategy '{primary_rec}' blocked by preference: Spreads Only. Falling back to No Trade.")
                 primary_rec = "No Trade"
                 confidence_pct = 50.0
@@ -2473,7 +2473,7 @@ class SimulationState:
             active_pos = self.strategy_positions.get(strat_key)
 
             # ENTRY EVALUATION (Strategy has no open trade)
-            if active_pos is None and signal in ["Buy CE", "Buy PE", "Short Strangle"]:
+            if active_pos is None and signal in ["Buy CE", "Buy PE", "Buy CE"]:
                 self._execute_independent_strategy_entry(strat_key, s_data, is_live_deploy)
                 self.strategy_cooldowns[strat_key] = now
 
@@ -2610,7 +2610,7 @@ class SimulationState:
             elif spot >= sl and sl > 0:
                 should_exit = True
                 reason = f"Stop Loss Hit @ ₹{spot:.1f}"
-        elif sig == "Short Strangle":
+        elif sig == "Buy CE":
             if abs(spot - pos["entry_spot"]) > 50.0:
                 should_exit = True
                 reason = f"Strangle Range Exit @ ₹{spot:.1f}"
@@ -2880,7 +2880,7 @@ def calculate_trade_initial_risk(trade, capital):
             return {
                 "name": "IT Jegan Strategy (Capital Zone)",
                 "key": "it_jegan",
-                "signal": "Short Strangle",
+                "signal": "Buy CE",
                 "status": "RANGEBOUND THETA DECAY (STRANGLE)",
                 "confidence": 85.0,
                 "vwap": round(vwap_val, 2),
@@ -3016,7 +3016,7 @@ def calculate_trade_initial_risk(trade, capital):
             active_pos = self.strategy_positions.get(strat_key)
 
             # ENTRY EVALUATION (Strategy has no open trade)
-            if active_pos is None and signal in ["Buy CE", "Buy PE", "Short Strangle"]:
+            if active_pos is None and signal in ["Buy CE", "Buy PE", "Buy CE"]:
                 self._execute_independent_strategy_entry(strat_key, s_data, is_live_deploy)
                 self.strategy_cooldowns[strat_key] = now
 
@@ -3089,7 +3089,7 @@ def calculate_trade_initial_risk(trade, capital):
             elif spot >= sl and sl > 0:
                 should_exit = True
                 reason = f"Stop Loss Hit @ ₹{spot:.1f}"
-        elif sig == "Short Strangle":
+        elif sig == "Buy CE":
             if abs(spot - pos["entry_spot"]) > 50.0:
                 should_exit = True
                 reason = f"Strangle Range Exit @ ₹{spot:.1f}"
@@ -3358,7 +3358,7 @@ def calculate_trade_initial_risk(trade, capital):
             return {
                 "name": "IT Jegan Strategy (Capital Zone)",
                 "key": "it_jegan",
-                "signal": "Short Strangle",
+                "signal": "Buy CE",
                 "status": "RANGEBOUND THETA DECAY (STRANGLE)",
                 "confidence": 85.0,
                 "vwap": round(vwap_val, 2),
@@ -3995,13 +3995,13 @@ def get_market_data():
 
     expected_move = spot * (state.vix / 100.0) / math.sqrt(252)
 
-    secondary_rec = "Short Strangle"
-    tertiary_rec = "Iron Condor"
+    secondary_rec = "Buy CE"
+    tertiary_rec = "Buy PE"
     if "Buy" in state.current_recommendation:
         secondary_rec = "Bull Put Spread" if "CE" in state.current_recommendation else "Bear Call Spread"
         tertiary_rec = "No Trade"
     elif "Strangle" in state.current_recommendation:
-        secondary_rec = "Iron Condor"
+        secondary_rec = "Buy PE"
         tertiary_rec = "No Trade"
 
     # Determine lot sizing based on max 2% trade limit risk & margins

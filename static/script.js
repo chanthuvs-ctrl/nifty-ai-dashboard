@@ -404,7 +404,7 @@ function updateStrategyLegs(data) {
         
         html = makeLegCard("Leg 1 (Short)", "SELL", sellStrike, "CE", sellLtp, sellKey) +
                makeLegCard("Leg 2 (Long)", "BUY", buyStrike, "CE", buyLtp, buyKey);
-    } else if (rec === "Short Strangle") {
+    } else if (rec === "Buy CE") {
         const peStrike = atm - 100;
         const ceStrike = atm + 100;
         const peLtp = getStrikeLTP(chain, peStrike, 'PE');
