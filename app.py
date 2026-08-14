@@ -1533,14 +1533,22 @@ class SimulationState:
             # Upstox API call succeeded — mark token as VALID!
             self.upstox_token_status = "VALID"
 
-            # Fetch official Upstox market quote for 100% accurate net_change & change_pct matching Upstox Pro app
+            # Fetch official Upstox market quote for Futures price & accurate net_change
             try:
+                future_key = get_future_instrument_key(preferred_index)
+                fetch_keys = f"{instrument_key},{future_key}" if future_key else instrument_key
+                
                 q_url = "https://api.upstox.com/v2/market-quote/quotes"
-                q_resp = requests.get(q_url, headers=headers, params={"instrument_key": instrument_key}, timeout=3)
+                q_resp = requests.get(q_url, headers=headers, params={"instrument_key": fetch_keys}, timeout=3)
                 if q_resp.status_code == 200 and q_resp.json().get("status") == "success":
                     q_data = q_resp.json().get("data", {})
-                    key_alt = instrument_key.replace("|", ":")
-                    q_info = q_data.get(instrument_key) or q_data.get(key_alt)
+                    
+                    # Determine which key to extract info from (Prioritize Futures)
+                    target_q_key = future_key if future_key else instrument_key
+                    key_alt = target_q_key.replace("|", ":") if target_q_key else ""
+                    
+                    q_info = q_data.get(target_q_key) or q_data.get(key_alt)
+                    
                     if q_info:
                         upstox_last = float(q_info.get("last_price", self.spot_price))
                         upstox_change = float(q_info.get("net_change", 0.0))
@@ -1550,6 +1558,10 @@ class SimulationState:
                             self.prev_close_baseline = round(upstox_last - upstox_change, 2)
                             if self.prev_close_baseline > 0:
                                 self.intraday_change_pct = round((self.intraday_change_val / self.prev_close_baseline) * 100.0, 2)
+                                
+                            # Update label to reflect Future
+                            idx_str = "SENSEX" if preferred_index.lower() == "sensex" else "NSE"
+                            self.price_source = f"Upstox Live Feed ({idx_str} Futures)" if future_key else f"Upstox Live Feed ({idx_str} Spot)"
             except Exception as _q_err:
                 print(f"⚠️ Upstox market quote fetch warning: {_q_err}")
 
