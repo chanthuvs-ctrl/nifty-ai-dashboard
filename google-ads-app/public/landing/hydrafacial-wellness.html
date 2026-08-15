@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HydraFacial MD, Peels & Wellness Drips | De Natura Aesthetics Trivandrum</title>
+  <meta name="description" content="Medical-grade HydraFacial MD, chemical peels, & cellular detox wellness infusions at De Natura Aesthetics Trivandrum. Consultation fee ₹300. Call 8137093028.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="landing.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="#" class="brand-logo">
+      <i class="fa-solid fa-spa"></i>
+      <div>
+        <span class="brand-name">De Natura Aesthetics</span>
+        <span class="brand-tag">Trivandrum Skin & Wellness Center</span>
+      </div>
+    </a>
+
+    <div class="location-pill">
+      <i class="fa-solid fa-location-dot" style="color:var(--gold);"></i> Trivandrum, Kerala
+    </div>
+
+    <div class="nav-contacts">
+      <a href="https://wa.me/918137093028?text=Hi%20De%20Natura%20Aesthetics,%20I%20want%20to%20book%20a%20HydraFacial%20Consultation" target="_blank" class="btn-whatsapp">
+        <i class="fa-brands fa-whatsapp"></i> WhatsApp 8137093028
+      </a>
+      <a href="#book-form" class="btn-gold"><i class="fa-solid fa-calendar-check"></i> Book Doctor Consult (₹300)</a>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-left">
+      <span class="hero-badge"><i class="fa-solid fa-sparkles"></i> Deep Medical Glow Therapy</span>
+      <h1 class="hero-title">Instant Skin Radiance With <span>HydraFacial MD & Peels</span></h1>
+      <p class="hero-desc">Trivandrum's premier medical facial center. Unclog pores, extract impurities, and infuse nourishing antioxidant serums for healthy glowing skin.</p>
+      
+      <!-- Visual Clinic Hero Image -->
+      <div class="hero-image-frame">
+        <img src="assets/hero_glutathione.jpg" alt="De Natura HydraFacial Suite Trivandrum">
+        <div class="image-overlay-badge">
+          <i class="fa-solid fa-droplet" style="color:var(--gold);"></i> Deep Pore Extraction & Hydration
+        </div>
+      </div>
+    </div>
+
+    <!-- Booking Card -->
+    <div class="hero-right" id="book-form">
+      <div class="form-card">
+        <span class="fee-tag"><i class="fa-solid fa-user-doctor"></i> Doctor Consultation Fee: ₹300</span>
+        <div class="form-header">
+          <h3>Schedule Facial Assessment</h3>
+          <p>Book a confidential skin analysis at our Trivandrum clinic.</p>
+        </div>
+        <form onsubmit="handleFormSubmit(event)">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" required placeholder="e.g. Meera Pillai" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Phone Number (for appointment call)</label>
+            <input type="tel" required placeholder="+91 81370 93028" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Select Treatment</label>
+            <select class="form-select">
+              <option value="HYDRAFACIAL_SIGNATURE">HydraFacial MD Signature Cleanse</option>
+              <option value="GLOW_CHEMICAL_PEEL">Dermatologist Chemical Glow Peel</option>
+              <option value="DETOX_WELLNESS_DRIP">Cellular Detox & Immunity Infusion</option>
+            </select>
+          </div>
+          <button type="submit" class="btn-gold full-width" style="width:100%; font-size:16px; margin-top:10px;">
+            <i class="fa-solid fa-calendar-check"></i> Book Consultation (₹300)
+          </button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sticky Mobile Bar -->
+  <div class="sticky-bar">
+    <div class="sticky-text">
+      <span>HydraFacial & Peels Trivandrum</span>
+      <strong>Doctor Consult Fee ₹300 | Call 8137093028</strong>
+    </div>
+    <a href="tel:+918137093028" class="btn-gold"><i class="fa-solid fa-phone"></i> Call Now</a>
+  </div>
+
+  <!-- Floating WhatsApp Button -->
+  <a href="https://wa.me/918137093028?text=Hi%20De%20Natura%20Aesthetics,%20I%20want%20to%20book%20a%20HydraFacial%20Consultation" target="_blank" class="whatsapp-float">
+    <i class="fa-brands fa-whatsapp"></i>
+  </a>
+
+  <footer class="footer">
+    <p>&copy; 2026 De Natura Aesthetics Clinic, Trivandrum. Contact: +91 8137 093 028 | <a href="https://www.denaturaaesthetics.com">www.denaturaaesthetics.com</a></p>
+  </footer>
+
+  <script>
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      alert("🎉 Appointment Request Received!\nOur De Natura clinic team in Trivandrum will call you at +91 81370 93028 within 15 minutes to confirm your appointment.");
+    }
+  </script>
+</body>
+</html>

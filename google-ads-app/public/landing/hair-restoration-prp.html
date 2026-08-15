@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hair Transplant & GFC Hair Restoration | De Natura Aesthetics Trivandrum</title>
+  <meta name="description" content="100% Surgeon-performed Hair Transplant starting from ₹34,999 & Exosome GFC hair regrowth therapy at De Natura Aesthetics Trivandrum. Call 8137093028.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="landing.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="#" class="brand-logo">
+      <i class="fa-solid fa-spa"></i>
+      <div>
+        <span class="brand-name">De Natura Aesthetics</span>
+        <span class="brand-tag">Trivandrum Hair & Aesthetic Clinic</span>
+      </div>
+    </a>
+
+    <div class="location-pill">
+      <i class="fa-solid fa-location-dot" style="color:var(--gold);"></i> Trivandrum, Kerala
+    </div>
+
+    <div class="nav-contacts">
+      <a href="https://wa.me/918137093028?text=Hi%20De%20Natura%20Aesthetics,%20I%20want%20to%20book%20a%20Hair%20Consultation" target="_blank" class="btn-whatsapp">
+        <i class="fa-brands fa-whatsapp"></i> WhatsApp 8137093028
+      </a>
+      <a href="#book-form" class="btn-gold"><i class="fa-solid fa-calendar-check"></i> Book Doctor Consult (₹300)</a>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-left">
+      <span class="hero-badge"><i class="fa-solid fa-crown"></i> 100% Surgeon-Performed Hair Restoration</span>
+      <h1 class="hero-title">Restore Your Hairline. <span>Renew Your Confidence.</span></h1>
+      <p class="hero-desc">Trivandrum's premier hair clinic for <strong>Hair Transplants starting from ₹34,999</strong> and advanced <strong>Exosome & Growth Factor (GFC) Therapies</strong>.</p>
+      
+      <!-- Visual Feature Banner -->
+      <div class="hero-image-frame">
+        <img src="assets/poster_hairline_transplant.jpg" alt="De Natura Hairline Transplant Transformation Trivandrum">
+        <div class="image-overlay-badge">
+          <i class="fa-solid fa-check-double" style="color:var(--gold);"></i> Certified Aesthetic Surgeons & Trichologists
+        </div>
+      </div>
+    </div>
+
+    <!-- Booking Card -->
+    <div class="hero-right" id="book-form">
+      <div class="form-card">
+        <span class="fee-tag"><i class="fa-solid fa-user-doctor"></i> Doctor Consultation Fee: ₹300</span>
+        <div class="form-header">
+          <h3>Schedule Your Clinic Visit</h3>
+          <p>Book a confidential hair & scalp assessment at our Trivandrum clinic.</p>
+        </div>
+        <form onsubmit="handleFormSubmit(event)">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" required placeholder="e.g. Rahul Nair" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Phone Number (for confirmation call)</label>
+            <input type="tel" required placeholder="+91 81370 93028" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Interested Treatment Package</label>
+            <select class="form-select">
+              <option value="TRANSPLANT_34999">Hair Transplant Offer (Starting ₹34,999)</option>
+              <option value="ADVANCED_GFC">Advanced GFC Package (₹5,999 / Session + Free GFC)</option>
+              <option value="EXOSOME_GFC">Exosome GFC Treatment (₹8,500 / Session + 1 Free)</option>
+              <option value="FOLLIRICH_GFC">Follirich GFC Treatment (₹21,999 3-Session)</option>
+            </select>
+          </div>
+          <button type="submit" class="btn-gold full-width" style="width:100%; font-size:16px; margin-top:10px;">
+            <i class="fa-solid fa-calendar-check"></i> Book Consultation (₹300)
+          </button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- Visual Promotional Posters Section -->
+  <section class="section">
+    <div class="section-header">
+      <h2>Special Clinic Offer Packages</h2>
+      <p>Exclusive hair regrowth & transplant deals available at De Natura Aesthetics Trivandrum.</p>
+    </div>
+
+    <div class="posters-grid">
+      <!-- Poster 1: Hair Transplant Grafts -->
+      <div class="poster-card">
+        <img src="assets/poster_grafts_transplant.jpg" alt="De Natura Hair Transplant Graft Packages">
+        <div class="poster-info">
+          <div class="poster-title">100% Surgeon-Performed Hair Transplant</div>
+          <p class="poster-desc">Full natural density hairline reconstruction performed by expert aesthetic surgeons.</p>
+          <div class="freebie-tag"><i class="fa-solid fa-gift"></i> FREE PRP/GFC Sessions + FREE 7-Day Medicine Kit</div>
+        </div>
+      </div>
+
+      <!-- Poster 2: Advanced GFC Treatment -->
+      <div class="poster-card">
+        <img src="assets/poster_advanced_gfc.jpg" alt="De Natura Advanced GFC Hair Treatment">
+        <div class="poster-info">
+          <div class="poster-title">Advanced GFC Scalp Therapy</div>
+          <p class="poster-desc">Autologous Growth Factor Concentrate micro-injections for intense hair fall reduction.</p>
+          <div class="freebie-tag"><i class="fa-solid fa-gift"></i> GET NORMAL GFC WORTH ₹5000 FREE with 3-Session Package</div>
+        </div>
+      </div>
+
+      <!-- Poster 3: Exosome & Follirich GFC -->
+      <div class="poster-card">
+        <img src="assets/poster_exosome_gfc.jpg" alt="De Natura Exosome GFC Treatment">
+        <div class="poster-info">
+          <div class="poster-title">Exosome & Follirich GFC Therapy</div>
+          <p class="poster-desc">Cellular stem cell exosome technology to reactivate dormant hair follicles.</p>
+          <div class="freebie-tag"><i class="fa-solid fa-gift"></i> GET 1 GFC FREE with 3-Session Package</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing Breakdown Cards -->
+  <section class="section">
+    <div class="section-header">
+      <h2>Transparent Hair Transplant & GFC Pricing</h2>
+      <p>No hidden charges. Doctor consultation fee ₹300 at our Trivandrum clinic.</p>
+    </div>
+
+    <div class="packages-grid">
+      <!-- Hair Transplant Offer -->
+      <div class="package-card popular">
+        <span class="popular-badge">Top Transplant Offer</span>
+        <div class="package-name">Surgeon Hair Transplant</div>
+        <div class="package-price">₹34,999 <span>/ Starting Price</span></div>
+        <div class="freebie-tag"><i class="fa-solid fa-gift"></i> Includes FREE PRP/GFC + 7-Day Medicine Kit</div>
+        <ul class="package-features">
+          <li><i class="fa-solid fa-check"></i> Up to 2,000 Grafts: <strong>₹35,000</strong></li>
+          <li><i class="fa-solid fa-check"></i> Up to 2,500 Grafts: <strong>₹48,000</strong></li>
+          <li><i class="fa-solid fa-check"></i> Up to 3,000 Grafts: <strong>₹62,000</strong></li>
+          <li><i class="fa-solid fa-check"></i> Up to 3,500 Grafts: <strong>₹72,000</strong></li>
+          <li><i class="fa-solid fa-check"></i> 100% Surgeon-Performed FUE</li>
+        </ul>
+        <a href="https://wa.me/918137093028?text=Hi%20I%20want%20to%20book%20Hair%20Transplant%20at%20Trivandrum" target="_blank" class="btn-gold"><i class="fa-brands fa-whatsapp"></i> Book Hair Transplant</a>
+      </div>
+
+      <!-- Advanced GFC Package -->
+      <div class="package-card">
+        <div class="package-name">Advanced GFC Therapy</div>
+        <div class="package-price"><span class="old-price">₹19,500</span> ₹15,999 <span>/ 3 Sessions</span></div>
+        <div class="freebie-tag"><i class="fa-solid fa-gift"></i> GET NORMAL GFC WORTH ₹5000 FREE</div>
+        <ul class="package-features">
+          <li><i class="fa-solid fa-check"></i> Single Session: <span class="old-price">₹6,500</span> <strong>₹5,999</strong></li>
+          <li><i class="fa-solid fa-check"></i> Two Sessions: <span class="old-price">₹13,500</span> <strong>₹11,499</strong></li>
+          <li><i class="fa-solid fa-check"></i> Three Sessions: <span class="old-price">₹19,500</span> <strong>₹15,999</strong></li>
+          <li><i class="fa-solid fa-check"></i> Concentrated Autologous Growth Factors</li>
+        </ul>
+        <a href="https://wa.me/918137093028?text=Hi%20I%20want%20Advanced%20GFC%20Package" target="_blank" class="btn-gold"><i class="fa-brands fa-whatsapp"></i> Claim GFC Offer</a>
+      </div>
+
+      <!-- Exosome / Follirich GFC -->
+      <div class="package-card">
+        <div class="package-name">Exosome / Follirich GFC</div>
+        <div class="package-price">₹21,999 <span>/ 3 Sessions</span></div>
+        <div class="freebie-tag"><i class="fa-solid fa-gift"></i> GET 1 GFC SESSION FREE</div>
+        <ul class="package-features">
+          <li><i class="fa-solid fa-check"></i> Single Session: <strong>₹8,500</strong></li>
+          <li><i class="fa-solid fa-check"></i> 3 Session Package: <strong>₹21,999</strong></li>
+          <li><i class="fa-solid fa-check"></i> Stem Cell Exosome Scalp Infusion</li>
+          <li><i class="fa-solid fa-check"></i> Computerized Trichology Assessment</li>
+        </ul>
+        <a href="https://wa.me/918137093028?text=Hi%20I%20want%20Exosome%20GFC%20Offer" target="_blank" class="btn-gold"><i class="fa-brands fa-whatsapp"></i> Claim Exosome Offer</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sticky Mobile CTA Bar -->
+  <div class="sticky-bar">
+    <div class="sticky-text">
+      <span>Hair Transplant & GFC Trivandrum</span>
+      <strong>Consultation Fee ₹300 | Call 8137093028</strong>
+    </div>
+    <a href="tel:+918137093028" class="btn-gold"><i class="fa-solid fa-phone"></i> Call Now</a>
+  </div>
+
+  <!-- Floating WhatsApp Button -->
+  <a href="https://wa.me/918137093028?text=Hi%20De%20Natura%20Aesthetics,%20I%20want%20to%20book%20a%20Hair%20Consultation" target="_blank" class="whatsapp-float">
+    <i class="fa-brands fa-whatsapp"></i>
+  </a>
+
+  <footer class="footer">
+    <p>&copy; 2026 De Natura Aesthetics Clinic, Trivandrum. Contact: +91 8137 093 028 | <a href="https://www.denaturaaesthetics.com">www.denaturaaesthetics.com</a></p>
+  </footer>
+
+  <script>
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      alert("🎉 Appointment Request Received!\nOur De Natura clinic team in Trivandrum will call you at +91 81370 93028 within 15 minutes to confirm your appointment.");
+    }
+  </script>
+</body>
+</html>

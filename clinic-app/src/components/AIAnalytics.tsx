@@ -60,6 +60,23 @@ export default function AIAnalytics() {
   const [incomeCategorySearchTerm, setIncomeCategorySearchTerm] = useState('');
 
   const [transactions, setTransactions] = useState<any[]>([]);
+  const availableMonths = useMemo(() => {
+    const ymSet = new Set<string>();
+    // Always include current month
+    const now = new Date();
+    ymSet.add(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+    // Derive all months from loaded transactions
+    transactions.forEach((t: any) => {
+      const d = String(t.date || '');
+      if (d.length >= 7 && /^\d{4}-\d{2}/.test(d)) ymSet.add(d.slice(0, 7));
+    });
+    return Array.from(ymSet).sort().reverse().map(ym => {
+      const [y, m] = ym.split('-');
+      const label = new Date(parseInt(y), parseInt(m) - 1, 1)
+        .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      return { ym, label };
+    });
+  }, [transactions]);
 
   // -------------------------------------------------------------
   // New Customer Acquisition & Patient LTV Intelligence
@@ -120,7 +137,8 @@ export default function AIAnalytics() {
       const descLower = String(t.description || '').toLowerCase();
       const amt = parseFloat(t.amount) || 0;
 
-      const isConsult = catLower.includes('consult') || descLower.includes('consult') || catLower.includes('opd');
+      // Match all consult shorthand: 'con', 'cons', 'consul', 'consult', 'consultation', 'con for ht', etc.
+      const isConsult = catLower.includes('consult') || descLower.includes('consult') || catLower.includes('opd') || catLower === 'con' || catLower.startsWith('con ') || /^con[sult]/.test(catLower);
       const is300 = amt === 300 || String(t.rate || '').includes('300') || descLower.includes('300');
 
       if (isConsult && is300) {
@@ -488,14 +506,10 @@ export default function AIAnalytics() {
               <option value="current_fy">FY 2026–27 (Apr 2026 – Mar 2027)</option>
               <option value="prev_fy">FY 2025–26 (Apr 2025 – Mar 2026)</option>
               <option value="current_quarter">Q3 2026 (Jul–Sep 2026)</option>
-              <optgroup label="2026 Monthly Breakdown">
-                <option value="month_2026-04">📅 April 2026</option>
-                <option value="month_2026-05">📅 May 2026</option>
-                <option value="month_2026-06">📅 June 2026</option>
-                <option value="month_2026-07">📅 July 2026</option>
-                <option value="month_2026-03">📅 March 2026</option>
-                <option value="month_2026-02">📅 February 2026</option>
-                <option value="month_2026-01">📅 January 2026</option>
+              <optgroup label="Monthly Breakdown">
+                {availableMonths.map(m => (
+                  <option key={m.ym} value={`month_${m.ym}`}>📅 {m.label}</option>
+                ))}
               </optgroup>
               <option value="all">All Time Historical (2024–2026)</option>
               <option value="custom">Custom Range</option>

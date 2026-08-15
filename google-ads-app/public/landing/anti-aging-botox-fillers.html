@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anti-Aging, Botox & Fillers | De Natura Aesthetics Trivandrum</title>
+  <meta name="description" content="Wrinkle reduction, lip plumping, dermal fillers & facial rejuvenation by expert dermatologists at De Natura Aesthetics Trivandrum. Consultation fee ₹300. Call 8137093028.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="landing.css">
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <a href="#" class="brand-logo">
+      <i class="fa-solid fa-spa"></i>
+      <div>
+        <span class="brand-name">De Natura Aesthetics</span>
+        <span class="brand-tag">Trivandrum Facial Aesthetic Clinic</span>
+      </div>
+    </a>
+
+    <div class="location-pill">
+      <i class="fa-solid fa-location-dot" style="color:var(--gold);"></i> Trivandrum, Kerala
+    </div>
+
+    <div class="nav-contacts">
+      <a href="https://wa.me/918137093028?text=Hi%20De%20Natura%20Aesthetics,%20I%20want%20to%20book%20a%20Botox/Filler%20Consultation" target="_blank" class="btn-whatsapp">
+        <i class="fa-brands fa-whatsapp"></i> WhatsApp 8137093028
+      </a>
+      <a href="#book-form" class="btn-gold"><i class="fa-solid fa-calendar-check"></i> Book Doctor Consult (₹300)</a>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-left">
+      <span class="hero-badge"><i class="fa-solid fa-gem"></i> Natural Looking Rejuvenation</span>
+      <h1 class="hero-title">Turn Back Time With <span>Botox & Dermal Fillers</span></h1>
+      <p class="hero-desc">Trivandrum's top doctor-administered anti-aging clinic. Smooth frown lines, plump thinning lips, and define jawline contours seamlessly.</p>
+      
+      <!-- Visual Hero Image -->
+      <div class="hero-image-frame">
+        <img src="assets/hero_botox.jpg" alt="De Natura Doctor Consultation Suite Trivandrum">
+        <div class="image-overlay-badge">
+          <i class="fa-solid fa-user-doctor" style="color:var(--gold);"></i> Performed Exclusively by Certified Aesthetic Physicians
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-right" id="book-form">
+      <div class="form-card">
+        <span class="fee-tag"><i class="fa-solid fa-user-doctor"></i> Doctor Consultation Fee: ₹300</span>
+        <div class="form-header">
+          <h3>Schedule Facial Assessment</h3>
+          <p>Book a private facial rejuvenation evaluation at our Trivandrum clinic.</p>
+        </div>
+        <form onsubmit="handleFormSubmit(event)">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" required placeholder="e.g. Priya Nair" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Phone Number (for confirmation call)</label>
+            <input type="tel" required placeholder="+91 81370 93028" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Target Treatment Area</label>
+            <select class="form-select">
+              <option value="BOTOX_WRINKLES">Anti-Wrinkle Botox (Forehead / Crow's Feet)</option>
+              <option value="DERMAL_FILLERS">Dermal Fillers (Lips / Cheeks / Under Eye)</option>
+              <option value="FULL_FACE_REJUV">Full Face Lift & Contour Package</option>
+            </select>
+          </div>
+          <button type="submit" class="btn-gold full-width" style="width:100%; font-size:16px; margin-top:10px;">
+            <i class="fa-solid fa-calendar-check"></i> Book Doctor Consultation (₹300)
+          </button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sticky Mobile Bar -->
+  <div class="sticky-bar">
+    <div class="sticky-text">
+      <span>De Natura Anti-Aging & Botox Trivandrum</span>
+      <strong>Doctor Consult Fee ₹300 | Call 8137093028</strong>
+    </div>
+    <a href="tel:+918137093028" class="btn-gold"><i class="fa-solid fa-phone"></i> Call Now</a>
+  </div>
+
+  <!-- Floating WhatsApp Button -->
+  <a href="https://wa.me/918137093028?text=Hi%20De%20Natura%20Aesthetics,%20I%20want%20to%20book%20a%20Botox/Filler%20Consultation" target="_blank" class="whatsapp-float">
+    <i class="fa-brands fa-whatsapp"></i>
+  </a>
+
+  <footer class="footer">
+    <p>&copy; 2026 De Natura Aesthetics Clinic, Trivandrum. Contact: +91 8137 093 028 | <a href="https://www.denaturaaesthetics.com">www.denaturaaesthetics.com</a></p>
+  </footer>
+
+  <script>
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      alert("🎉 Consultation Request Received!\nOur De Natura aesthetic doctor in Trivandrum will call you at +91 81370 93028 within 15 minutes.");
+    }
+  </script>
+</body>
+</html>

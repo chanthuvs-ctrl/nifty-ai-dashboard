@@ -7,9 +7,10 @@ import { collection, writeBatch, doc } from 'firebase/firestore';
 import { 
   LogOut, Sparkles, DollarSign, Users, Calendar, FileText, Mail, Menu, X, UserCheck, 
   Bell, Search, ChevronRight, Shield, Check, AlertTriangle, Loader2
-, FolderOpen, Table2} from 'lucide-react';
+, FolderOpen, Table2, Target} from 'lucide-react';
 
 import AIAnalytics from './AIAnalytics';
+import AdAgencyAnalytics from './AdAgencyAnalytics';
 import IncomeExpenseTracker from './IncomeExpenseTracker';
 import StaffManagement from './StaffManagement';
 import LeaveManagement from './LeaveManagement';
@@ -19,7 +20,7 @@ import DocumentVault from './DocumentVault';
 import EmployeeDirectory from './EmployeeDirectory';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'income' | 'staff' | 'profiles' | 'leaves' | 'payslips' | 'offerletter' | 'documents' | 'directory'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'income' | 'adagency' | 'staff' | 'profiles' | 'leaves' | 'payslips' | 'offerletter' | 'documents' | 'directory'>('analytics');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -115,6 +116,7 @@ export default function AdminDashboard() {
   const navItems = [
     { id: 'analytics', label: 'AI Analytics & Insights', icon: Sparkles, badge: 'AI Live' },
     { id: 'income', label: 'Income & Expenses', icon: DollarSign, badge: 'Ledger' },
+    { id: 'adagency', label: 'Ad Agency Analytics', icon: Target, badge: 'Meta Ads' },
     { id: 'profiles', label: 'Employee Profiles & Docs', icon: UserCheck, badge: 'Vault' },
     { id: 'staff', label: 'Staff Directory', icon: Users, badge: 'Hikes' },
     { id: 'leaves', label: 'Leave Approvals', icon: Calendar, badge: 'Policy' },
@@ -239,6 +241,7 @@ export default function AdminDashboard() {
             </div>
             <h2 className='text-xl sm:text-2xl font-black text-white tracking-tight'>
               {activeTab === 'analytics' && 'AI Analytics & Pricing Intelligence'}
+              {activeTab === 'adagency' && 'Ad Agency Performance & Campaign Analytics'}
               {activeTab === 'income' && 'Income & Expense Tracker'}
               {activeTab === 'profiles' && 'Employee Profiles, Certificates & Resume Vault'}
               {activeTab === 'staff' && 'Staff Directory & Salary Hike Logger'}
@@ -269,6 +272,7 @@ export default function AdminDashboard() {
         {/* Tab Workspace Views */}
         <div className='space-y-6'>
           {activeTab === 'analytics' && <AIAnalytics />}
+          {activeTab === 'adagency' && <AdAgencyAnalytics />}
           {activeTab === 'income' && <IncomeExpenseTracker onStartBulkUpload={startBackgroundBulkUpload} bgUpload={bgUpload} />}
           {activeTab === 'profiles' && <EmployeeProfilesVault />}
           {activeTab === 'staff' && <StaffManagement />}

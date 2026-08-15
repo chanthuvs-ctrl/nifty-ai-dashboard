@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>De Natura Aesthetics - Google Ads & Landing Page Suite</title>
+  <meta name="description" content="Automated Google Ads manager, high-converting landing pages, & ROAS engine for De Natura Aesthetics Clinic Trivandrum.">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon"><i class="fa-solid fa-spa"></i></div>
+        <div class="brand-text">
+          <span class="brand-title">De Natura AI</span>
+          <span class="brand-subtitle">Trivandrum Ads Suite</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        
+        <button class="nav-item active" data-tab="daily-tracker">
+          <i class="fa-solid fa-calendar-day"></i>
+          <span>Daily Performance</span>
+        </button>
+
+        <button class="nav-item" data-tab="overview">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span>Overview</span>
+        </button>
+        <button class="nav-item" data-tab="revenue">
+          <i class="fa-solid fa-receipt"></i>
+          <span>Clinic Revenue (₹)</span>
+        </button>
+        <button class="nav-item" data-tab="campaigns">
+          <i class="fa-solid fa-rectangle-ad"></i>
+          <span>Campaign Studio</span>
+        </button>
+        <button class="nav-item" data-tab="landingpages">
+          <i class="fa-solid fa-laptop-code"></i>
+          <span>Landing Pages Hub</span>
+        </button>
+        <button class="nav-item" data-tab="rules">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span>Automation Rules</span>
+        </button>
+        <button class="nav-item" data-tab="keywords">
+          <i class="fa-solid fa-filter"></i>
+          <span>Negative Harvester</span>
+        </button>
+        <button class="nav-item" data-tab="logs">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+          <span>Execution Logs</span>
+        </button>
+        <button class="nav-item" data-tab="settings">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Google Ads Connect</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-status-card">
+        <div class="status-header">
+          <span class="pulse-dot"></span>
+          <span id="modeStatusText">SIMULATOR MODE (INR ₹)</span>
+        </div>
+        <p class="status-desc">De Natura AI active. Auto-optimizing clinic ad budgets.</p>
+        <button id="runRulesBtn" class="btn-action-glow">
+          <i class="fa-solid fa-bolt"></i> Run Automation Now
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+
+      <!-- Topbar Header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 id="pageTitle">Executive Overview</h1>
+          <p id="pageSubtitle">De Natura Aesthetics Trivandrum Google Ads performance, in-clinic revenue attribution, and ROAS optimization.</p>
+        </div>
+        <div class="topbar-actions">
+
+        <div class="user-profile-badge" id="userProfileBadge">
+          <span class="badge badge-gold" id="userRoleBadge"><i class="fa-solid fa-user-astronaut"></i> Alchemy Ads</span>
+          <button class="btn-icon" id="logoutBtn" title="Sign Out" onclick="handleLogout()"><i class="fa-solid fa-power-off"></i></button>
+        </div>
+
+          <button class="btn-secondary" id="refreshBtn">
+            <i class="fa-solid fa-rotate-right"></i> Sync Data
+          </button>
+          <button class="btn-primary" id="openNewCampaignBtn">
+            <i class="fa-solid fa-sparkles"></i> Auto-Build Campaign
+          </button>
+        </div>
+      </header>
+
+      <!-- TAB 1: OVERVIEW -->
+      
+      <!-- TAB: DAILY PERFORMANCE TRACKER -->
+      <section id="tab-daily-tracker" class="tab-panel active">
+        <!-- Daily KPI Summary Cards -->
+        <div class="kpi-grid">
+          <div class="kpi-card gradient-border">
+            <div class="kpi-icon icon-blue"><i class="fa-solid fa-users"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Total Unique Leads</span>
+              <h2 id="dtUniqueLeads">105</h2>
+              <span class="kpi-subtext positive"><i class="fa-solid fa-filter"></i> 163 Raw Submissions</span>
+            </div>
+          </div>
+
+          <div class="kpi-card gradient-border">
+            <div class="kpi-icon icon-purple"><i class="fa-solid fa-indian-rupee-sign"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Meta Ad Spend</span>
+              <h2 id="dtAdSpend">₹26,000</h2>
+              <span class="kpi-subtext positive"><i class="fa-solid fa-bullseye"></i> CPL: ₹247.62</span>
+            </div>
+          </div>
+
+          <div class="kpi-card gradient-border">
+            <div class="kpi-icon icon-amber"><i class="fa-solid fa-building-user"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Agency Fee (incl. GST)</span>
+              <h2 id="dtAgencyCost">₹29,500</h2>
+              <span class="kpi-subtext highlight"><i class="fa-solid fa-receipt"></i> ₹25k + 18% GST</span>
+            </div>
+          </div>
+
+          <div class="kpi-card gradient-border">
+            <div class="kpi-icon icon-emerald"><i class="fa-solid fa-cash-register"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Realized Clinic Revenue</span>
+              <h2 id="dtRevenue">₹30,394</h2>
+              <span class="kpi-subtext positive"><i class="fa-solid fa-check-circle"></i> 8 Paying Clients</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agency ROAS vs Overall Net Banner -->
+        <div class="banner-card banner-roas shadow-sm">
+          <div class="banner-metric">
+            <div class="metric-block">
+              <span class="metric-title">Standalone ROAS (Ad Spend Only)</span>
+              <span class="metric-value text-emerald">116.9% <font size="3">(+₹4,394 Net Profit)</font></span>
+            </div>
+            <div class="metric-divider"></div>
+            <div class="metric-block">
+              <span class="metric-title">Overall Campaign Deficit (incl. Agency Fee)</span>
+              <span class="metric-value text-rose">-₹25,106 <font size="3">(-45.2% ROI)</font></span>
+            </div>
+            <div class="metric-divider"></div>
+            <div class="metric-block">
+              <span class="metric-title">Cost Per Acquisition (CPA)</span>
+              <span class="metric-value text-gold">₹3,250 <font size="3">(Ad spend) / ₹6,937 (Overall)</font></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Daily Entry Form + Analytics Row -->
+        <div class="grid-2col" style="margin-top: 15px;">
+          <!-- Daily Performance Input Form -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-plus-circle"></i> Log Daily Ad Performance</h3>
+              <span class="badge badge-blue">Alchemy Ads Agency Portal</span>
+            </div>
+            <form id="addDailyLogForm" onsubmit="event.preventDefault(); submitDailyLog();">
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label>Log Date</label>
+                  <input type="date" id="dlDate" class="form-input" required>
+                </div>
+                <div class="form-group col-6">
+                  <label>Ad Platform</label>
+                  <select id="dlPlatform" class="form-input" required>
+                    <option value="Facebook">Facebook Ads</option>
+                    <option value="Instagram">Instagram Ads</option>
+                    <option value="Facebook & IG">Facebook & Instagram</option>
+                    <option value="Google Ads">Google Ads</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-4">
+                  <label>Raw Leads</label>
+                  <input type="number" id="dlLeadsRaw" class="form-input" placeholder="e.g. 5" min="0" required>
+                </div>
+                <div class="form-group col-4">
+                  <label>Unique Leads</label>
+                  <input type="number" id="dlLeadsUnique" class="form-input" placeholder="e.g. 4" min="0" required>
+                </div>
+                <div class="form-group col-4">
+                  <label>Daily Ad Spend (₹)</label>
+                  <input type="number" id="dlAdSpend" class="form-input" placeholder="e.g. 900" min="0" step="10" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label>Clinic Revenue Realized (₹)</label>
+                  <input type="number" id="dlRevenue" class="form-input" placeholder="e.g. 300 or 20220" min="0" step="10" value="0">
+                </div>
+                <div class="form-group col-6">
+                  <label>Primary Service Focus</label>
+                  <select id="dlService" class="form-input">
+                    <option value="PRP / GFC Hair Treatment">PRP / GFC Hair Treatment</option>
+                    <option value="Hair Transplant Planning">Hair Transplant Planning</option>
+                    <option value="Hair Fall / Hair Thinning">Hair Fall / Hair Thinning</option>
+                    <option value="Acne Scars / Marks">Acne Scars / Marks</option>
+                    <option value="Glutathione IV Therapy">Glutathione IV Therapy</option>
+                    <option value="Pigmentation / Melasma / Tan">Pigmentation / Melasma / Tan</option>
+                    <option value="Hydrafacial / Medi-Facial">Hydrafacial / Medi-Facial</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Daily Notes / Converted Client Names</label>
+                <input type="text" id="dlNotes" class="form-input" placeholder="e.g. 2 Consultations completed, 1 Hair Transplant booking">
+              </div>
+
+              <button type="submit" class="btn-primary btn-block">
+                <i class="fa-solid fa-paper-plane"></i> Save Daily Performance Record
+              </button>
+            </form>
+          </div>
+
+          <!-- Daily Analytics & Platform Distribution -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-chart-line"></i> Daily Leads & Revenue Trajectory</h3>
+              <span class="badge badge-purple">Daily Breakdown</span>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="dailyLeadsChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Daily Performance Data Table -->
+        <div class="glass-card" style="margin-top: 15px;">
+          <div class="card-header flex-between">
+            <div>
+              <h3><i class="fa-solid fa-table-list"></i> De Natura Daily Performance Logs (July 7 – August 11, 2026)</h3>
+              <p class="subtitle">Complete audit log of raw forms, unique leads, daily spend, and realized clinic revenue.</p>
+            </div>
+            <div class="flex-actions">
+              <select id="filterPlatform" class="form-input input-sm" onchange="renderDailyTable()">
+                <option value="ALL">All Platforms</option>
+                <option value="Facebook">Facebook Ads</option>
+                <option value="Instagram">Instagram Ads</option>
+              </select>
+              <button class="btn-secondary btn-sm" onclick="exportDailyLogsCSV()">
+                <i class="fa-solid fa-download"></i> Export CSV
+              </button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table" id="dailyLogsTable">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Platform</th>
+                  <th>Treatment Focus</th>
+                  <th class="text-right">Raw Leads</th>
+                  <th class="text-right">Unique Leads</th>
+                  <th class="text-right">Ad Spend (₹)</th>
+                  <th class="text-right">Clinic Revenue (₹)</th>
+                  <th class="text-right">Agency Fee (₹)</th>
+                  <th>Status / Client Notes</th>
+                </tr>
+              </thead>
+              <tbody id="dailyLogsTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+
+      <section id="tab-overview" class="tab-panel">
+        <!-- KPI Cards Grid -->
+        <div class="kpi-grid">
+          <div class="kpi-card gradient-border">
+            <div class="kpi-icon icon-blue"><i class="fa-solid fa-indian-rupee-sign"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Total Google Ads Spend</span>
+              <h2 id="kpiSpend">₹0</h2>
+              <span class="kpi-subtext positive"><i class="fa-solid fa-arrow-trend-up"></i> Auto-Optimized</span>
+            </div>
+          </div>
+
+          <div class="kpi-card gradient-border">
+            <div class="kpi-icon icon-emerald"><i class="fa-solid fa-cash-register"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Clinic In-Person Revenue</span>
+              <h2 id="kpiRevenue">₹0</h2>
+              <span class="kpi-subtext positive"><i class="fa-solid fa-check-double"></i> Verified Receipts</span>
+            </div>
+          </div>
+
+          <div class="kpi-card gradient-border">
+            <div class="kpi-icon icon-purple"><i class="fa-solid fa-chart-line-up"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Offline ROAS Multiple</span>
+              <h2 id="kpiRoas">0.0x</h2>
+              <span class="kpi-subtext highlight"><i class="fa-solid fa-shield-check"></i> Target: >3.5x</span>
+            </div>
+          </div>
+
+          <div class="kpi-card gradient-border">
+            <div class="kpi-icon icon-amber"><i class="fa-solid fa-user-check"></i></div>
+            <div class="kpi-info">
+              <span class="kpi-label">Cost / Paying Patient (CPA)</span>
+              <h2 id="kpiCpa">₹0</h2>
+              <span class="kpi-subtext positive"><i class="fa-solid fa-arrow-trend-down"></i> Per Patient</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analytics Charts Grid -->
+        <div class="charts-grid">
+          <div class="glass-card chart-container">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-chart-area"></i> Revenue & Spend Trajectory (INR ₹)</h3>
+              <span class="badge badge-purple">7-Day Trend</span>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="revenueSpendChart"></canvas>
+            </div>
+          </div>
+
+          <div class="glass-card chart-container">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-gauge-high"></i> In-Clinic ROAS Performance</h3>
+              <span class="badge badge-emerald">Target: 3.5x</span>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="roasChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: CLINIC REVENUE & ATTRIBUTION -->
+      <section id="tab-revenue" class="tab-panel">
+        <div class="rules-container-grid">
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-plus-circle"></i> Log In-Clinic Patient Payment</h3>
+            </div>
+            <form id="recordPaymentForm" class="rule-form">
+              <div class="form-group">
+                <label>Patient Name</label>
+                <input type="text" id="payPatientName" placeholder="e.g. Rahul Verma" required class="input-text">
+              </div>
+
+              <div class="form-group">
+                <label>Treatment Selected</label>
+                <input type="text" id="payTreatment" placeholder="e.g. Hair Transplant (2,500 Grafts)" required class="input-text">
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Amount Collected in Clinic (₹)</label>
+                  <input type="number" id="payAmount" placeholder="48000" required class="input-text">
+                </div>
+
+                <div class="form-group">
+                  <label>Payment Date</label>
+                  <input type="date" id="payDate" required class="input-text">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Attributed Ad Campaign Lead Source</label>
+                <select id="payCampaignId" class="input-select">
+                  <!-- Loaded via JS -->
+                </select>
+              </div>
+
+              <button type="submit" class="btn-primary full-width">
+                <i class="fa-solid fa-check"></i> Record Payment & Recalculate ROAS
+              </button>
+            </form>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-header flex-between">
+              <h3><i class="fa-solid fa-receipt"></i> Verified In-Clinic Patient Receipts</h3>
+              <span class="badge badge-emerald">Real Revenue Feed</span>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Patient</th>
+                    <th>Treatment</th>
+                    <th>Amount Paid</th>
+                    <th>Ad Campaign Source</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="paymentsTableBody">
+                  <!-- Loaded via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: CAMPAIGNS -->
+      <section id="tab-campaigns" class="tab-panel">
+        <div class="glass-card">
+          <div class="card-header flex-between">
+            <h3><i class="fa-solid fa-list-check"></i> De Natura Aesthetics Clinic Campaigns</h3>
+            <div class="filter-group">
+              <input type="text" id="campaignSearch" placeholder="Search campaigns..." class="input-search">
+              <select id="channelFilter" class="input-select">
+                <option value="ALL">All Channels</option>
+                <option value="SEARCH">Search</option>
+                <option value="PERFORMANCE_MAX">Performance Max</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Campaign Name</th>
+                  <th>Channel</th>
+                  <th>Daily Budget</th>
+                  <th>Target CPA</th>
+                  <th>Spend</th>
+                  <th>Clinic Revenue</th>
+                  <th>Landing Page</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="campaignsTableBody">
+                <!-- Loaded via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: LANDING PAGES HUB -->
+      <section id="tab-landingpages" class="tab-panel">
+        <div class="cards-grid">
+          <!-- Card 1: Hair Transplant -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-crown font-gold"></i> Surgeon Hair Transplant</h3>
+              <span class="badge badge-purple">Official Posters</span>
+            </div>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">100% Surgeon-Performed starting ₹34,999. Graft pricing (2,000 to 3,500 Grafts) + FREE PRP/GFC & Medicine Kit.</p>
+            <a href="/landing/hair-transplant.html" target="_blank" class="btn-primary" style="text-decoration:none; display:inline-flex; width:100%; justify-content:center;">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Preview Hair Transplant Page
+            </a>
+          </div>
+
+          <!-- Card 2: GFC & PRP Hair Therapy -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-seedling font-gold"></i> Normal GFC, Advanced GFC & PRP</h3>
+              <span class="badge badge-emerald">Official Posters</span>
+            </div>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Normal GFC (₹3,999), Advanced GFC (₹5,999 + Free GFC Worth ₹5000), PRP Hair (₹2,999) & Exosome packages.</p>
+            <a href="/landing/gfc-hair-treatment.html" target="_blank" class="btn-primary" style="text-decoration:none; display:inline-flex; width:100%; justify-content:center;">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Preview GFC & PRP Hair Page
+            </a>
+          </div>
+
+          <!-- Card 3: Microneedling & MNRF Acne Scars -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-sparkles font-gold"></i> MNRF & Microneedling Acne Scars</h3>
+              <span class="badge badge-purple">Official Posters</span>
+            </div>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">MN with PRP (₹5,500), MN with GFC (₹6,500), MNRF with PRP (₹6,500), MNRF with GFC (₹8,500).</p>
+            <a href="/landing/laser-skin-rejuvenation.html" target="_blank" class="btn-primary" style="text-decoration:none; display:inline-flex; width:100%; justify-content:center;">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Preview MNRF & Skin Page
+            </a>
+          </div>
+
+          <!-- Card 4: Glutathione Radiance -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-gem font-gold"></i> Glutathione Skin Radiance</h3>
+              <span class="badge badge-emerald">High Converting</span>
+            </div>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Radiance Starter (₹2,800), 3-Dose Glow Bundle (₹7,500), 4-Dose Intensive (₹9,500).</p>
+            <a href="/landing/glutathione-radiance.html" target="_blank" class="btn-primary" style="text-decoration:none; display:inline-flex; width:100%; justify-content:center;">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Preview Glutathione Page
+            </a>
+          </div>
+
+          <!-- Card 5: Anti-Aging & Botox -->
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-face-smile font-gold"></i> Anti-Aging & Botox Fillers</h3>
+              <span class="badge badge-purple">High Converting</span>
+            </div>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Wrinkle reduction, dermal fillers, and non-surgical facial rejuvenation.</p>
+            <a href="/landing/anti-aging-botox-fillers.html" target="_blank" class="btn-primary" style="text-decoration:none; display:inline-flex; width:100%; justify-content:center;">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Preview Anti-Aging Page
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: RULES -->
+      <section id="tab-rules" class="tab-panel">
+        <div class="rules-container-grid">
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-plus-circle"></i> Create Automation Rule</h3>
+            </div>
+            <form id="createRuleForm" class="rule-form">
+              <div class="form-group">
+                <label>Rule Name</label>
+                <input type="text" id="ruleName" placeholder="e.g. Scale Budget on High ROAS" required class="input-text">
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Metric Condition</label>
+                  <select id="ruleMetric" class="input-select">
+                    <option value="ROAS">ROAS (Return on Ad Spend)</option>
+                    <option value="CPA">CPA (Cost per Patient ₹)</option>
+                    <option value="CONVERSION_RATE">Conversion Rate (%)</option>
+                    <option value="COST">Total Spend (₹)</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label>Operator</label>
+                  <select id="ruleOperator" class="input-select">
+                    <option value="GREATER_THAN">Is Greater Than ( > )</option>
+                    <option value="LESS_THAN">Is Less Than ( < )</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label>Threshold Value</label>
+                  <input type="number" step="0.1" id="ruleThreshold" placeholder="3.5" required class="input-text">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Automated Action</label>
+                  <select id="ruleAction" class="input-select">
+                    <option value="INCREASE_BUDGET">Increase Daily Budget (%)</option>
+                    <option value="DECREASE_BUDGET">Decrease Daily Budget (%)</option>
+                    <option value="PAUSE_CAMPAIGN">Pause Campaign</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label>Action Value (%)</label>
+                  <input type="number" id="ruleActionVal" placeholder="15" class="input-text">
+                </div>
+              </div>
+
+              <button type="submit" class="btn-primary full-width">
+                <i class="fa-solid fa-plus"></i> Save & Enable Rule
+              </button>
+            </form>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-header flex-between">
+              <h3><i class="fa-solid fa-gears"></i> Active Rule Triggers</h3>
+              <button class="btn-accent" id="triggerRulesBtn">
+                <i class="fa-solid fa-play"></i> Evaluate All Rules
+              </button>
+            </div>
+            <div id="rulesListContainer" class="rules-list">
+              <!-- Loaded via JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 6: KEYWORDS -->
+      <section id="tab-keywords" class="tab-panel">
+        <div class="keywords-grid">
+          <div class="glass-card">
+            <div class="card-header flex-between">
+              <h3><i class="fa-solid fa-magnifying-glass"></i> Search Query Logs</h3>
+              <button class="btn-primary" id="harvestBtn">
+                <i class="fa-solid fa-broom"></i> Harvest Wasteful Terms
+              </button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Search Query</th>
+                    <th>Impressions</th>
+                    <th>Clicks</th>
+                    <th>Cost (₹)</th>
+                    <th>Conversions</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="searchTermsTableBody">
+                  <!-- Loaded via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-shield-halved"></i> Active Negative Keywords</h3>
+            </div>
+            <div class="negatives-tag-cloud" id="negativesCloud">
+              <!-- Loaded via JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 7: LOGS -->
+      <section id="tab-logs" class="tab-panel">
+        <div class="glass-card">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-terminal"></i> Automation Engine Decision Stream</h3>
+          </div>
+          <div class="logs-feed" id="logsFeed">
+            <!-- Loaded via JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 8: SETTINGS & CONNECT GUIDE -->
+      <section id="tab-settings" class="tab-panel">
+        <div class="settings-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-key"></i> Google Ads Account Credentials</h3>
+            </div>
+            <form id="settingsForm" class="settings-form">
+              <div class="form-group">
+                <label>Engine Operating Mode</label>
+                <select id="configMode" class="input-select">
+                  <option value="SIMULATOR">Simulator Mode (Instant Testing & AI Ad Generation)</option>
+                  <option value="LIVE">Live Google Ads API Mode (Direct Account Sync)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Google Ads Customer ID (10 digits)</label>
+                <input type="text" id="configCustomerId" class="input-text" placeholder="e.g. 849-204-1192">
+              </div>
+
+              <div class="form-group">
+                <label>Developer Token</label>
+                <input type="text" id="configDevToken" class="input-text" placeholder="Developer Token from Google Ads API Center">
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>OAuth Client ID</label>
+                  <input type="text" id="configClientId" class="input-text" placeholder="Google Cloud OAuth Client ID">
+                </div>
+                <div class="form-group">
+                  <label>OAuth Client Secret</label>
+                  <input type="password" id="configClientSecret" class="input-text" placeholder="••••••••••••">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Refresh Token</label>
+                <input type="text" id="configRefreshToken" class="input-text" placeholder="1//04x-OAuth-Refresh-Token">
+              </div>
+
+              <button type="submit" class="btn-primary">
+                <i class="fa-solid fa-floppy-disk"></i> Save & Connect Account
+              </button>
+            </form>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-circle-info"></i> How to Connect Your Google Ads Account</h3>
+            </div>
+            <div class="guide-steps" style="display:flex; flex-direction:column; gap:16px;">
+              <div style="background:rgba(255,255,255,0.03); padding:14px; border-radius:8px; border-left:3px solid var(--primary);">
+                <strong style="color:var(--primary);">1. Get Your Customer ID</strong>
+                <p style="font-size:13px; color:var(--text-muted); margin-top:4px;">Log into your Google Ads account at <em>ads.google.com</em>. Copy the 10-digit number in the top right corner (e.g. 123-456-7890).</p>
+              </div>
+
+              <div style="background:rgba(255,255,255,0.03); padding:14px; border-radius:8px; border-left:3px solid var(--accent);">
+                <strong style="color:var(--accent);">2. Developer Token (API Access)</strong>
+                <p style="font-size:13px; color:var(--text-muted); margin-top:4px;">In Google Ads Manager Account, go to <strong>Tools & Settings &rarr; API Center</strong> and copy your Developer Token.</p>
+              </div>
+
+              <div style="background:rgba(255,255,255,0.03); padding:14px; border-radius:8px; border-left:3px solid var(--emerald);">
+                <strong style="color:var(--emerald);">3. Alternative: 1-Click Google Ads Script</strong>
+                <p style="font-size:13px; color:var(--text-muted); margin-top:4px;">If you don't have an approved Developer Token yet, you can copy our built-in Google Ads Script into your account (Tools &rarr; Scripts) to automatically push spend & search terms into this dashboard without API approval delays!</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL: AUTO-BUILD CAMPAIGN & AI ASSISTANT -->
+  <div class="modal-overlay" id="campaignModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-wand-magic-sparkles"></i> Automated De Natura Campaign Builder</h3>
+        <button class="modal-close" id="closeModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="campaignModalForm">
+          <div class="form-group">
+            <label>Campaign Name</label>
+            <input type="text" id="newCmpName" value="Search - De Natura Hair & Skin Special Offers" required class="input-text">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Ad Channel</label>
+              <select id="newCmpChannel" class="input-select">
+                <option value="SEARCH">Search</option>
+                <option value="PERFORMANCE_MAX">Performance Max</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Daily Budget (₹)</label>
+              <input type="number" id="newCmpBudget" value="5000" class="input-text">
+            </div>
+          </div>
+
+          <div class="ai-box">
+            <div class="ai-box-header">
+              <span><i class="fa-solid fa-brain"></i> AI Automated Ad Generator (Gemini Engine)</span>
+            </div>
+            <div class="form-row">
+              <input type="text" id="aiBrandInput" value="De Natura Aesthetics Trivandrum" class="input-text">
+              <button type="button" class="btn-accent" id="generateAiCopyBtn">
+                <i class="fa-solid fa-sparkles"></i> Generate Complete Ad Package
+              </button>
+            </div>
+
+            <div id="aiCopyResult" class="ai-copy-output hidden">
+              <h5>Generated Headlines:</h5>
+              <div id="aiHeadlinesTags" class="tag-cloud"></div>
+
+              <h5 class="margin-top-sm">Generated Descriptions:</h5>
+              <p id="aiDescPreview" class="ai-desc-text"></p>
+
+              <h5 class="margin-top-sm">Auto-Linked Service Landing Page:</h5>
+              <p id="aiLandingPreview" style="font-size:13px; color:#10b981; font-weight:700; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px; font-family:monospace;"></p>
+
+              <h5 class="margin-top-sm">High-Intent Keywords:</h5>
+              <div id="aiKeywordsTags" class="tag-cloud"></div>
+
+              <h5 class="margin-top-sm">Target Locations:</h5>
+              <div id="aiLocationsTags" class="tag-cloud"></div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" id="cancelModalBtn">Cancel</button>
+            <button type="submit" class="btn-primary"><i class="fa-solid fa-rocket"></i> Auto-Deploy Campaign</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+
+  <!-- AUTHENTICATION LOGIN MODAL -->
+  <div id="loginModal" class="modal-overlay active">
+    <div class="modal-card login-card">
+      <div class="login-header">
+        <div class="login-brand-icon"><i class="fa-solid fa-spa"></i></div>
+        <h2>De Natura Aesthetics</h2>
+        <p>Daily Performance Audit & ROAS Dashboard</p>
+      </div>
+
+      <div class="login-alert" id="loginAlert" style="display: none;">
+        <i class="fa-solid fa-triangle-exclamation"></i> <span id="loginAlertText">Invalid credentials</span>
+      </div>
+
+      <form id="loginForm" onsubmit="event.preventDefault(); handleLoginSubmit();">
+        <div class="form-group">
+          <label><i class="fa-solid fa-user"></i> Username</label>
+          <input type="text" id="loginUsername" class="form-input" placeholder="e.g. alchemy_ads or admin" required>
+        </div>
+
+        <div class="form-group">
+          <label><i class="fa-solid fa-key"></i> Password</label>
+          <input type="password" id="loginPassword" class="form-input" placeholder="Enter password" required>
+        </div>
+
+        <div class="quick-login-buttons">
+          <span class="quick-label">Quick Login Presets:</span>
+          <button type="button" class="btn-preset" onclick="fillLogin('alchemy_ads', 'alchemy123')">
+            <i class="fa-solid fa-user-astronaut"></i> Alchemy Ads (Agency)
+          </button>
+          <button type="button" class="btn-preset btn-preset-admin" onclick="fillLogin('admin', 'admin123')">
+            <i class="fa-solid fa-user-shield"></i> Clinic Admin
+          </button>
+        </div>
+
+        <button type="submit" class="btn-primary btn-block btn-lg" style="margin-top: 15px;">
+          <i class="fa-solid fa-right-to-bracket"></i> Sign In to Dashboard
+        </button>
+      </form>
+    </div>
+  </div>
+
+</body>
+</html>

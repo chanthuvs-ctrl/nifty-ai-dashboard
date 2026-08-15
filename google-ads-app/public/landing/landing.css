@@ -1,0 +1,539 @@
+/* De Natura Aesthetics Luxury Clinical Landing Page CSS - Trivandrum Edition */
+:root {
+  --bg-dark: #080b13;
+  --bg-surface: #0f1626;
+  --bg-card: rgba(19, 27, 44, 0.88);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-gold: rgba(212, 175, 55, 0.4);
+  
+  --gold: #d4af37;
+  --gold-hover: #b89326;
+  --gold-bg: rgba(212, 175, 55, 0.12);
+  --emerald: #10b981;
+  --emerald-bg: rgba(16, 185, 129, 0.15);
+  --whatsapp: #25d366;
+  --whatsapp-hover: #1da851;
+  --crimson: #ef4444;
+  
+  --text-main: #f9fafb;
+  --text-muted: #9ca3af;
+  --text-gold: #f5e6b3;
+  
+  --font-heading: 'Outfit', sans-serif;
+  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --shadow-gold: 0 10px 30px rgba(212, 175, 55, 0.3);
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* Navbar */
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background: rgba(8, 11, 19, 0.95);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-color);
+  padding: 14px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 1000;
+}
+
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--text-main);
+}
+
+.brand-logo i {
+  font-size: 26px;
+  color: var(--gold);
+}
+
+.brand-name {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.brand-tag {
+  font-size: 11px;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: block;
+}
+
+.location-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-contacts {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.btn-whatsapp {
+  background: var(--whatsapp);
+  color: #fff;
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 30px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  transition: var(--transition);
+}
+
+.btn-whatsapp:hover {
+  background: var(--whatsapp-hover);
+  transform: translateY(-2px);
+}
+
+.btn-gold {
+  background: linear-gradient(135deg, var(--gold), var(--gold-hover));
+  color: #080b13;
+  font-weight: 800;
+  padding: 12px 24px;
+  border-radius: 30px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-gold);
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.btn-gold:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 36px rgba(212, 175, 55, 0.5);
+}
+
+/* Hero Section */
+.hero {
+  padding: 140px 40px 80px 40px;
+  max-width: 1350px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 50px;
+  align-items: center;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--gold-bg);
+  border: 1px solid var(--border-gold);
+  color: var(--text-gold);
+  padding: 6px 16px;
+  border-radius: 30px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 20px;
+}
+
+.hero-title {
+  font-family: var(--font-heading);
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -1px;
+  margin-bottom: 18px;
+}
+
+.hero-title span {
+  color: var(--gold);
+}
+
+.hero-desc {
+  font-size: 17px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+/* Image Visual Showcase */
+.hero-image-frame {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-gold);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+  margin-bottom: 24px;
+}
+
+.hero-image-frame img {
+  width: 100%;
+  height: 380px;
+  object-fit: cover;
+  display: block;
+}
+
+.image-overlay-badge {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  background: rgba(8, 11, 19, 0.85);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-gold);
+  padding: 10px 18px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Consultation Form Card */
+.form-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+
+.fee-tag {
+  background: var(--gold-bg);
+  border: 1px solid var(--border-gold);
+  color: var(--gold);
+  font-weight: 800;
+  font-size: 14px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+.form-header h3 {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.form-header p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.form-group {
+  margin-bottom: 18px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.form-input, .form-select {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 14px;
+  transition: var(--transition);
+}
+
+.form-input:focus, .form-select:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.25);
+}
+
+.form-select option {
+  background: #111726;
+  color: #fff;
+}
+
+/* Poster Showcase Grid */
+.posters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 28px;
+  margin-top: 40px;
+}
+
+.poster-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.poster-card:hover {
+  border-color: var(--border-gold);
+  transform: translateY(-6px);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+}
+
+.poster-card img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.poster-info {
+  padding: 20px;
+}
+
+.poster-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+
+.poster-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+/* Packages Table */
+.packages-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.package-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  transition: var(--transition);
+}
+
+.package-card.popular {
+  border-color: var(--gold);
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.1), rgba(19, 27, 44, 0.95));
+}
+
+.popular-badge {
+  position: absolute;
+  top: -14px;
+  right: 24px;
+  background: var(--gold);
+  color: #080b13;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 14px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.package-name {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.package-price {
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--gold);
+  margin-bottom: 16px;
+}
+
+.package-price span {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.old-price {
+  text-decoration: line-through;
+  color: var(--text-muted);
+  font-size: 16px;
+  margin-right: 8px;
+}
+
+.freebie-tag {
+  background: var(--emerald-bg);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--emerald);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  display: inline-block;
+}
+
+.package-features {
+  list-style: none;
+  margin-bottom: 24px;
+}
+
+.package-features li {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.package-features li i {
+  color: var(--emerald);
+}
+
+/* Sections */
+.section {
+  padding: 80px 40px;
+  max-width: 1350px;
+  margin: 0 auto;
+}
+
+.section-header {
+  text-align: center;
+  max-width: 750px;
+  margin: 0 auto 50px auto;
+}
+
+.section-header h2 {
+  font-family: var(--font-heading);
+  font-size: 36px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.section-header p {
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+/* Footer */
+.footer {
+  background: rgba(5, 8, 15, 0.98);
+  border-top: 1px solid var(--border-color);
+  padding: 40px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.footer a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+/* Sticky Mobile CTA Bar */
+.sticky-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: rgba(8, 11, 19, 0.95);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border-gold);
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 999;
+}
+
+.sticky-text span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sticky-text strong {
+  font-size: 15px;
+  color: var(--gold);
+}
+
+/* Floating WhatsApp Button */
+.whatsapp-float {
+  position: fixed;
+  bottom: 80px;
+  right: 24px;
+  background: #25d366;
+  color: #fff;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  box-shadow: 0 8px 24px rgba(37, 211, 102, 0.5);
+  z-index: 998;
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+.whatsapp-float:hover {
+  transform: scale(1.1);
+  box-shadow: 0 12px 32px rgba(37, 211, 102, 0.7);
+}
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding-top: 110px;
+  }
+  .navbar {
+    padding: 12px 20px;
+  }
+  .nav-contacts {
+    display: none;
+  }
+}

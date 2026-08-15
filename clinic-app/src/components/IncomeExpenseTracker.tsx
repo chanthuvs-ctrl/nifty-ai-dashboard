@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore';
-import { DollarSign, PlusCircle, ArrowUpRight, ArrowDownRight, FileText, Trash2, ChevronDown, Link as LinkIcon } from 'lucide-react';
+import { DollarSign, PlusCircle, ArrowUpRight, ArrowDownRight, FileText, Trash2, ChevronDown, Link as LinkIcon, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export const INITIAL_SAMPLE_TRANSACTIONS = [
@@ -91,6 +91,21 @@ export default function IncomeExpenseTracker({ onStartBulkUpload, bgUpload: _bgU
   // isUploading unused
   
   const [transactions, setTransactions] = useState<any[]>([]);
+  const availableMonths = useMemo(() => {
+    const ymSet = new Set<string>();
+    const now = new Date();
+    ymSet.add(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+    transactions.forEach((t: any) => {
+      const d = String(t.date || '');
+      if (d.length >= 7 && /^\d{4}-\d{2}/.test(d)) ymSet.add(d.slice(0, 7));
+    });
+    return Array.from(ymSet).sort().reverse().map(ym => {
+      const [y, m] = ym.split('-');
+      const label = new Date(parseInt(y), parseInt(m) - 1, 1)
+        .toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      return { ym, label };
+    });
+  }, [transactions]);
   const [categories, setCategories] = useState<string[]>(['Glutathione', 'Facial Aesthetic', 'Clinic Rent', 'Salaries', 'Supplies', 'Utilities']);
   
   // Reporting & Table Filter States
@@ -731,33 +746,30 @@ useEffect(() => {
 
 return (
     <div className='space-y-8'>
-      {/* Time Period Filter Header Bar */}
-      <div className='glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3'>
-        <div className='flex items-center gap-2 text-xs text-slate-300'>
-          <span className='font-bold text-white'>📅 Reporting Period:</span>
+      {/* Time Period Filter - Compact Inline */}
+      <div className='flex items-center justify-between gap-3 px-1'>
+        <div className='flex items-center gap-2'>
+          <Filter size={13} className='text-slate-500' />
+          <span className='text-[11px] font-semibold text-slate-400 uppercase tracking-wider'>Period:</span>
           <select
             value={periodFilter}
             onChange={e => setPeriodFilter(e.target.value)}
-            className='bg-slate-900 border border-slate-700 text-cyan-300 font-bold text-xs rounded-xl p-2 cursor-pointer focus:outline-none'
+            className='bg-slate-900/80 border border-slate-700/80 text-slate-200 font-semibold text-xs rounded-lg px-2.5 py-1.5 cursor-pointer focus:outline-none focus:border-cyan-500/50 transition-colors'
           >
-            <option value='current_year'>CY 2026 (Jan–Dec 2026)</option>
-            <option value='current_fy'>FY 2026–27 (Apr 2026 – Mar 2027)</option>
-            <option value='prev_fy'>FY 2025–26 (Apr 2025 – Mar 2026)</option>
-            <option value='current_quarter'>Q3 2026 (Jul–Sep 2026)</option>
-            <optgroup label="2026 Monthly Breakdown">
-              <option value='month_2026-04'>📅 April 2026</option>
-              <option value='month_2026-05'>📅 May 2026</option>
-              <option value='month_2026-06'>📅 June 2026</option>
-              <option value='month_2026-07'>📅 July 2026</option>
-              <option value='month_2026-03'>📅 March 2026</option>
-              <option value='month_2026-02'>📅 February 2026</option>
-              <option value='month_2026-01'>📅 January 2026</option>
+            <option value='all'>All Time (2024–Present)</option>
+            <option value='current_year'>CY 2026 (Jan–Dec)</option>
+            <option value='current_fy'>FY 2026–27 (Apr–Mar)</option>
+            <option value='prev_fy'>FY 2025–26 (Apr–Mar)</option>
+            <option value='current_quarter'>Q3 2026 (Jul–Sep)</option>
+            <optgroup label="Monthly">
+              {availableMonths.map(m => (
+                <option key={m.ym} value={`month_${m.ym}`}>{m.label}</option>
+              ))}
             </optgroup>
-            <option value='all'>All Time Historical (2024–2026)</option>
           </select>
         </div>
-        <span className='text-[11px] text-slate-400 font-medium'>
-          Showing <strong className='text-emerald-400'>{filteredTransactions.length}</strong> transactions matching selected period
+        <span className='text-[11px] text-slate-500'>
+          <strong className='text-emerald-400 font-mono'>{filteredTransactions.length.toLocaleString()}</strong> records
         </span>
       </div>
 
